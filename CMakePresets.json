@@ -1,0 +1,153 @@
+{
+  "version": 11,
+  "cmakeMinimumRequired": {
+    "major": 4,
+    "minor": 3,
+    "patch": 0
+  },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/install/${presetName}",
+      "warnings": {
+        "dev": true,
+        "deprecated": true
+      }
+    },
+
+    {
+      "name": "ninja-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja Multi-Config"
+    },
+
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER":   "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "ninja-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+
+    {
+      "name": "windows",
+      "displayName": "Windows  ·  Ninja Multi-Config  ·  MSVC  ·  x64",
+      "description": "Primary Windows preset. Requires a Developer Command Prompt. Supports import std (VS 17.6+ / MSVC 14.36+).",
+      "inherits": "windows-base"
+    },
+
+    {
+      "name": "linux",
+      "displayName": "Linux  ·  Ninja Multi-Config  ·  GCC",
+      "description": "All configurations in one tree. Requires GCC 15+ for import std.",
+      "inherits": "linux-base"
+    },
+
+    {
+      "name": "linux-clang",
+      "displayName": "Linux  ·  Ninja Multi-Config  ·  Clang",
+      "description": "Requires Clang 18.1.2+ with libc++ or libstdc++ for import std.",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER":   "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "build-base",
+      "hidden": true,
+      "jobs": 0
+    },
+
+    {
+      "name": "windows-debug",
+      "displayName": "Windows  ·  Debug",
+      "inherits": "build-base",
+      "configurePreset": "windows",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-dev",
+      "displayName": "Windows  ·  RelWithDebInfo",
+      "inherits": "build-base",
+      "configurePreset": "windows",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows  ·  Release",
+      "inherits": "build-base",
+      "configurePreset": "windows",
+      "configuration": "Release"
+    },
+
+    {
+      "name": "linux-debug",
+      "displayName": "Linux  ·  Debug",
+      "inherits": "build-base",
+      "configurePreset": "linux",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-dev",
+      "displayName": "Linux  ·  RelWithDebInfo",
+      "inherits": "build-base",
+      "configurePreset": "linux",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux  ·  Release",
+      "inherits": "build-base",
+      "configurePreset": "linux",
+      "configuration": "Release"
+    },
+
+    {
+      "name": "linux-clang-debug",
+      "displayName": "Linux Clang  ·  Debug",
+      "inherits": "build-base",
+      "configurePreset": "linux-clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-clang-dev",
+      "displayName": "Linux Clang  ·  RelWithDebInfo",
+      "inherits": "build-base",
+      "configurePreset": "linux-clang",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "linux-clang-release",
+      "displayName": "Linux Clang  ·  Release",
+      "inherits": "build-base",
+      "configurePreset": "linux-clang",
+      "configuration": "Release"
+    }
+  ]
+}
