@@ -50,7 +50,12 @@
       "name": "windows",
       "displayName": "Windows  ·  Ninja Multi-Config  ·  MSVC  ·  x64",
       "description": "Primary Windows preset. Requires a Developer Command Prompt. Supports import std (VS 17.6+ / MSVC 14.36+).",
-      "inherits": "windows-base"
+      "inherits": "windows-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     },
 
     {
