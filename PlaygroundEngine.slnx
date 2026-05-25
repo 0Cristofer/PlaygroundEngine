@@ -1,7 +1,0 @@
-<Solution>
-  <Configurations>
-    <Platform Name="x64" />
-  </Configurations>
-  <Project Path="PlaygroundEngine/PlaygroundEngine.vcxproj" />
-  <Project Path="PlaygroundGame/PlaygroundGame.vcxproj" />
-</Solution>
