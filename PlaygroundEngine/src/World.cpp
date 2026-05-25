@@ -1,0 +1,16 @@
+#include "PlaygroundEngine/World.h"
+
+PlaygroundEngine::GameObject* PlaygroundEngine::World::AddGameObject()
+{
+    _gameObjects.push_back(std::make_unique<GameObject>());
+    
+    return _gameObjects.back().get();
+}
+
+void PlaygroundEngine::World::Run()
+{
+    for (auto& gameObject : _gameObjects)
+    {
+        gameObject->Update();
+    }
+}

@@ -38,7 +38,7 @@ endif()
 
 target_sources(PlaygroundGame
     PRIVATE
-        main.cpp
+        src/PlaygroundGame.cpp
 )
 
 target_link_libraries(PlaygroundGame

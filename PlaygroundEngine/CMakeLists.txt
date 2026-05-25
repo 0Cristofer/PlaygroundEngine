@@ -43,11 +43,21 @@ endif()
 
 target_sources(PlaygroundEngine
     PRIVATE
-        World.cpp
+        src/GameObject.cpp
+        src/Log.cpp
+        src/PlaygroundEngine.cpp
+        src/World.cpp
+        src/Component/ComponentBase.cpp
+        src/Component/TransformComponent.cpp
 
     PUBLIC
         FILE_SET HEADERS
+        BASE_DIRS include
         FILES
-            World.h
+            include/PlaygroundEngine/GameObject.h
+            include/PlaygroundEngine/Log.h
+            include/PlaygroundEngine/PlaygroundEngine.h
+            include/PlaygroundEngine/World.h
+            include/PlaygroundEngine/Component/ComponentBase.h
+            include/PlaygroundEngine/Component/TransformComponent.h
 )
-
