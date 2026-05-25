@@ -41,6 +41,26 @@ if(PGE_IPO_SUPPORTED)
     )
 endif()
 
+include(FetchContent)
+
+# --- spdlog setup --
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        b8944a4
+    SYSTEM
+    FIND_PACKAGE_ARGS
+    CONFIG
+    NAMES spdlog
+)
+
+set(SPDLOG_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(spdlog)
+# --- spdlog setup --
+
+target_link_libraries(PlaygroundEngine PRIVATE spdlog::spdlog)
+
 target_sources(PlaygroundEngine
     PRIVATE
         src/GameObject.cpp

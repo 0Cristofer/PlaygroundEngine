@@ -1,20 +1,7 @@
 #pragma once
 #include <memory>
 
-//#include "vendor/spdlog/include/spdlog/logger.h"
-
-namespace spdlog
-{
-    class logger
-    {
-    public:
-        void trace(const char [], int = 0) {}
-        void info(const char [], int = 0) {}
-        void warn(const char [], int = 0) {}
-        void error(const char [], int = 0) {}
-        void fatal(const char [], int = 0) {}
-    };
-}
+#include "spdlog/logger.h"
 
 namespace PlaygroundEngine
 {
