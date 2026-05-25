@@ -26,8 +26,8 @@ target_compile_options(PlaygroundGame
 
 set_target_properties(PlaygroundGame PROPERTIES
     COMPILE_WARNING_AS_ERROR ON
-    CMAKE_LINK_WARNING_AS_ERROR ON
-    MSVC_RUNTIME_CHECKS "$<$<CONFIG:Debug>:DEFAULT>"
+    CMAKE_LINK_WARNING_AS_ERROR ON 
+    MSVC_RUNTIME_CHECKS "$<$<CONFIG:Debug,RelWithDebInfo>:StackFrameErrorCheck;UninitializedVariable>"
 )
 
 if(PGE_IPO_SUPPORTED)

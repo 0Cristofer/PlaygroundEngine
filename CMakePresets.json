@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 9,
   "cmakeMinimumRequired": {
     "major": 4,
     "minor": 3,
@@ -32,11 +32,6 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER":   "cl",
         "CMAKE_CXX_COMPILER": "cl"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
       }
     },
 
@@ -80,8 +75,7 @@
   "buildPresets": [
     {
       "name": "build-base",
-      "hidden": true,
-      "jobs": 0
+      "hidden": true
     },
 
     {
