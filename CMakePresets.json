@@ -62,17 +62,10 @@
       "name": "linux",
       "displayName": "Linux  ·  Ninja Multi-Config  ·  GCC",
       "description": "All configurations in one tree. Requires GCC 15+ for import std.",
-      "inherits": "linux-base"
-    },
-
-    {
-      "name": "linux-clang",
-      "displayName": "Linux  ·  Ninja Multi-Config  ·  Clang",
-      "description": "Requires Clang 18.1.2+ with libc++ or libstdc++ for import std.",
       "inherits": "linux-base",
       "cacheVariables": {
-        "CMAKE_C_COMPILER":   "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_C_COMPILER":   "cc",
+        "CMAKE_CXX_COMPILER": "c++"
       }
     }
   ],
@@ -124,28 +117,6 @@
       "displayName": "Linux  ·  Release",
       "inherits": "build-base",
       "configurePreset": "linux",
-      "configuration": "Release"
-    },
-
-    {
-      "name": "linux-clang-debug",
-      "displayName": "Linux Clang  ·  Debug",
-      "inherits": "build-base",
-      "configurePreset": "linux-clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-clang-dev",
-      "displayName": "Linux Clang  ·  RelWithDebInfo",
-      "inherits": "build-base",
-      "configurePreset": "linux-clang",
-      "configuration": "RelWithDebInfo"
-    },
-    {
-      "name": "linux-clang-release",
-      "displayName": "Linux Clang  ·  Release",
-      "inherits": "build-base",
-      "configurePreset": "linux-clang",
       "configuration": "Release"
     }
   ]
