@@ -36,3 +36,23 @@ endif ()
 
 add_subdirectory(PlaygroundEngine)
 add_subdirectory(PlaygroundGame)
+
+# Ensures import std is correctly understood by CLion/Rider. Should be removed when better support comes
+if (LINUX)
+    if (EXISTS /usr/include/c++/15/bits)
+        add_library(unused_std_target STATIC)
+        target_compile_features(unused_std_target PRIVATE cxx_std_23)
+        target_sources(unused_std_target
+                PRIVATE
+                FILE_SET CXX_MODULES
+                BASE_DIRS /usr/include/c++/15/bits
+                FILES /usr/include/c++/15/bits/std.cc /usr/include/c++/15/bits/std.compat.cc
+        )
+        target_compile_options(unused_std_target PRIVATE
+                $<$<CXX_COMPILER_ID:GNU>:-w>
+                $<$<CXX_COMPILER_ID:Clang>:-w>
+        )
+    else ()
+        message(STATUS "[PlaygroundEngine] std module source not found — 'import std' may not resolve in IDE")
+    endif ()
+endif ()
