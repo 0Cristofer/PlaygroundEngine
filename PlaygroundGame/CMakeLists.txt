@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 4.3)
 add_executable(PlaygroundGame)
 
 target_compile_definitions(PlaygroundGame
-    PRIVATE
+        PRIVATE
         # Windows specifics to improve compile times
         $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
         $<$<PLATFORM_ID:Windows>:NOMINMAX>
@@ -12,7 +12,7 @@ target_compile_definitions(PlaygroundGame
 )
 
 target_compile_options(PlaygroundGame
-    PRIVATE
+        PRIVATE
         # Enables all possible warnings
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<CXX_COMPILER_ID:MSVC>:/permissive->
@@ -25,23 +25,23 @@ target_compile_options(PlaygroundGame
 )
 
 set_target_properties(PlaygroundGame PROPERTIES
-    COMPILE_WARNING_AS_ERROR ON
-    CMAKE_LINK_WARNING_AS_ERROR ON
-    MSVC_RUNTIME_CHECKS "$<$<CONFIG:Debug>:UninitializedVariable;StackFrameErrorCheck>"
+        COMPILE_WARNING_AS_ERROR ON
+        CMAKE_LINK_WARNING_AS_ERROR ON
+        MSVC_RUNTIME_CHECKS "$<$<CONFIG:Debug>:UninitializedVariable;StackFrameErrorCheck>"
 )
 
-if(PGE_IPO_SUPPORTED)
+if (PGE_IPO_SUPPORTED)
     set_target_properties(PlaygroundGame PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
     )
-endif()
+endif ()
 
 target_sources(PlaygroundGame
-    PRIVATE
+        PRIVATE
         src/PlaygroundGame.cpp
 )
 
 target_link_libraries(PlaygroundGame
-    PRIVATE
+        PRIVATE
         PlaygroundEngine
 )

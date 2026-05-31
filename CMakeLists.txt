@@ -6,13 +6,13 @@ cmake_minimum_required(VERSION 4.3)
 project(PlaygroundEngineMain)
 
 # No in-source builds
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
     message(FATAL_ERROR
-        "In-source builds are not supported.\n"
-        "Create a build directory and run CMake from there.\n"
-        "You may need to delete CMakeCache.txt and CMakeFiles/ first."
+            "In-source builds are not supported.\n"
+            "Create a build directory and run CMake from there.\n"
+            "You may need to delete CMakeCache.txt and CMakeFiles/ first."
     )
-endif()
+endif ()
 
 # Modules and "import std"
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
@@ -23,16 +23,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Ensures we have a config defined in single-config generators
 get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(NOT _isMultiConfig AND NOT CMAKE_BUILD_TYPE)
+if (NOT _isMultiConfig AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
     message(STATUS "[PlaygroundEngine] CMAKE_BUILD_TYPE not set — defaulting to Debug")
-endif()
+endif ()
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT PGE_IPO_SUPPORTED OUTPUT _PGE_IPO_OUTPUT LANGUAGES CXX)
-if(NOT PGE_IPO_SUPPORTED)
+if (NOT PGE_IPO_SUPPORTED)
     message(STATUS "[PlaygroundEngine] IPO/LTO not available: ${_PGE_IPO_OUTPUT}")
-endif()
+endif ()
 
 add_subdirectory(PlaygroundEngine)
 add_subdirectory(PlaygroundGame)
