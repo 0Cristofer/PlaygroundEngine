@@ -34,9 +34,6 @@ if (NOT PGE_IPO_SUPPORTED)
     message(STATUS "[PlaygroundEngine] IPO/LTO not available: ${_PGE_IPO_OUTPUT}")
 endif ()
 
-add_subdirectory(PlaygroundEngine)
-add_subdirectory(PlaygroundGame)
-
 # Ensures import std is correctly understood by CLion/Rider. Should be removed when better support comes
 if (LINUX)
     if (EXISTS /usr/include/c++/15/bits)
@@ -56,3 +53,9 @@ if (LINUX)
         message(STATUS "[PlaygroundEngine] std module source not found — 'import std' may not resolve in IDE")
     endif ()
 endif ()
+
+# spdlog uses UTF8 by default, so we need to make sure cmake uses it too when compiling std modules
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
+
+add_subdirectory(PlaygroundEngine)
+add_subdirectory(PlaygroundGame)
