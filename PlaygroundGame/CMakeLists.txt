@@ -45,5 +45,3 @@ target_link_libraries(PlaygroundGame
         PRIVATE
         PlaygroundEngine
 )
-
-target_precompile_headers(PlaygroundGame REUSE_FROM PlaygroundEngine)

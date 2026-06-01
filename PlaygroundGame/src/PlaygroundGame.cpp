@@ -1,6 +1,9 @@
 import PlaygroundEngine;
 import PlaygroundEngine.Components;
 
+// Only needed for GCC, since it doesn't export operator new correctly with template instantiations. Remove this to see the
+import std;
+
 int main(int, char**)
 {
     PlaygroundEngine::Engine engine;

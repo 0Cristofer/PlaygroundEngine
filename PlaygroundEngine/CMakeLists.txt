@@ -63,11 +63,6 @@ target_compile_definitions(spdlog INTERFACE SPDLOG_HEADER_ONLY)
 
 target_link_libraries(PlaygroundEngine PUBLIC spdlog::spdlog)
 
-target_precompile_headers(PlaygroundEngine
-        PRIVATE
-        include/PlaygroundEngine/Core.h
-)
-
 target_sources(PlaygroundEngine
         PRIVATE
         src/GameObject.cpp
@@ -94,5 +89,4 @@ target_sources(PlaygroundEngine
         BASE_DIRS include
         FILES
         include/PlaygroundEngine/Log.h
-        include/PlaygroundEngine/Core.h
 )

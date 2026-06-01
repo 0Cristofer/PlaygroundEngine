@@ -1,6 +1,6 @@
 module;
 
-#include "PlaygroundEngine/Core.h"
+#include "PlaygroundEngine/Log.h"
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 

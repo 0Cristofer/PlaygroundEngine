@@ -1,6 +1,6 @@
 module;
 
-#include "PlaygroundEngine/Core.h"
+#include "PlaygroundEngine/Log.h"
 
 module PlaygroundEngine;
 

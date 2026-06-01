@@ -1,6 +1,6 @@
 module;
 
-#include "PlaygroundEngine/Core.h"
+#include <cassert>
 
 export module PlaygroundEngine.GameObject;
 
