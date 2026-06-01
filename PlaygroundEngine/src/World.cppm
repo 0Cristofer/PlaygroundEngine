@@ -1,13 +1,12 @@
-#pragma once
+export module PlaygroundEngine.World;
 
-#include <memory>
-#include <vector>
+import PlaygroundEngine.GameObject;
 
-#include "PlaygroundEngine/GameObject.h"
+import std;
 
 namespace PlaygroundEngine
 {
-    class World
+    export class World
     {
     public:
         GameObject* AddGameObject();

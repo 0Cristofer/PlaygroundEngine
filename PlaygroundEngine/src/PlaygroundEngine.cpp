@@ -1,11 +1,14 @@
-#include "PlaygroundEngine/PlaygroundEngine.h"
+module;
 
-#include "PlaygroundEngine/Log.h"
-#include "PlaygroundEngine/World.h"
+#include "PlaygroundEngine/Core.h"
+
+module PlaygroundEngine;
+
+import PlaygroundEngine.Log;
 
 namespace PlaygroundEngine
 {
-    Engine::Engine()
+    PlaygroundEngine::Engine::Engine()
     {
         Log::Init();
         LOG_INFO("Creating engine");

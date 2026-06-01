@@ -1,12 +1,8 @@
-#include "PlaygroundEngine/World.h"
-
-import Test;
+module PlaygroundEngine.World;
 
 PlaygroundEngine::GameObject* PlaygroundEngine::World::AddGameObject()
 {
     _gameObjects.push_back(std::make_unique<GameObject>());
-    Test t;
-    t.GetA();
     
     return _gameObjects.back().get();
 }

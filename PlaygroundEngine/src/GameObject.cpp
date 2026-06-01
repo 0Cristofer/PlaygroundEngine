@@ -1,6 +1,4 @@
-#include "PlaygroundEngine/GameObject.h"
-
-#include <ranges>
+module PlaygroundEngine.GameObject;
 
 namespace PlaygroundEngine
 {

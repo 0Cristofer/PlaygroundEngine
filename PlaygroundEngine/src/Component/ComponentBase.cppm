@@ -1,8 +1,8 @@
-#pragma once
+export module PlaygroundEngine.Components.ComponentBase;
 
 namespace PlaygroundEngine
 {
-    class ComponentBase
+    export class ComponentBase
     {
     public:
         virtual void Update() = 0;

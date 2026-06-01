@@ -1,6 +1,10 @@
-#include "PlaygroundEngine/Component/TransformComponent.h"
+module;
 
-#include "PlaygroundEngine/Log.h"
+#include "PlaygroundEngine/Core.h"
+
+module PlaygroundEngine.Components.TransformComponent;
+
+import PlaygroundEngine.Log;
 
 void PlaygroundEngine::TransformComponent::Update()
 {

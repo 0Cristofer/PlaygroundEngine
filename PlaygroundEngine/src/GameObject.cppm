@@ -1,14 +1,16 @@
-#pragma once
+module;
 
-#include <cassert>
-#include <memory>
-#include <unordered_map>
+#include "PlaygroundEngine/Core.h"
 
-#include "PlaygroundEngine/Component/ComponentBase.h"
+export module PlaygroundEngine.GameObject;
+
+import PlaygroundEngine.Components.ComponentBase;
+
+import std;
 
 namespace PlaygroundEngine
 {
-    class GameObject
+    export class GameObject
     {
         using ComponentId = int;
         
@@ -21,10 +23,10 @@ namespace PlaygroundEngine
         {
             const ComponentId componentId = GetComponentId<T>();
             
-            auto [it, added] = _components.try_emplace(componentId, std::make_unique<T>(std::forward<Args>(args)...));
-            assert(added && "Added already existing component");
+            auto result = _components.try_emplace(componentId, std::make_unique<T>(std::forward<Args>(args)...));
+            assert(result.second && "Added already existing component");
             
-            return static_cast<T*>(it->second.get());
+            return static_cast<T*>(result.first->second.get());
         }
         
         template <typename T>

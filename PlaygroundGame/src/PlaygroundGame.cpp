@@ -1,17 +1,19 @@
-#include "PlaygroundEngine/PlaygroundEngine.h"
-#include "PlaygroundEngine/World.h"
-#include "PlaygroundEngine/Component/TransformComponent.h"
+import PlaygroundEngine;
+import PlaygroundEngine.Components;
 
 int main(int, char**)
 {
     PlaygroundEngine::Engine engine;
 
-    const auto world = engine.GetWorld();
+    PlaygroundEngine::World* world = engine.GetWorld();
 
-    const auto gO1 = world->AddGameObject();
-    auto transformComponent = gO1->AddComponent<PlaygroundEngine::TransformComponent>();
-    transformComponent->Position = 2;
-    
+    PlaygroundEngine::GameObject* gO1 = world->AddGameObject();
+    PlaygroundEngine::TransformComponent* component = gO1->AddComponent<PlaygroundEngine::TransformComponent>();
+
+    component->Position = 3;
+    engine.Run();
+
+    gO1->GetComponent<PlaygroundEngine::TransformComponent>()->Position = 2;
     engine.Run();
     
     return 0;

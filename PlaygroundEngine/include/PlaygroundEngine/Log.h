@@ -1,22 +1,6 @@
-#pragma once
-#include <memory>
+﻿#pragma once
 
-#include "spdlog/logger.h"
-
-namespace PlaygroundEngine
-{
-
-    class Log
-    {
-    public:
-        static void Init();
-
-        static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return _logger; }
-    private:
-        static std::shared_ptr<spdlog::logger> _logger;
-    };
-
-}
+#include <spdlog/spdlog.h>
 
 #define LOG_TRACE(...)    ::PlaygroundEngine::Log::GetCoreLogger()->trace(__VA_ARGS__)
 #define LOG_INFO(...)     ::PlaygroundEngine::Log::GetCoreLogger()->info(__VA_ARGS__)

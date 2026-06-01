@@ -32,6 +32,11 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER":   "cl",
         "CMAKE_CXX_COMPILER": "cl"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
       }
     },
 
@@ -50,12 +55,7 @@
       "name": "windows",
       "displayName": "Windows  ·  Ninja Multi-Config  ·  MSVC  ·  x64",
       "description": "Primary Windows preset. Requires a Developer Command Prompt. Supports import std (VS 17.6+ / MSVC 14.36+).",
-      "inherits": "windows-base",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
+      "inherits": "windows-base"
     },
 
     {
@@ -64,8 +64,8 @@
       "description": "All configurations in one tree. Requires GCC 15+ for import std.",
       "inherits": "linux-base",
       "cacheVariables": {
-        "CMAKE_C_COMPILER":   "cc",
-        "CMAKE_CXX_COMPILER": "c++"
+        "CMAKE_C_COMPILER":   "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
       }
     }
   ],

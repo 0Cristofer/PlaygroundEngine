@@ -57,14 +57,20 @@ FetchContent_Declare(
 set(SPDLOG_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(spdlog)
+
+target_compile_definitions(spdlog INTERFACE SPDLOG_HEADER_ONLY)
 # --- spdlog setup --
 
-target_link_libraries(PlaygroundEngine PRIVATE spdlog::spdlog)
+target_link_libraries(PlaygroundEngine PUBLIC spdlog::spdlog)
+
+target_precompile_headers(PlaygroundEngine
+        PRIVATE
+        include/PlaygroundEngine/Core.h
+)
 
 target_sources(PlaygroundEngine
         PRIVATE
         src/GameObject.cpp
-        src/TestClass.cpp
         src/Log.cpp
         src/PlaygroundEngine.cpp
         src/World.cpp
@@ -72,19 +78,21 @@ target_sources(PlaygroundEngine
         src/Component/TransformComponent.cpp
 
         PUBLIC
-        FILE_SET HEADERS
-        BASE_DIRS include
-        FILES
-        include/PlaygroundEngine/GameObject.h
-        include/PlaygroundEngine/Log.h
-        include/PlaygroundEngine/PlaygroundEngine.h
-        include/PlaygroundEngine/World.h
-        include/PlaygroundEngine/Component/ComponentBase.h
-        include/PlaygroundEngine/Component/TransformComponent.h
-
-        PUBLIC
         FILE_SET CXX_MODULES
         BASE_DIRS src
         FILES
-        src/TestClass.cppm
+        src/GameObject.cppm
+        src/Log.cppm
+        src/PlaygroundEngine.cppm
+        src/World.cppm
+        src/Component/Components.cppm
+        src/Component/ComponentBase.cppm
+        src/Component/TransformComponent.cppm
+
+        PUBLIC
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+        include/PlaygroundEngine/Log.h
+        include/PlaygroundEngine/Core.h
 )

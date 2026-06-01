@@ -1,1 +1,1 @@
-#include "PlaygroundEngine/Component/ComponentBase.h"
+module PlaygroundEngine.Components.ComponentBase;

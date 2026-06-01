@@ -1,14 +1,13 @@
-#pragma once
+export module PlaygroundEngine;
 
-#include <memory>
+export import PlaygroundEngine.World;
+export import PlaygroundEngine.GameObject;
 
-#define SPDLOG_HEADER_ONLY
+import std;
 
 namespace PlaygroundEngine
 {
-    class World;
-
-    class Engine
+    export class Engine
     {
     public:
         Engine();

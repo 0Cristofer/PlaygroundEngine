@@ -1,7 +1,10 @@
-#include "PlaygroundEngine/Log.h"
+module;
 
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include "PlaygroundEngine/Core.h"
+
+#include <spdlog/sinks/stdout_color_sinks.h>
+
+module PlaygroundEngine.Log;
 
 namespace PlaygroundEngine
 {
@@ -15,5 +18,4 @@ namespace PlaygroundEngine
         
         LOG_INFO("Logging initialized");
     }
-
 }
