@@ -38,6 +38,23 @@ endif ()
 
 target_sources(PlaygroundGame
         PRIVATE
+        src/App.cpp
+        src/PlaygroundGame.cpp
+
+        PUBLIC
+        FILE_SET CXX_MODULES
+        BASE_DIRS src
+        FILES
+        src/App.cppm
+
+        PUBLIC
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+)
+
+target_sources(PlaygroundGame
+        PRIVATE
         src/PlaygroundGame.cpp
 )
 

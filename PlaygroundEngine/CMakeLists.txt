@@ -67,10 +67,13 @@ target_sources(PlaygroundEngine
         PRIVATE
         src/GameObject.cpp
         src/Log.cpp
-        src/PlaygroundEngine.cpp
+        src/Engine.cpp
         src/World.cpp
         src/Component/ComponentBase.cpp
         src/Component/TransformComponent.cpp
+        src/App.cpp
+        src/main.cpp
+        
 
         PUBLIC
         FILE_SET CXX_MODULES
@@ -78,7 +81,8 @@ target_sources(PlaygroundEngine
         FILES
         src/GameObject.cppm
         src/Log.cppm
-        src/PlaygroundEngine.cppm
+        src/Engine.cppm
+        src/App.cppm
         src/World.cppm
         src/Component/Components.cppm
         src/Component/ComponentBase.cppm
@@ -89,4 +93,5 @@ target_sources(PlaygroundEngine
         BASE_DIRS include
         FILES
         include/PlaygroundEngine/Log.h
+        include/PlaygroundEngine/EntryPoint.h
 )

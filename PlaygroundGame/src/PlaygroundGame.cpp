@@ -1,23 +1,11 @@
-import PlaygroundEngine;
-import PlaygroundEngine.Components;
+#include <PlaygroundEngine/EntryPoint.h>
 
-// Only needed for GCC, since it doesn't export operator new correctly with template instantiations. Remove this to see the
+import PlaygroundEngine;
+import PlaygroundGame;
+
 import std;
 
-int main(int, char**)
+PlaygroundEngine::AppDescriptorBase* PlaygroundEngine::GetAppDescriptor(PlaygroundEngine::CommandLine* commandLine)
 {
-    PlaygroundEngine::Engine engine;
-
-    PlaygroundEngine::World* world = engine.GetWorld();
-
-    PlaygroundEngine::GameObject* gO1 = world->AddGameObject();
-    PlaygroundEngine::TransformComponent* component = gO1->AddComponent<PlaygroundEngine::TransformComponent>();
-
-    component->Position = 3;
-    engine.Run();
-
-    gO1->GetComponent<PlaygroundEngine::TransformComponent>()->Position = 2;
-    engine.Run();
-    
-    return 0;
+    return new PlaygroundGame::PlaygroundGameAppDescriptor(commandLine);
 }
