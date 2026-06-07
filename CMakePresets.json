@@ -64,8 +64,8 @@
       "description": "All configurations in one tree. Requires GCC 15+ for import std.",
       "inherits": "linux-base",
       "cacheVariables": {
-        "CMAKE_C_COMPILER":   "gcc",
-        "CMAKE_CXX_COMPILER": "g++"
+        "CMAKE_C_COMPILER":   "$penv{HOME}/gcc-16/bin/gcc",
+        "CMAKE_CXX_COMPILER": "$penv{HOME}/gcc-16/bin/g++"
       }
     }
   ],

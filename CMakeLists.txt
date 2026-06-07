@@ -18,6 +18,11 @@ endif ()
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_CXX_MODULE_STD ON)
 
+# Make sure cmake uses the same flag for all compilation steps, including internal ones, since otherwise, we might get mismatched types
+set(CMAKE_CXX_STANDARD          26)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS        OFF)
+
 # Helps clangd/tidy, no effect in builds
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -54,8 +59,12 @@ if (LINUX)
     endif ()
 endif ()
 
-# spdlog uses UTF8 by default, so we need to make sure cmake uses it too when compiling std modules
-add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
+# Global options to ensure all compilation (including cmake internal) steps are using the same flags
+add_compile_options(
+        $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+        $<$<CXX_COMPILER_ID:GNU>:-freflection>
+)
 
 add_subdirectory(PlaygroundEngine)
 add_subdirectory(PlaygroundGame)
+add_subdirectory(PlaygroundReflection)

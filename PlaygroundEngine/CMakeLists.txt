@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.3)
 
 add_library(PlaygroundEngine)
 
-target_compile_features(PlaygroundEngine PUBLIC cxx_std_23)
+target_compile_features(PlaygroundEngine PUBLIC cxx_std_26)
 
 target_compile_definitions(PlaygroundEngine
         PUBLIC
