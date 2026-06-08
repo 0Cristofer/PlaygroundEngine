@@ -49,6 +49,12 @@ endif ()
 target_sources(PlaygroundReflection
         PRIVATE
         src/main.cpp
+        src/field_printing.h
+        src/annotation_registry.h
+        src/generic_registry.h
+        src/type_exploration.h
+        src/serialization.h
+        src/construction.h
 
         PUBLIC
         FILE_SET CXX_MODULES

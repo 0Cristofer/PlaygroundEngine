@@ -2,37 +2,22 @@
 
 import std;
 
-struct Vec3
-{
-    float x, y, z;
-};
-
-struct Transform
-{
-    Vec3 position;
-    Vec3 rotation;
-    float scale;
-};
-
-template <typename T>
-void PrintMembers(const T& obj)
-{
-    std::cout << "Type: " << std::meta::identifier_of(^^T) << "\n";
-    
-    template for (constexpr auto member :
-        std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::current())))
-    {
-        std::cout << "member: " << std::meta::identifier_of(member) << ", value: " << obj.[:member:] << "\n";
-    }
-}
+// Each header covers one aspect of C++26 reflection (P2996) as implemented in GCC 16.
+// Include order matters: type_exploration.h uses PlayerState from annotation_registry.h.
+#include "field_printing.h"       // ^^T, nonstatic_data_members_of, template for, splicers
+#include "annotation_registry.h"  // [[=Tag{}]], annotations_of_with_type, type-specific registry
+#include "generic_registry.h"     // parameters_of, return_type_of, any-erased generic registry
+#include "type_exploration.h"     // bases_of, display_string_of, typeid+splice, enumerators_of
+#include "serialization.h"        // FromJson<T>: JSON string → struct via field-name matching
+#include "construction.h"         // feasibility: parameter annotations + constructor splicing
 
 int main()
 {
-    Vec3 vec3 = {1, 2, 3};
-    Vec3 vec31 = {2, 3, 5};
-    // Transform transform = {vec3, vec31, 2};
-    PrintMembers(vec3);
-    PrintMembers(vec31);
-    // PrintMembers<Transform>(transform);
+    DemoFieldPrinting();
+    DemoAnnotations();
+    DemoGenericRegistry();
+    DemoTypeExploration();
+    DemoSerialization();
+    DemoConstruction();
     return 0;
 }
