@@ -19,6 +19,9 @@
 //                                            is a structural type, so this is legal)
 //   InvokeStatic<Fn>                       — static-function variant of InvokeImpl
 //                                            (no object pointer, direct [:Fn:] call)
+//   InvokeStaticTyped<Fn>                  — splice in RETURN-TYPE position:
+//                                            [:return_type_of(Fn):] as the function's
+//                                            own return type, no std::any round trip
 //   mixed injected/serialized dispatch     — runtime counter tracks which injected
 //                                            arg to pull next as template for unrolls
 // =============================================================================
@@ -104,6 +107,37 @@ std::any InvokeStatic(Args args)
 }
 
 // -----------------------------------------------------------------------------
+// Step 2b: InvokeStaticTyped<Fn> — strongly-typed return value
+//
+// Tests a splice context not covered elsewhere: the function's RETURN TYPE is
+// spliced directly from the reflection. Fn is a template parameter (a constant),
+// so [:return_type_of(Fn):] is usable in the signature itself.
+//
+// Compared to InvokeStatic:
+//   - the result comes back as its real type — no std::any round trip
+//     (which copies the object into the any, likely heap-allocating)
+//   - no is_void branch needed: `return f(...)` where f returns void is legal
+//
+// The erased InvokeStatic above is still the right shape for registries, where
+// every entry must share one signature to live in the same map. The typed
+// variant is for callers that know Fn at compile time — construction here,
+// generated binding thunks later.
+// -----------------------------------------------------------------------------
+template <std::meta::info Fn, std::size_t... I>
+[:std::meta::return_type_of(Fn):] InvokeStaticTypedImpl(Args args, std::index_sequence<I...>)
+{
+    constexpr auto params = std::define_static_array(std::meta::parameters_of(Fn));
+    return [:Fn:](ArgCast<params[I]>::from(args[I])...);
+}
+
+template <std::meta::info Fn>
+[:std::meta::return_type_of(Fn):] InvokeStaticTyped(Args args)
+{
+    constexpr std::size_t paramCount = std::meta::parameters_of(Fn).size();
+    return InvokeStaticTypedImpl<Fn>(args, std::make_index_sequence<paramCount>{});
+}
+
+// -----------------------------------------------------------------------------
 // Step 3: ConstructImpl<T, Fn>
 //
 // This is the generated code — what a separate code generator would emit.
@@ -114,7 +148,8 @@ std::any InvokeStatic(Args args)
 //   Serialized → looks up by parameter name in parsedJson, converts by type
 //
 // Assembles a std::vector<std::any> in the correct order, then forwards to
-// InvokeStatic which unpacks and calls the factory with real types.
+// InvokeStaticTyped which unpacks and calls the factory with real types —
+// the result comes back as T directly, no any_cast on the return value.
 // -----------------------------------------------------------------------------
 template <typename T, std::meta::info Fn>
 T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injectedArgs)
@@ -149,7 +184,7 @@ T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injec
         }
     }
 
-    return std::any_cast<T>(InvokeStatic<Fn>(allArgs));
+    return InvokeStaticTyped<Fn>(allArgs);
 }
 
 // -----------------------------------------------------------------------------
@@ -186,4 +221,13 @@ void DemoConstruction()
     std::cout << "  id     = " << weapon.id     << "\n";
     std::cout << "  name   = " << weapon.name   << "\n";
     std::cout << "  damage = " << weapon.damage  << "\n";
+
+    // Direct strongly-typed call: all three args provided manually, in
+    // declaration order. The return type is spliced from the reflection,
+    // so the result is a Weapon — no any_cast needed.
+    std::vector<std::any> daggerArgs = {2002, std::string{"Dagger"}, 7.5f};
+    Weapon dagger = InvokeStaticTyped<FindFactory<Weapon>()>(daggerArgs);
+
+    std::cout << "  typed  : " << dagger.name << " (id " << dagger.id
+              << ", damage " << dagger.damage << ")\n";
 }

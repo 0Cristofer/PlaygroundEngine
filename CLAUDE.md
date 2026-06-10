@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A sandbox for implementing game/game-engine concepts (mostly) from scratch. Current goal: the simplest possible 3D renderer. Some parts follow industry standards, others are deliberately simplified.
+A cross-platform application engine focused on realtime graphics and simulation. Currently in the **exploration phase**: major concepts are validated in isolation before being unified. See [EngineDesign.md](EngineDesign.md) for the full design document — read it before making architectural decisions.
+
+The five target core systems are: application lifecycle, realtime simulation, asset authoring tool, networking, and native/managed (C++/C#) integration. All are at the concept or early groundwork stage; the current active area is the **C++26 reflection system** (`PlaygroundReflection/`), which is a prerequisite for serialization, networking replication, and the C# binding layer.
+
+Key design principles relevant to coding decisions:
+- Where the language provides a mechanism, use it — no macro-based annotation systems, no engine-specific idioms where C++ suffices.
+- Old approaches are replaced when a better one exists, not kept alongside it.
+- Networking and replication are considered in system design from the start, not retrofitted.
 
 The project deliberately rides the bleeding edge of the C++ toolchain: **C++26, named modules, `import std`, and `std::meta` reflection**. This drives most of the non-obvious constraints below.
 
