@@ -6,12 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A cross-platform application engine focused on realtime graphics and simulation. Currently in the **exploration phase**: major concepts are validated in isolation before being unified. See [EngineDesign.md](EngineDesign.md) for the full design document — read it before making architectural decisions.
 
-The five target core systems are: application lifecycle, realtime simulation, asset authoring tool, networking, and native/managed (C++/C#) integration. All are at the concept or early groundwork stage; the current active area is the **C++26 reflection system** (`PlaygroundReflection/`), which is a prerequisite for serialization, networking replication, and the C# binding layer.
+The five target core systems are: application lifecycle, realtime simulation, asset authoring tool, networking, and native/managed (C++/C#) integration. All are at the concept or early groundwork stage; the current active area is the **C++26 reflection system** (`PlaygroundReflection/`), which is a prerequisite for serialization, networking replication, and the C# binding layer. Its design doc (use cases, requirements) is [docs/ReflectionSystem.md](docs/ReflectionSystem.md).
 
 Key design principles relevant to coding decisions:
 - Where the language provides a mechanism, use it — no macro-based annotation systems, no engine-specific idioms where C++ suffices.
 - Old approaches are replaced when a better one exists, not kept alongside it.
 - Networking and replication are considered in system design from the start, not retrofitted.
+- Engine-wide conventions are settled in [docs/CoreConventions.md](docs/CoreConventions.md): no garbage collector, generational handles as the canonical reference to engine objects, ECS as the simulation direction, std usage policy (deny-list, pmr seam), and the error-handling zones (native runtime code uses `std::expected`/error codes, never depends on exceptions). Consult it before design-adjacent changes.
 
 The project deliberately rides the bleeding edge of the C++ toolchain: **C++26, named modules, `import std`, and `std::meta` reflection**. This drives most of the non-obvious constraints below.
 
@@ -62,6 +63,7 @@ A game is created by subclassing `AppDescriptorBase` (factory: `GetApp()`) and `
 - `World` owns `GameObject`s (`std::vector<unique_ptr>`); `World::Run()` updates them.
 - `GameObject` owns `ComponentBase`s in an `unordered_map<ComponentId, unique_ptr>`. Type→id mapping is a per-type `static` counter (`GetComponentId<T>()` caches a value from `IncrementComponentId()`), so **each component type can appear at most once per GameObject** — `AddComponent` asserts on duplicates, `GetComponent` asserts if absent.
 - New components subclass `ComponentBase` (pure-virtual `Update()`) and should be re-exported from `Components.cppm`. `TransformComponent` is the template to copy.
+- **This model is a placeholder.** The decided direction is a full ECS — entities as generational handles, components as concrete value types in contiguous storage (see `docs/CoreConventions.md`). The skeleton will be replaced, not evolved; don't build new infrastructure on the GameObject model.
 
 ### Logging
 spdlog, header-only (`SPDLOG_HEADER_ONLY`). Use the `LOG_TRACE/INFO/WARN/ERROR/FATAL` macros from `include/PlaygroundEngine/Log.h`. Because macros can't cross module boundaries, files that log must `#include "PlaygroundEngine/Log.h"` in the **global module fragment** (`module;` ... before the `module X;` line) — see `Engine.cpp` and `PlaygroundGame/src/App.cpp`.

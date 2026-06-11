@@ -48,4 +48,4 @@ Output: `build/linux/<Target>/<Config>/`
 | `PlaygroundGame` | Executable — links the engine, current demo |
 | `PlaygroundReflection` | Standalone scratch pad for C++26 `std::meta` reflection |
 
-See [EngineDesign.md](EngineDesign.md) for the full design document.
+See [EngineDesign.md](EngineDesign.md) for the full design document, [docs/ReflectionSystem.md](docs/ReflectionSystem.md) for the reflection system design, and [docs/CoreConventions.md](docs/CoreConventions.md) for engine-wide conventions (object model, memory, std policy, error handling).

@@ -48,7 +48,7 @@ These are the five pillars the engine needs to have working together — in thei
 Window creation, input handling, the main loop, platform abstraction. The entry point pattern is in place — the engine owns `main()` and the game supplies a descriptor — but the full lifecycle system is not yet designed.
 
 ### 2. Realtime Simulation `planned`
-The world, entities, components, and the update loop. A basic skeleton exists (World, GameObject, ComponentBase), but the full system is not designed. The design needs to account for networking from the start — replication, authority, and determinism influence the structure, not just the API surface.
+The world, entities, components, and the update loop. The decided direction is a full ECS — entities as generational handles, components as value types ([docs/CoreConventions.md](docs/CoreConventions.md)); the existing skeleton (World, GameObject, ComponentBase) is a placeholder that will be replaced. The design needs to account for networking from the start — replication, authority, and determinism influence the structure, not just the API surface.
 
 ### 3. Asset Authoring Tool `planned`
 An editor for creating, importing, and configuring assets. Depends on the reflection and serialization system — asset data is reflected C++ structs, and the editor reads and writes serialized state directly.
@@ -57,7 +57,7 @@ An editor for creating, importing, and configuring assets. Depends on the reflec
 State replication, authority model, transport abstraction. The intent is for networking to be transparent for single-player use while remaining fully accessible when needed. The reflection system is the substrate — replicated fields are annotated, and the networking layer reads those annotations.
 
 ### 5. Native / Managed Integration `planned`
-The bridge between C++ and C#. The C++ reflection system provides the type metadata; a binding generator emits C# wrapper classes from it.
+The bridge between C++ and C#. The C++ reflection system provides the type metadata; a binding generator emits C# wrapper classes from it. The lifetime model is settled ([docs/CoreConventions.md](docs/CoreConventions.md)): engine objects cross the boundary as handles only — no native pointers in managed objects, no finalizers — and the generated bindings translate between the native error model (`std::expected`) and idiomatic C# exceptions.
 
 ---
 
@@ -100,16 +100,15 @@ main()
 
 This inversion means the engine controls initialization order, platform setup, and teardown. The game plugs into well-defined lifecycle hooks.
 
-### Entity / Component Model (implemented, evolving)
+### Entity / Component Model (placeholder — ECS planned)
 
-- `World` owns `GameObject`s
-- `GameObject` owns `ComponentBase`s, keyed by type
-- Each component type appears at most once per object (enforced by assertion)
-- Components are updated by the world each frame
+The current skeleton (`World` owns `GameObject`s, `GameObject` owns `ComponentBase`s keyed by type) is a sketch and will be **replaced, not evolved**. The decided direction is a full ECS: entities as generational handles, components as concrete value types in contiguous per-type storage, behavior expressed by composition. An optional thin facade may later present a simpler object-style API for small games; it owns no state, so engine systems see only ECS state.
 
-This will evolve as the networking and simulation requirements become clearer.
+Object model, handle, and memory conventions are recorded in [docs/CoreConventions.md](docs/CoreConventions.md).
 
 ### Reflection System (in design)
+
+See [docs/ReflectionSystem.md](docs/ReflectionSystem.md) for the system's design document (use cases and requirements).
 
 C++26 `std::meta` reflection is the substrate for serialization, editor tooling, networking replication, and native/managed binding. The reflection API (`TypeInfo`, `FieldInfo`, `FuncInfo`, `TypeRegistry`) is what engine systems and game code interact with. The implementation uses `^^T`, `template for`, and splicers internally — game code never touches `std::meta` directly.
 
@@ -161,7 +160,8 @@ cmake --build --preset linux-debug    # or linux-dev / linux-release
 | Generic any-erased function registry | `PlaygroundReflection/src/` | Done |
 | JSON deserialization via reflection | `PlaygroundReflection/src/` | Done |
 | Construction via annotated factory | `PlaygroundReflection/src/` | Done |
-| Reflection system API design | — | Next |
+| Reflection system API design | [docs/ReflectionSystem.md](docs/ReflectionSystem.md) | Active — use cases defined |
+| Core conventions (object model, memory, std, errors) | [docs/CoreConventions.md](docs/CoreConventions.md) | Defined |
 | 3D renderer | `PlaygroundGame/` | Early |
 
 ---
