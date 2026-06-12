@@ -1,0 +1,59 @@
+---
+# PlaygroundEngine naming rules — machine-readable form of the table in the
+# .editorconfig header (PascalCase types/functions/public surface, camelBack
+# locals/params, _camelBack private members, UPPER_CASE macros).
+#
+# Only naming is enabled: every other clang-tidy check needs clang to fully
+# parse the translation unit, which this codebase's toolchain defeats today
+# (GCC-only C++26: named modules, import std, -freflection). IDE bundled
+# clang-tidy (Rider/CLion/ReSharper) reads this file and will surface naming
+# issues wherever parsing succeeds; the file is ready for CLI/CI use once
+# clang's P2996 support catches up.
+#
+# Deliberately not enforced yet:
+#   - PGE_ macro prefix (MacroDefinitionPrefix): enable after the LOG_* macros
+#     are renamed to PGE_LOG_*.
+#   - std-facing snake_case contracts (begin/end/swap, value_type, ...) are
+#     exempted via the IgnoredRegexp options below; extend as needed.
+
+Checks: '-*,readability-identifier-naming'
+
+CheckOptions:
+  # Namespaces, types, concepts
+  - { key: readability-identifier-naming.NamespaceCase,          value: CamelCase }
+  - { key: readability-identifier-naming.ClassCase,              value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,             value: CamelCase }
+  - { key: readability-identifier-naming.UnionCase,              value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,               value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,          value: CamelCase }
+  - { key: readability-identifier-naming.TypedefCase,            value: CamelCase }
+  - { key: readability-identifier-naming.ConceptCase,            value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase,  value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasIgnoredRegexp, value: '^(value_type|size_type|difference_type|key_type|mapped_type|element_type|allocator_type|iterator|const_iterator|reference|const_reference|pointer|const_pointer|iterator_category|iterator_concept)$' }
+  - { key: readability-identifier-naming.TypedefIgnoredRegexp,   value: '^(value_type|size_type|difference_type|key_type|mapped_type|element_type|allocator_type|iterator|const_iterator|reference|const_reference|pointer|const_pointer|iterator_category|iterator_concept)$' }
+
+  # Functions and methods
+  - { key: readability-identifier-naming.FunctionCase,           value: CamelCase }
+  - { key: readability-identifier-naming.MethodCase,             value: CamelCase }
+  - { key: readability-identifier-naming.FunctionIgnoredRegexp,  value: '^(main|begin|end|swap)$' }
+  - { key: readability-identifier-naming.MethodIgnoredRegexp,    value: '^(begin|end|cbegin|cend|rbegin|rend|crbegin|crend|swap|size|empty|data)$' }
+
+  # Members: public surface is reflected/serialized and maps 1:1 to C#
+  - { key: readability-identifier-naming.PublicMemberCase,       value: CamelCase }
+  - { key: readability-identifier-naming.ProtectedMemberCase,    value: camelBack }
+  - { key: readability-identifier-naming.ProtectedMemberPrefix,  value: '_' }
+  - { key: readability-identifier-naming.PrivateMemberCase,      value: camelBack }
+  - { key: readability-identifier-naming.PrivateMemberPrefix,    value: '_' }
+
+  # Locals and parameters
+  - { key: readability-identifier-naming.ParameterCase,          value: camelBack }
+  - { key: readability-identifier-naming.LocalVariableCase,      value: camelBack }
+
+  # Constants and enumerators
+  - { key: readability-identifier-naming.EnumConstantCase,       value: CamelCase }
+  - { key: readability-identifier-naming.ScopedEnumConstantCase, value: CamelCase }
+  - { key: readability-identifier-naming.GlobalConstantCase,     value: CamelCase }
+  - { key: readability-identifier-naming.ClassConstantCase,      value: CamelCase }
+
+  # Macros
+  - { key: readability-identifier-naming.MacroDefinitionCase,    value: UPPER_CASE }

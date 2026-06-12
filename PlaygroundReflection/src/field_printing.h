@@ -22,24 +22,24 @@ struct Vec3 { float x, y, z; };
 template <typename T>
 void PrintMembers(const T& obj)
 {
-    // ^^T produces a compile-time "reflection" of the type — a std::meta::info value.
-    std::cout << "Type: " << std::meta::identifier_of(^^T) << "\n";
+	// ^^T produces a compile-time "reflection" of the type — a std::meta::info value.
+	std::cout << "Type: " << std::meta::identifier_of(^^T) << "\n";
 
-    // nonstatic_data_members_of returns a compile-time list of member reflections.
-    // define_static_array materialises it into a static std::span we can loop over.
-    // access_context::current() respects the access rules at the call site.
-    template for (constexpr auto member :
-        std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::current())))
-    {
-        // obj.[:member:] is a "splicer": given a compile-time member reflection,
-        // it generates the actual field access expression (e.g. obj.x, obj.y).
-        std::cout << "  " << std::meta::identifier_of(member) << " = " << obj.[:member:] << "\n";
-    }
+	// nonstatic_data_members_of returns a compile-time list of member reflections.
+	// define_static_array materialises it into a static std::span we can loop over.
+	// access_context::current() respects the access rules at the call site.
+	template for (constexpr auto member :
+		std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::current())))
+	{
+		// obj.[:member:] is a "splicer": given a compile-time member reflection,
+		// it generates the actual field access expression (e.g. obj.x, obj.y).
+		std::cout << "  " << std::meta::identifier_of(member) << " = " << obj.[:member:] << "\n";
+	}
 }
 
 void DemoFieldPrinting()
 {
-    std::cout << "=== Field Printing ===\n";
-    PrintMembers(Vec3{1.f, 2.f, 3.f});
-    PrintMembers(Vec3{4.f, 5.f, 6.f});
+	std::cout << "=== Field Printing ===\n";
+	PrintMembers(Vec3{1.f, 2.f, 3.f});
+	PrintMembers(Vec3{4.f, 5.f, 6.f});
 }

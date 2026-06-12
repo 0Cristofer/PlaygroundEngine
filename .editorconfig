@@ -1,0 +1,63 @@
+# PlaygroundEngine code style
+#
+# Naming conventions (not expressible as EditorConfig properties — the
+# machine-readable rules live in .clang-tidy as readability-identifier-naming):
+#   Namespaces, types, concepts ........ PascalCase (no E/F/I prefixes)
+#   Functions, methods ................. PascalCase
+#   Public fields, enumerators, consts . PascalCase (reflected/serialized surface, maps 1:1 to C#)
+#   Private/protected members .......... _camelCase
+#   Locals, parameters ................. camelCase
+#   Macros ............................. PGE_SCREAMING_SNAKE
+#   Files .............................. PascalCase, matching the module name
+#   Exception: std-facing contracts (begin/end, value_type, ...) keep std's snake_case.
+#
+# The cpp_* properties below are read by the ReSharper C++ engine (Rider, CLion Nova,
+# ReSharper). Plain editors honor the standard properties only.
+
+root = true
+
+# Tabs are the project default (C++, CMake, and anything else we author).
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+# --- C++ sources, module interfaces, headers ---
+[*.{cpp,cppm,h,hpp}]
+max_line_length = 120
+
+# Brace layout: Allman everywhere
+cpp_namespace_declaration_braces = next_line
+cpp_type_declaration_braces = next_line
+cpp_invocable_declaration_braces = next_line
+cpp_other_braces = next_line
+
+# Blank lines: one around definitions; prototypes may be grouped
+cpp_blank_lines_around_function_definition = 1
+cpp_blank_lines_around_single_line_function_definition = 1
+cpp_blank_lines_around_function_declaration = 0
+cpp_blank_lines_around_class_definition = 1
+cpp_blank_lines_around_namespace = 1
+cpp_blank_lines_before_access_specifier = 1
+cpp_blank_lines_after_access_specifier = 0
+cpp_keep_blank_lines_in_declarations = 1
+cpp_keep_blank_lines_in_code = 1
+
+# Indentation: namespace members indented, access specifiers at class level
+cpp_namespace_indentation = all
+cpp_indent_access_specifiers_from_class = false
+cpp_indent_class_members_from_access_specifiers = true
+cpp_indent_switch_labels = true
+
+# --- Data / config formats (spaces by convention; tabs are invalid YAML) ---
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# --- Markdown (trailing double-space is a hard line break) ---
+[*.md]
+trim_trailing_whitespace = false

@@ -8,14 +8,14 @@ import std;
 
 namespace PlaygroundEngine
 {
-    export class Log
-    {
-    public:
-        static void Init();
+	export class Log
+	{
+	public:
+		static void Init();
 
-        static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return _logger; }
-    private:
-        static std::shared_ptr<spdlog::logger> _logger;
-    };
+		static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return _logger; }
+	private:
+		static std::shared_ptr<spdlog::logger> _logger;
+	};
 
 }

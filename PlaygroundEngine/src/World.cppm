@@ -6,13 +6,13 @@ import std;
 
 namespace PlaygroundEngine
 {
-    export class World
-    {
-    public:
-        GameObject* AddGameObject();
-        void Run();
-    
-    private:
-        std::vector<std::unique_ptr<GameObject>> _gameObjects;
-    };   
+	export class World
+	{
+	public:
+		GameObject* AddGameObject();
+		void Run();
+
+	private:
+		std::vector<std::unique_ptr<GameObject>> _gameObjects;
+	};
 }

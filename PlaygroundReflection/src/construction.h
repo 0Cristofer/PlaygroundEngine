@@ -36,23 +36,23 @@ struct Serialized {};   // parameter comes from serialized data (JSON, save file
 // -----------------------------------------------------------------------------
 struct Weapon
 {
-    // [[=Factory{}]] tells the reflection system this is the construction entry point.
-    // [[=Injected{}]] / [[=Serialized{}]] tell it where each argument comes from.
-    [[=Factory{}]]
-    static Weapon Create([[=Injected{}]]  int         id,
-                         [[=Serialized{}]] std::string name,
-                         [[=Serialized{}]] float       damage)
-    {
-        return Weapon(id, std::move(name), damage);
-    }
+	// [[=Factory{}]] tells the reflection system this is the construction entry point.
+	// [[=Injected{}]] / [[=Serialized{}]] tell it where each argument comes from.
+	[[=Factory{}]]
+	static Weapon Create([[=Injected{}]]  int         id,
+						 [[=Serialized{}]] std::string name,
+						 [[=Serialized{}]] float       damage)
+	{
+		return Weapon(id, std::move(name), damage);
+	}
 
-    int         id     = 0;
-    std::string name;
-    float       damage = 0.f;
+	int         id     = 0;
+	std::string name;
+	float       damage = 0.f;
 
 private:
-    Weapon(int id, std::string name, float damage)
-        : id(id), name(std::move(name)), damage(damage) {}
+	Weapon(int id, std::string name, float damage)
+		: id(id), name(std::move(name)), damage(damage) {}
 };
 
 // -----------------------------------------------------------------------------
@@ -66,13 +66,13 @@ private:
 template <typename T>
 consteval std::meta::info FindFactory()
 {
-    for (std::meta::info member : std::meta::members_of(^^T, std::meta::access_context::unchecked()))
-        if (std::meta::is_function(member) && !std::meta::is_special_member_function(member))
-            if (!std::meta::annotations_of_with_type(member, ^^Factory).empty())
-                return member;
+	for (std::meta::info member : std::meta::members_of(^^T, std::meta::access_context::unchecked()))
+		if (std::meta::is_function(member) && !std::meta::is_special_member_function(member))
+			if (!std::meta::annotations_of_with_type(member, ^^Factory).empty())
+				return member;
 
-    // No factory found — downstream template instantiation will produce a clearer error.
-    return {};
+	// No factory found — downstream template instantiation will produce a clearer error.
+	return {};
 }
 
 // -----------------------------------------------------------------------------
@@ -85,25 +85,25 @@ consteval std::meta::info FindFactory()
 template <std::meta::info Fn, std::size_t... I>
 std::any InvokeStaticImpl(Args args, std::index_sequence<I...>)
 {
-    constexpr auto params = std::define_static_array(std::meta::parameters_of(Fn));
-    using ReturnType = [:std::meta::return_type_of(Fn):];
+	constexpr auto params = std::define_static_array(std::meta::parameters_of(Fn));
+	using ReturnType = [:std::meta::return_type_of(Fn):];
 
-    if constexpr (std::is_void_v<ReturnType>)
-    {
-        [:Fn:](ArgCast<params[I]>::from(args[I])...);
-        return {};
-    }
-    else
-    {
-        return [:Fn:](ArgCast<params[I]>::from(args[I])...);
-    }
+	if constexpr (std::is_void_v<ReturnType>)
+	{
+		[:Fn:](ArgCast<params[I]>::from(args[I])...);
+		return {};
+	}
+	else
+	{
+		return [:Fn:](ArgCast<params[I]>::from(args[I])...);
+	}
 }
 
 template <std::meta::info Fn>
 std::any InvokeStatic(Args args)
 {
-    constexpr std::size_t paramCount = std::meta::parameters_of(Fn).size();
-    return InvokeStaticImpl<Fn>(args, std::make_index_sequence<paramCount>{});
+	constexpr std::size_t paramCount = std::meta::parameters_of(Fn).size();
+	return InvokeStaticImpl<Fn>(args, std::make_index_sequence<paramCount>{});
 }
 
 // -----------------------------------------------------------------------------
@@ -126,15 +126,15 @@ std::any InvokeStatic(Args args)
 template <std::meta::info Fn, std::size_t... I>
 [:std::meta::return_type_of(Fn):] InvokeStaticTypedImpl(Args args, std::index_sequence<I...>)
 {
-    constexpr auto params = std::define_static_array(std::meta::parameters_of(Fn));
-    return [:Fn:](ArgCast<params[I]>::from(args[I])...);
+	constexpr auto params = std::define_static_array(std::meta::parameters_of(Fn));
+	return [:Fn:](ArgCast<params[I]>::from(args[I])...);
 }
 
 template <std::meta::info Fn>
 [:std::meta::return_type_of(Fn):] InvokeStaticTyped(Args args)
 {
-    constexpr std::size_t paramCount = std::meta::parameters_of(Fn).size();
-    return InvokeStaticTypedImpl<Fn>(args, std::make_index_sequence<paramCount>{});
+	constexpr std::size_t paramCount = std::meta::parameters_of(Fn).size();
+	return InvokeStaticTypedImpl<Fn>(args, std::make_index_sequence<paramCount>{});
 }
 
 // -----------------------------------------------------------------------------
@@ -154,37 +154,37 @@ template <std::meta::info Fn>
 template <typename T, std::meta::info Fn>
 T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injectedArgs)
 {
-    std::vector<std::any> allArgs;
-    int injectedIdx = 0;   // runtime counter — incremented in Injected branches as
-                           // template for unrolls, preserving declaration order
+	std::vector<std::any> allArgs;
+	int injectedIdx = 0;   // runtime counter — incremented in Injected branches as
+						   // template for unrolls, preserving declaration order
 
-    template for (constexpr auto param :
-        std::define_static_array(std::meta::parameters_of(Fn)))
-    {
-        using ParamType = [:std::meta::type_of(param):];
+	template for (constexpr auto param :
+		std::define_static_array(std::meta::parameters_of(Fn)))
+	{
+		using ParamType = [:std::meta::type_of(param):];
 
-        if constexpr (!std::meta::annotations_of_with_type(param, ^^Injected).empty())
-        {
-            // Injected: take the next runtime dependency from the caller's list.
-            allArgs.push_back(injectedArgs[injectedIdx++]);
-        }
-        else
-        {
-            // Serialized: look up by the parameter's own name, convert to its type.
-            // This is the compile-time→runtime bridge: identifier_of gives the key,
-            // type_of drives the conversion branch.
-            const std::string& raw = parsedJson.at(std::string{std::meta::identifier_of(param)});
+		if constexpr (!std::meta::annotations_of_with_type(param, ^^Injected).empty())
+		{
+			// Injected: take the next runtime dependency from the caller's list.
+			allArgs.push_back(injectedArgs[injectedIdx++]);
+		}
+		else
+		{
+			// Serialized: look up by the parameter's own name, convert to its type.
+			// This is the compile-time→runtime bridge: identifier_of gives the key,
+			// type_of drives the conversion branch.
+			const std::string& raw = parsedJson.at(std::string{std::meta::identifier_of(param)});
 
-            if constexpr (std::is_same_v<ParamType, int>)
-                allArgs.push_back(std::stoi(raw));
-            else if constexpr (std::is_same_v<ParamType, float>)
-                allArgs.push_back(std::stof(raw));
-            else if constexpr (std::is_same_v<ParamType, std::string>)
-                allArgs.push_back(raw);
-        }
-    }
+			if constexpr (std::is_same_v<ParamType, int>)
+				allArgs.push_back(std::stoi(raw));
+			else if constexpr (std::is_same_v<ParamType, float>)
+				allArgs.push_back(std::stof(raw));
+			else if constexpr (std::is_same_v<ParamType, std::string>)
+				allArgs.push_back(raw);
+		}
+	}
 
-    return InvokeStaticTyped<Fn>(allArgs);
+	return InvokeStaticTyped<Fn>(allArgs);
 }
 
 // -----------------------------------------------------------------------------
@@ -196,8 +196,8 @@ T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injec
 template <typename T>
 T ConstructFromJson(std::string_view json, Args injectedArgs = {})
 {
-    auto parsedJson = ParseFlatJson(json);
-    return ConstructImpl<T, FindFactory<T>()>(parsedJson, injectedArgs);
+	auto parsedJson = ParseFlatJson(json);
+	return ConstructImpl<T, FindFactory<T>()>(parsedJson, injectedArgs);
 }
 
 // -----------------------------------------------------------------------------
@@ -205,29 +205,29 @@ T ConstructFromJson(std::string_view json, Args injectedArgs = {})
 // -----------------------------------------------------------------------------
 void DemoConstruction()
 {
-    std::cout << "\n=== Construction via Annotated Factory ===\n";
+	std::cout << "\n=== Construction via Annotated Factory ===\n";
 
-    // 'id' is Injected — provided by the caller (assigned by the entity system).
-    // 'name' and 'damage' are Serialized — come from the JSON.
-    // The constructor is private; Create() is the only entry point.
-    constexpr std::string_view json = R"({
+	// 'id' is Injected — provided by the caller (assigned by the entity system).
+	// 'name' and 'damage' are Serialized — come from the JSON.
+	// The constructor is private; Create() is the only entry point.
+	constexpr std::string_view json = R"({
         "name"  : "Excalibur",
         "damage": 42.5
     })";
 
-    std::vector<std::any> injectedArgs = {1001};   // runtime id
-    auto weapon = ConstructFromJson<Weapon>(json, injectedArgs);
+	std::vector<std::any> injectedArgs = {1001};   // runtime id
+	auto weapon = ConstructFromJson<Weapon>(json, injectedArgs);
 
-    std::cout << "  id     = " << weapon.id     << "\n";
-    std::cout << "  name   = " << weapon.name   << "\n";
-    std::cout << "  damage = " << weapon.damage  << "\n";
+	std::cout << "  id     = " << weapon.id     << "\n";
+	std::cout << "  name   = " << weapon.name   << "\n";
+	std::cout << "  damage = " << weapon.damage  << "\n";
 
-    // Direct strongly-typed call: all three args provided manually, in
-    // declaration order. The return type is spliced from the reflection,
-    // so the result is a Weapon — no any_cast needed.
-    std::vector<std::any> daggerArgs = {2002, std::string{"Dagger"}, 7.5f};
-    Weapon dagger = InvokeStaticTyped<FindFactory<Weapon>()>(daggerArgs);
+	// Direct strongly-typed call: all three args provided manually, in
+	// declaration order. The return type is spliced from the reflection,
+	// so the result is a Weapon — no any_cast needed.
+	std::vector<std::any> daggerArgs = {2002, std::string{"Dagger"}, 7.5f};
+	Weapon dagger = InvokeStaticTyped<FindFactory<Weapon>()>(daggerArgs);
 
-    std::cout << "  typed  : " << dagger.name << " (id " << dagger.id
-              << ", damage " << dagger.damage << ")\n";
+	std::cout << "  typed  : " << dagger.name << " (id " << dagger.id
+			  << ", damage " << dagger.damage << ")\n";
 }

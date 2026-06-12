@@ -13,11 +13,11 @@ import std;
 
 int main()
 {
-    DemoFieldPrinting();
-    DemoAnnotations();
-    DemoGenericRegistry();
-    DemoTypeExploration();
-    DemoSerialization();
-    DemoConstruction();
-    return 0;
+	DemoFieldPrinting();
+	DemoAnnotations();
+	DemoGenericRegistry();
+	DemoTypeExploration();
+	DemoSerialization();
+	DemoConstruction();
+	return 0;
 }

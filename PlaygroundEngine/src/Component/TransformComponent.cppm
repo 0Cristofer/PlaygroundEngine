@@ -4,11 +4,11 @@ import PlaygroundEngine.Components.ComponentBase;
 
 namespace PlaygroundEngine
 {
-    export class TransformComponent : public ComponentBase
-    {
-    public:
-        void Update() override;
+	export class TransformComponent : public ComponentBase
+	{
+	public:
+		void Update() override;
 
-        int Position = 0;
-    };   
+		int Position = 0;
+	};
 }

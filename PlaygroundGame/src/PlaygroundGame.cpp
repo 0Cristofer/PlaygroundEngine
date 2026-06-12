@@ -7,5 +7,5 @@ import std;
 
 PlaygroundEngine::AppDescriptorBase* PlaygroundEngine::GetAppDescriptor(PlaygroundEngine::CommandLine* commandLine)
 {
-    return new PlaygroundGame::PlaygroundGameAppDescriptor(commandLine);
+	return new PlaygroundGame::PlaygroundGameAppDescriptor(commandLine);
 }
