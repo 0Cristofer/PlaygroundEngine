@@ -57,7 +57,7 @@ An editor for creating, importing, and configuring assets. Depends on the reflec
 State replication, authority model, transport abstraction. The intent is for networking to be transparent for single-player use while remaining fully accessible when needed. The reflection system is the substrate — replicated fields are annotated, and the networking layer reads those annotations.
 
 ### 5. Native / Managed Integration `planned`
-The bridge between C++ and C#. The C++ reflection system provides the type metadata; a binding generator emits C# wrapper classes from it. The lifetime model is settled ([docs/CoreConventions.md](docs/CoreConventions.md)): engine objects cross the boundary as handles only — no native pointers in managed objects, no finalizers — and the generated bindings translate between the native error model (`std::expected`) and idiomatic C# exceptions.
+The bridge between C++ and C#. The C++ reflection system provides the type metadata; a binding generator emits C# wrapper classes from it. The boundary lifetime and error models are settled in [docs/CoreConventions.md](docs/CoreConventions.md).
 
 ---
 
@@ -82,6 +82,10 @@ The default path through the engine should be obvious and sufficient for common 
 ### Networking considered from the start
 
 The entity and simulation model is designed with replication and authority in mind from the beginning. Retrofitting networking onto a system designed for single-player typically requires structural changes; building with it in scope avoids that.
+
+### Multithread-first
+
+The engine assumes parallel execution from the start. The concrete threading model (job system, scheduling) belongs to the engine architecture design, not yet written. Standing rule until then: systems designed today must not bake in single-threaded assumptions.
 
 ---
 

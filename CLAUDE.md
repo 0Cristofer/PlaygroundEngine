@@ -16,6 +16,20 @@ Key design principles relevant to coding decisions:
 
 The project deliberately rides the bleeding edge of the C++ toolchain: **C++26, named modules, `import std`, and `std::meta` reflection**. This drives most of the non-obvious constraints below.
 
+## Design rationale notes
+
+Background for the decisions in `docs/` — useful when evaluating proposals or extending designs; the docs state only the decisions.
+
+- **No native GC:** UE's GC exists chiefly to serve Blueprint-style script object graphs; here that role belongs to the .NET GC on the C# side. Two collectors that can't see each other's edges cause boundary bugs (Godot's C# RefCounted history).
+- **Handles over `weak_ptr`:** same explicit may-be-dead semantics (check before use), but POD — serializable, replicable, crosses to C# as an `int64` — with no shared-ownership prerequisite and no cycles. Avoids UE's pointer↔NetGUID translation layer, Unity's cached-pointer "fake null", and Godot's cross-boundary refcount dance.
+- **`Poly<T>` capture-at-erasure:** chosen so engine correctness never depends on RTTI; P2996 cannot enumerate derived classes and vtable-pointer maps are UB, so capturing `TypeInfo` where the concrete type is still statically known is the only clean mechanism.
+- **Tree-of-ownership:** matches practice (in UE: owned `UPROPERTY` subobject vs. `UPROPERTY(Transient)` reference); it is what makes text assets mergeable and removes graph-aliasing machinery from serializers. Assets are the multi-referenced exception, handled by never serializing inline.
+- **UI as retained polymorphic trees:** ECS-for-UI is a known poor fit (deep heterogeneous hierarchies, tree ownership); every shipping retained UI (Slate, Qt, Godot Control) is an object tree. Handle-style cross-references rather than Slate's shared-pointer web, because UI is driven from C#.
+- **No std wrapper aliases:** `vector`/`string`/`span` essentially never get wholesale-replaced; the genuinely weak pieces (node-based maps, regex, iostreams) get replaced individually when profiling shows it.
+- **Error zones split by "ships in the console runtime?"** not "system vs gameplay" — meta-game code (store, customization) ships on console but is C#, which always has exceptions; native runtime code must not depend on unwinding so `-fno-exceptions` stays available.
+- **Cross-runtime type model:** UE's `UClass` (Blueprint classes are first-class types) is the model; Unity's split native/C# metadata worlds are the cautionary tale. Unify the TypeInfo contract, not the per-runtime mechanisms.
+- **pmr as the allocator seam:** the seam (signatures, `memory_resource*` params) is invasive to retrofit; the pools are not. Hence seam now, implementations later.
+
 ## Toolchain constraints
 
 - **GCC 16+ is required and the only supported compiler.** It must be a source build located at `~/gcc-16` (the `linux` preset hardcodes `~/gcc-16/bin/{gcc,g++}`).
