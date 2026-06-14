@@ -73,6 +73,9 @@ target_sources(PlaygroundEngine
 		src/Component/TransformComponent.cpp
 		src/App.cpp
 		src/main.cpp
+        src/Reflection/TypeInfo.cpp
+        src/Reflection/TypeRegistry.cpp
+        src/Reflection/Field.cpp
 
 
 		PUBLIC
@@ -87,6 +90,9 @@ target_sources(PlaygroundEngine
 		src/Component/Components.cppm
 		src/Component/ComponentBase.cppm
 		src/Component/TransformComponent.cppm
+        src/Reflection/TypeInfo.cppm
+        src/Reflection/TypeRegistry.cppm
+        src/Reflection/Field.cppm
 
 		PUBLIC
 		FILE_SET HEADERS

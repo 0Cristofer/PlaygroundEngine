@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- libstdc++ std::span, dynamic extent.
+       _M_extent stores the size in _M_extent_value. -->
+  <Type Name="std::span&lt;*,18446744073709551615&gt;">
+    <DisplayString>{{ size={_M_extent._M_extent_value} }}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>_M_extent._M_extent_value</Size>
+        <ValuePointer>_M_ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- libstdc++ std::span, static extent.
+       _M_extent is empty; the size is the non-type template argument $T2. -->
+  <Type Name="std::span&lt;*,*&gt;">
+    <DisplayString>{{ size={$T2} }}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>$T2</Size>
+        <ValuePointer>_M_ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- std::vector (NOT std::vector<bool>, which has a different bit-packed layout).
+       Members live in the _Vector_base::_M_impl subobject. -->
+  <Type Name="std::vector&lt;*&gt;">
+    <DisplayString>{{ size={_M_impl._M_finish - _M_impl._M_start} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">_M_impl._M_finish - _M_impl._M_start</Item>
+      <Item Name="[capacity]">_M_impl._M_end_of_storage - _M_impl._M_start</Item>
+      <ArrayItems>
+        <Size>_M_impl._M_finish - _M_impl._M_start</Size>
+        <ValuePointer>_M_impl._M_start</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- std::string. _M_dataplus._M_p is the (always NUL-terminated) buffer. -->
+  <Type Name="std::basic_string&lt;char,*&gt;">
+    <DisplayString>{_M_dataplus._M_p,s}</DisplayString>
+    <StringView>_M_dataplus._M_p,s</StringView>
+    <Expand>
+      <Item Name="[size]">_M_string_length</Item>
+      <ArrayItems>
+        <Size>_M_string_length</Size>
+        <ValuePointer>_M_dataplus._M_p</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- std::string_view. Not NUL-terminated, so length-bound the read. -->
+  <Type Name="std::basic_string_view&lt;char,*&gt;">
+    <DisplayString>{_M_str,[_M_len]s}</DisplayString>
+    <StringView>_M_str,[_M_len]s</StringView>
+    <Expand>
+      <Item Name="[size]">_M_len</Item>
+      <ArrayItems>
+        <Size>_M_len</Size>
+        <ValuePointer>_M_str</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <!-- std::pair -->
+  <Type Name="std::pair&lt;*,*&gt;">
+    <DisplayString>({first}, {second})</DisplayString>
+    <Expand>
+      <Item Name="first">first</Item>
+      <Item Name="second">second</Item>
+    </Expand>
+  </Type>
+
+  <!-- std::optional. _M_payload nests: payload-base._M_payload (the union)._M_value. -->
+  <Type Name="std::optional&lt;*&gt;">
+    <DisplayString Condition="!_M_payload._M_engaged">nullopt</DisplayString>
+    <DisplayString Condition="_M_payload._M_engaged">{_M_payload._M_payload._M_value}</DisplayString>
+    <Expand>
+      <Item Name="[engaged]">_M_payload._M_engaged</Item>
+      <Item Name="[value]" Condition="_M_payload._M_engaged">_M_payload._M_payload._M_value</Item>
+    </Expand>
+  </Type>
+
+  <!-- unique_ptr / shared_ptr are intentionally left to Rider's built-in LLDB
+       formatters: the libstdc++ pointer is buried under several anonymous tuple
+       base classes that Rider's natvis expression evaluator can't walk
+       (yields "???"), and the built-in already renders the pointee correctly. -->
+
+</AutoVisualizer>
