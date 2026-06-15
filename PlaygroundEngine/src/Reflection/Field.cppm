@@ -14,6 +14,10 @@ namespace PlaygroundEngine
 		{
 		}
 
+		int GetByteOffset() const;
+		std::string_view GetName() const;
+		const TypeInfo& GetTypeInfo() const;
+
 	private:
 		const TypeInfo* _typeInfo;
 		std::string_view _name;

@@ -93,6 +93,7 @@ target_sources(PlaygroundEngine
         src/Reflection/TypeInfo.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/Field.cppm
+        src/Reflection/TypeInfoTraits.cppm
 
 		PUBLIC
 		FILE_SET HEADERS
