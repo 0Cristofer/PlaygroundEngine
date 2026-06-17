@@ -1,18 +1,20 @@
 module PlaygroundEngine.Reflection.TypeInfo;
 
+import :FieldInfo;
+
 namespace PlaygroundEngine
 {
-	int Field::GetByteOffset() const
+	int FieldInfo::GetByteOffset() const
 	{
 		return _byteOffset;
 	}
 
-	std::string_view Field::GetName() const
+	std::string_view FieldInfo::GetName() const
 	{
 		return _name;
 	}
 
-	const TypeInfo& Field::GetTypeInfo() const
+	const TypeInfo& FieldInfo::GetTypeInfo() const
 	{
 		return *_typeInfo;
 	}

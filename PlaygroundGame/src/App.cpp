@@ -6,7 +6,7 @@ module PlaygroundGame;
 
 import PlaygroundEngine.Components.TransformComponent;
 import PlaygroundEngine.Reflection.TypeRegistry;
-import PlaygroundEngine.Reflection.TypeInfo;
+import PlaygroundEngine.Reflection;
 import PlaygroundEngine.Log;
 
 class BaseActor
@@ -59,7 +59,8 @@ void PlaygroundGame::App::OnInitialized()
 	registry.RegisterType<int>();
 	Actor actor("John", 25);
 
-	LOG_INFO(PlaygroundEngine::TypeInfo::ToStringTyped(actor));
+	LOG_INFO(PlaygroundEngine::TypeOf<Actor>().ObjectToString(&actor));
+	LOG_INFO("Actor functions:\n{}", PlaygroundEngine::TypeOf<Actor>().FunctionsToString());
 }
 
 void PlaygroundGame::App::OnRun(PlaygroundEngine::World* world)

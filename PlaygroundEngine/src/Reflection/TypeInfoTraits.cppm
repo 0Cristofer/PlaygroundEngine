@@ -1,4 +1,4 @@
-﻿export module PlaygroundEngine.Reflection.TypeInfo:TypeInfoTraits;
+export module PlaygroundEngine.Reflection.TypeInfoTraits;
 
 import std;
 

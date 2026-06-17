@@ -1,10 +1,8 @@
-module;
-
-#include <meta>
-
 export module PlaygroundEngine.Reflection.TypeRegistry;
 
-import PlaygroundEngine.Reflection.TypeInfo;
+export import PlaygroundEngine.Reflection.TypeInfo;
+
+import PlaygroundEngine.Reflection;
 
 import std;
 
@@ -16,7 +14,7 @@ namespace PlaygroundEngine
 		template <typename T>
 		void RegisterType()
 		{
-			_registeredTypes.push_back(&TypeInfo::TypeOf<T>());
+			_registeredTypes.push_back(&TypeOf<T>());
 		}
 
 	private:

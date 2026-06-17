@@ -1,8 +1,5 @@
 #include "PlaygroundEngine/EntryPoint.h"
 
-import PlaygroundEngine.Reflection.TypeRegistry;
-import PlaygroundEngine.Log;
-
 import std;
 
 int main(int argc, char** argv)
