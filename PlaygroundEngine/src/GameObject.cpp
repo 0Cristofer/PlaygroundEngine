@@ -1,6 +1,6 @@
 module PlaygroundEngine.GameObject;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	void GameObject::Update()
 	{

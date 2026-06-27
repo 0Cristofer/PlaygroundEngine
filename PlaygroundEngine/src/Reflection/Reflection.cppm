@@ -6,10 +6,9 @@ export import :Builder;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export template <typename T>
-	// ReSharper disable once CppUseInternalLinkage
 	constexpr const TypeInfo& TypeOf()
 	{
 		return detail::TypeOfMeta<^^T>();

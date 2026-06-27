@@ -1,6 +1,6 @@
 export module PlaygroundEngine.Components.ComponentBase;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class ComponentBase
 	{

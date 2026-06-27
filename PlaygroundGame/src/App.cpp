@@ -45,30 +45,30 @@ private:
 	Actor* other = nullptr;
 };
 
-std::unique_ptr<PlaygroundEngine::AppBase> PlaygroundGame::PlaygroundGameAppDescriptor::GetApp()
+std::unique_ptr<PgE::AppBase> PgG::PlaygroundGameAppDescriptor::GetApp()
 {
 	return std::make_unique<App>();
 }
 
-void PlaygroundGame::App::OnInitialized()
+void PgG::App::OnInitialized()
 {
-	LOG_INFO("PlaygroundGame::App::OnInitialized");
+	LOG_INFO("PgG::App::OnInitialized");
 
-	PlaygroundEngine::TypeRegistry registry;
+	PgE::TypeRegistry registry;
 	registry.RegisterType<Actor>();
 	registry.RegisterType<int>();
 	Actor actor("John", 25);
 
-	LOG_INFO(PlaygroundEngine::TypeOf<Actor>().ObjectToString(&actor));
-	LOG_INFO("Actor functions:\n{}", PlaygroundEngine::TypeOf<Actor>().FunctionsToString());
+	LOG_INFO(PgE::TypeOf<Actor>().ObjectToString(&actor));
+	LOG_INFO("Actor functions:\n{}", PgE::TypeOf<Actor>().FunctionsToString());
 }
 
-void PlaygroundGame::App::OnRun(PlaygroundEngine::World* world)
+void PgG::App::OnRun(PgE::World* world)
 {
 	static int a = 2;
-	PlaygroundEngine::GameObject* gO1 = world->AddGameObject();
-	PlaygroundEngine::TransformComponent* component = gO1->AddComponent<PlaygroundEngine::TransformComponent>();
+	PgE::GameObject* gO1 = world->AddGameObject();
+	PgE::TransformComponent* component = gO1->AddComponent<PgE::TransformComponent>();
 	component->Position = a;
-	LOG_INFO("PlaygroundGame::App::OnRun {}", component->Position);
+	LOG_INFO("PgG::App::OnRun {}", component->Position);
 	a++;
 }

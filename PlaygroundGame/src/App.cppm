@@ -5,22 +5,22 @@ import PlaygroundEngine.App;
 
 import std;
 
-namespace PlaygroundGame
+namespace PgG
 {
-	export class PlaygroundGameAppDescriptor : public PlaygroundEngine::AppDescriptorBase
+	export class PlaygroundGameAppDescriptor : public PgE::AppDescriptorBase
 	{
 	public:
-		PlaygroundGameAppDescriptor(PlaygroundEngine::CommandLine* commandLine) : AppDescriptorBase(commandLine) {}
+		PlaygroundGameAppDescriptor(PgE::CommandLine* commandLine) : AppDescriptorBase(commandLine) {}
 
 		virtual ~PlaygroundGameAppDescriptor() = default;
 
-		std::unique_ptr<PlaygroundEngine::AppBase> GetApp() override;
+		std::unique_ptr<PgE::AppBase> GetApp() override;
 	};
 
-	export class App : public PlaygroundEngine::AppBase
+	export class App : public PgE::AppBase
 	{
 	public:
 		void OnInitialized() override;
-		void OnRun(PlaygroundEngine::World* world) override;
+		void OnRun(PgE::World* world) override;
 	};
 }

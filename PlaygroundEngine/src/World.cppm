@@ -4,7 +4,7 @@ import PlaygroundEngine.GameObject;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class World
 	{

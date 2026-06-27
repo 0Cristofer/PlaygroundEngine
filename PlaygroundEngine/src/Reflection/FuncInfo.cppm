@@ -2,7 +2,7 @@ export module PlaygroundEngine.Reflection.TypeInfo:FuncInfo;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class TypeInfo;
 

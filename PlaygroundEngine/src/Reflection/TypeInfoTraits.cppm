@@ -2,7 +2,7 @@ export module PlaygroundEngine.Reflection.TypeInfoTraits;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export struct TypeInfoTraitsDefaults
 	{

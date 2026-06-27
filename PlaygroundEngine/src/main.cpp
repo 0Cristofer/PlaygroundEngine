@@ -4,10 +4,10 @@ import std;
 
 int main(int argc, char** argv)
 {
-	PlaygroundEngine::AppDescriptorBase* appDescriptor =
-		PlaygroundEngine::GetAppDescriptor(new PlaygroundEngine::CommandLine(argc, argv));
+	PgE::AppDescriptorBase* appDescriptor =
+		PgE::GetAppDescriptor(new PgE::CommandLine(argc, argv));
 
-	std::unique_ptr<PlaygroundEngine::Engine> engine = appDescriptor->GetEngine(appDescriptor);
+	std::unique_ptr<PgE::Engine> engine = appDescriptor->GetEngine(appDescriptor);
 
 	engine->Run();
 	engine->Run();

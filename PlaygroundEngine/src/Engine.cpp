@@ -6,7 +6,7 @@ module PlaygroundEngine;
 
 import PlaygroundEngine.Log;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	std::unique_ptr<Engine> AppDescriptorBase::GetEngine(AppDescriptorBase* appDescriptor)
 	{

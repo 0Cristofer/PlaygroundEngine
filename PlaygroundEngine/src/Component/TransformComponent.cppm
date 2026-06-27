@@ -2,7 +2,7 @@ export module PlaygroundEngine.Components.TransformComponent;
 
 import PlaygroundEngine.Components.ComponentBase;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class TransformComponent : public ComponentBase
 	{

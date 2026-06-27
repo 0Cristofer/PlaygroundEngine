@@ -2,7 +2,7 @@ export module PlaygroundEngine.App;
 
 import PlaygroundEngine.World;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class AppBase
 	{

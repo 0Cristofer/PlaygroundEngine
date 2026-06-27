@@ -12,14 +12,12 @@ import std;
 // This file contains the compile-time reflection mechanisms to build the runtime reflection types
 
 // ReSharper disable once CppInconsistentNaming
-namespace PlaygroundEngine::detail
+namespace PgE::detail
 {
 	template <std::meta::info MetaTypeInfo>
-	// ReSharper disable once CppUseInternalLinkage
 	constexpr const TypeInfo& TypeOfMeta();
 
 	template <typename T>
-	// ReSharper disable once CppUseInternalLinkage
 	std::string StringifyValue(const void* obj)
 	{
 		return TypeInfoTraits<T>::Stringify(*static_cast<const T*>(obj));
@@ -96,7 +94,6 @@ namespace PlaygroundEngine::detail
 	}
 
 	template <std::meta::info MetaFuncInfo>
-	// ReSharper disable once CppUseInternalLinkage
 	constexpr std::span<const ParamInfo> MakeParams()
 	{
 		constexpr auto numParams = std::meta::parameters_of(MetaFuncInfo).size();
@@ -144,6 +141,7 @@ namespace PlaygroundEngine::detail
 		using T = [:MetaTypeInfo:];
 		constexpr std::string_view displayName = std::meta::display_string_of(MetaTypeInfo);
 
+		// ReSharper disable CppInconsistentNaming
 		static constexpr auto fields = GetFieldsFromType<MetaTypeInfo>();
 		static constexpr auto functions = GetFunctionsFromType<MetaTypeInfo>();
 
@@ -157,5 +155,6 @@ namespace PlaygroundEngine::detail
 			static constexpr TypeInfo typeInfo(displayName, fields, functions, nullptr);
 			return typeInfo;
 		}
+		// ReSharper restore CppInconsistentNaming
 	}
 }

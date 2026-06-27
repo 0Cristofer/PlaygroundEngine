@@ -6,7 +6,7 @@ import PlaygroundEngine.Reflection;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class TypeRegistry
 	{

@@ -2,7 +2,7 @@ module PlaygroundEngine.Reflection.TypeInfo;
 
 import :FieldInfo;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	int FieldInfo::GetByteOffset() const
 	{

@@ -6,7 +6,7 @@ module;
 
 module PlaygroundEngine.Log;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	std::shared_ptr<spdlog::logger> Log::_logger;
 

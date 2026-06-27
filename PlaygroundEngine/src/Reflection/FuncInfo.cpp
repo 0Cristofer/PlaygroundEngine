@@ -2,7 +2,7 @@ module PlaygroundEngine.Reflection.TypeInfo;
 
 import :FuncInfo;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	std::string_view ParamInfo::GetName() const
 	{

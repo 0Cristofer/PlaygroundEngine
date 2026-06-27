@@ -2,7 +2,7 @@ export module PlaygroundEngine.Reflection.TypeInfo:FieldInfo;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class TypeInfo;
 

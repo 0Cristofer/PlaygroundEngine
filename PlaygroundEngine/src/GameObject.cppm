@@ -8,7 +8,7 @@ import PlaygroundEngine.Components.ComponentBase;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class GameObject
 	{

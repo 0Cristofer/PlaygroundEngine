@@ -5,7 +5,7 @@ export import :FuncInfo;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class TypeInfo
 	{

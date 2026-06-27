@@ -1,0 +1,17 @@
+# Normalize all text files to LF in the repository and on checkout (all platforms).
+# Git auto-detects text vs binary; detected text is stored and checked out as LF.
+* text=auto eol=lf
+
+# Windows-native scripts must keep CRLF to run correctly.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binary assets: never apply line-ending conversion (belt-and-suspenders over auto-detect).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.zip  binary

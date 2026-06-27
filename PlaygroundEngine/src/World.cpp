@@ -1,13 +1,13 @@
 module PlaygroundEngine.World;
 
-PlaygroundEngine::GameObject* PlaygroundEngine::World::AddGameObject()
+PgE::GameObject* PgE::World::AddGameObject()
 {
 	_gameObjects.push_back(std::make_unique<GameObject>());
 
 	return _gameObjects.back().get();
 }
 
-void PlaygroundEngine::World::Run()
+void PgE::World::Run()
 {
 	for (auto& gameObject : _gameObjects)
 	{

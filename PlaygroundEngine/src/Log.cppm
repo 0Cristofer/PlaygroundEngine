@@ -6,7 +6,7 @@ export module PlaygroundEngine.Log;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class Log
 	{

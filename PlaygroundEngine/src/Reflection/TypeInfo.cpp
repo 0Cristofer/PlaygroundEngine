@@ -5,7 +5,7 @@ import :FuncInfo;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	std::string TypeInfo::ObjectToString(const void* obj) const
 	{

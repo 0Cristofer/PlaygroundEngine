@@ -7,7 +7,7 @@ import PlaygroundEngine.App;
 
 import std;
 
-namespace PlaygroundEngine
+namespace PgE
 {
 	export class Engine;
 
