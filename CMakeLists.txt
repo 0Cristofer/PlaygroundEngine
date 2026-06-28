@@ -80,12 +80,21 @@ if (LINUX)
 	endif ()
 endif ()
 
-# Global options to ensure all compilation (including cmake internal) steps are using the same flags
+# Global options to ensure all compilation (including cmake internal) steps are using the same flags.
+# -freflection MUST stay global: CMake builds the `import std` module via an internal target that
+# reads these global options, and -freflection alters module declarations - building the std module
+# BMI without it while consumers import it WITH it gives "conflicting type for imported declaration"
+# (e.g. __mbstate_t). It cannot be scoped to first-party targets. The cost is that it leaks onto
+# FetchContent deps; any dep sub-target compiling below C++26 must be exempted case-by-case (see
+# PlaygroundTests disabling doctest's static-main lib).
 add_compile_options(
 		$<$<CXX_COMPILER_ID:MSVC>:/utf-8>
 		$<$<CXX_COMPILER_ID:GNU>:-freflection>
 )
 
+enable_testing()
+
 add_subdirectory(PlaygroundEngine)
 add_subdirectory(PlaygroundGame)
 add_subdirectory(PlaygroundReflection)
+add_subdirectory(PlaygroundTests)
