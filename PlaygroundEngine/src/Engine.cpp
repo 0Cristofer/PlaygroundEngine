@@ -21,7 +21,7 @@ namespace PgE
 	Engine::Engine(AppDescriptorBase* appDescriptor)
 	{
 		Log::Init();
-		LOG_INFO("Creating engine");
+		PGE_LOG(Info, "Creating engine");
 
 		_app = appDescriptor->GetApp();
 		_currentWorld = std::make_unique<World>();
@@ -36,7 +36,7 @@ namespace PgE
 
 	void Engine::Run()
 	{
-		LOG_INFO("Running Engine");
+		PGE_LOG(Info);
 		_app->OnRun(_currentWorld.get());
 		_currentWorld->Run();
 	}

@@ -52,15 +52,15 @@ std::unique_ptr<PgE::AppBase> PgG::PlaygroundGameAppDescriptor::GetApp()
 
 void PgG::App::OnInitialized()
 {
-	LOG_INFO("PgG::App::OnInitialized");
+	PGE_LOG(Info);
 
 	PgE::TypeRegistry registry;
 	registry.RegisterType<Actor>();
 	registry.RegisterType<int>();
 	Actor actor("John", 25);
 
-	LOG_INFO(PgE::TypeOf<Actor>().ObjectToString(&actor));
-	LOG_INFO("Actor functions:\n{}", PgE::TypeOf<Actor>().FunctionsToString());
+	PGE_LOG(Info, PgE::TypeOf<Actor>().ObjectToString(&actor));
+	PGE_LOG(Info, "Actor functions:\n{}", PgE::TypeOf<Actor>().FunctionsToString());
 }
 
 void PgG::App::OnRun(PgE::World* world)
@@ -69,6 +69,6 @@ void PgG::App::OnRun(PgE::World* world)
 	PgE::GameObject* gO1 = world->AddGameObject();
 	PgE::TransformComponent* component = gO1->AddComponent<PgE::TransformComponent>();
 	component->Position = a;
-	LOG_INFO("PgG::App::OnRun {}", component->Position);
+	PGE_LOG(Info, "{}", component->Position);
 	a++;
 }

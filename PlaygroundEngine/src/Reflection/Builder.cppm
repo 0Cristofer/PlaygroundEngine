@@ -11,7 +11,6 @@ import std;
 
 // This file contains the compile-time reflection mechanisms to build the runtime reflection types
 
-// ReSharper disable once CppInconsistentNaming
 namespace PgE::detail
 {
 	template <std::meta::info MetaTypeInfo>

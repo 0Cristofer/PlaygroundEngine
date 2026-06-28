@@ -8,5 +8,5 @@ import PlaygroundEngine.Log;
 
 void PgE::TransformComponent::Update()
 {
-	LOG_TRACE("Updating Transform with position: {0}", Position);
+	PGE_LOG(Trace, "Updating Transform with position: {0}", Position);
 }
