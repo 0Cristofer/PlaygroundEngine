@@ -39,6 +39,18 @@ if (NOT PGE_IPO_SUPPORTED)
 	message(STATUS "[PlaygroundEngine] IPO/LTO not available: ${_PGE_IPO_OUTPUT}")
 endif ()
 
+# IPO/LTO is force-disabled pending a GCC modules+LTO bug: when a class's key function
+# (first non-inline virtual) lives in a separate module implementation unit from its
+# interface unit, LTO drops the class vtable, giving "undefined reference to vtable
+# for ...@<module>" at link (hit by TransformComponent). Reproduces with a 3-file
+# module-class-in-a-static-lib repro on plain g++ -flto -- not a build-config issue
+# (gcc-ar and -ffat-lto-objects don't help; non-module or no-LTO links fine).
+# Re-enable once it's fixed upstream, or once components shed polymorphism under ECS.
+if (PGE_IPO_SUPPORTED)
+	message(STATUS "[PlaygroundEngine] IPO/LTO supported but disabled (GCC modules+LTO vtable bug)")
+	set(PGE_IPO_SUPPORTED OFF)
+endif ()
+
 # Ensures import std is correctly understood by CLion/Rider. Should be removed when better support comes
 if (LINUX)
 	# The std module sources must come from the active toolchain — a version mismatch
