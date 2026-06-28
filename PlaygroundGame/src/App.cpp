@@ -59,7 +59,7 @@ void PgG::App::OnInitialized()
 	registry.RegisterType<int>();
 	Actor actor("John", 25);
 
-	PGE_LOG(Info, PgE::TypeOf<Actor>().ObjectToString(&actor));
+	PGE_LOG(Info, PgE::ToString(actor));
 	PGE_LOG(Info, "Actor functions:\n{}", PgE::TypeOf<Actor>().FunctionsToString());
 }
 

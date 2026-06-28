@@ -13,4 +13,11 @@ namespace PgE
 	{
 		return detail::TypeOfMeta<^^T>();
 	}
+
+	export template <typename T>
+	std::string ToString(const T& value)
+	{
+		return TypeOf<T>().ObjectToString(&value);
+	}
+
 }

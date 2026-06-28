@@ -42,7 +42,7 @@ namespace PgE::detail
 	consteval auto GetFieldsFromType()
 	{
 		using T = [:MetaTypeInfo:];
-		if constexpr (TypeInfoTraits<T>::IsLeaf)
+		if constexpr (TypeInfoTraits<T>::IS_LEAF)
 		{
 			return std::array<FieldInfo, 0>{};
 		}
@@ -119,7 +119,7 @@ namespace PgE::detail
 	consteval auto GetFunctionsFromType()
 	{
 		using T = [:MetaTypeInfo:];
-		if constexpr (TypeInfoTraits<T>::IsLeaf)
+		if constexpr (TypeInfoTraits<T>::IS_LEAF)
 		{
 			return std::array<FuncInfo, 0>{};
 		}

@@ -6,7 +6,7 @@ namespace PgE
 {
 	export struct TypeInfoTraitsDefaults
 	{
-		static constexpr bool IsLeaf = false;
+		static constexpr bool IS_LEAF = false;
 
 		template <typename T>
 		static std::string Stringify(const T& obj)
@@ -28,7 +28,7 @@ namespace PgE
 	template <typename CharT, typename Traits, typename Alloc>
 	struct TypeInfoTraits<std::basic_string<CharT, Traits, Alloc>> : TypeInfoTraitsDefaults
 	{
-		static constexpr bool IsLeaf = true;
+		static constexpr bool IS_LEAF = true;
 
 		static std::string Stringify(const std::string& obj)
 		{

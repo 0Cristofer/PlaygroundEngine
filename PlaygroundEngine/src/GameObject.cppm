@@ -55,6 +55,7 @@ namespace PgE
 		requires(std::is_base_of_v<ComponentBase, T>)
 		[[nodiscard]] static ComponentId GetComponentId()
 		{
+			// ReSharper disable once CppInconsistentNaming
 			static const ComponentId componentId = IncrementComponentId();
 
 			return componentId;
