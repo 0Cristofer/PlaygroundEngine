@@ -166,6 +166,7 @@ cmake --build --preset linux-debug    # or linux-dev / linux-release
 | Construction via annotated factory | `PlaygroundReflection/src/` | Done |
 | Reflection system API design | [docs/ReflectionSystem.md](docs/ReflectionSystem.md) | Active — use cases defined |
 | Core conventions (object model, memory, std, errors) | [docs/CoreConventions.md](docs/CoreConventions.md) | Defined |
+| Testing system (doctest + CTest) | [docs/TestingSystem.md](docs/TestingSystem.md) | In use — unit/characterization |
 | 3D renderer | `PlaygroundGame/` | Early |
 
 ---

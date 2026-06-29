@@ -144,7 +144,9 @@ namespace PgE::detail
 		static constexpr auto fields = GetFieldsFromType<MetaTypeInfo>();
 		static constexpr auto functions = GetFunctionsFromType<MetaTypeInfo>();
 
-		if constexpr (fields.empty())
+		// std::is_object_v excludes void (reached here as a function return type), where
+		// StringifyValue can't form a const T*; it stays true for primitives and classes.
+		if constexpr (fields.empty() && std::is_object_v<T>)
 		{
 			static constexpr TypeInfo typeInfo(displayName, fields, functions, &StringifyValue<T>);
 			return typeInfo;

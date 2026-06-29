@@ -30,6 +30,7 @@ namespace PgE
 	namespace detail
 	{
 		export void LogDispatch(LogLevel level, const std::source_location& location, std::string_view message);
+		export std::string ExtractQualifiedName(std::string_view signature);
 	}
 
 	export class Log

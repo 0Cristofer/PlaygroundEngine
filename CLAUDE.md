@@ -49,13 +49,22 @@ cmake --build --preset linux-debug   # or linux-dev (RelWithDebInfo) / linux-rel
 
 Build output is under `build/linux/<Target>/<Config>/`. In-source builds are blocked by a `FATAL_ERROR` guard.
 
-There is **no test framework wired in** (no `enable_testing`/`add_test`, no Catch2/GTest/doctest). "Running tests" currently means building and running the executables.
+Tests use **doctest** + **CTest** (`PlaygroundTests` target). Build with `cmake --build --preset linux-debug --target PlaygroundTests`, then `cd build/linux && ctest -C Debug` (or `ctest -R <name>` for one). See [docs/TestingSystem.md](docs/TestingSystem.md) for the workflow, how to write a test, and constraints (read it before adding tests). Note: tests run from CLion or terminal `ctest` — **Rider cannot run them** (its C++ test runner is MSBuild-bound and fails on this CMake/WSL project).
+
+### Testing expectations
+
+Use `PlaygroundTests` (doctest + CTest) as the working ground for validating engine behavior, not throwaway `main()`s — see [docs/TestingSystem.md](docs/TestingSystem.md).
+
+- **Explore in the `scratch` case.** Behavior needing on-demand validation (reflection capabilities, engine output) goes in the shared, ephemeral `scratch` case — overwrite it freely; don't accumulate provisional tests. For purely toolchain/compile-level questions, a throwaway compile is the right tool — the harness's value is engine linkage + logging.
+- **Durable API that settles ⇒ test.** Such an API isn't done until a named test validates what was implemented; promote the scratch exploration into it (characterization tests pinning implementation-defined output are fine). Run `ctest -C Debug` and report. Exempt placeholder scaffolding slated for replacement (the GameObject/World/Component skeleton).
+- **Permissive in between.** Don't gold-plate — spikes, trivial/obvious changes, and pure refactors owe no new test. When unsure, lean toward writing it.
 
 ## Targets
 
 - **PlaygroundEngine** — static library; the engine. Depends on spdlog (header-only, fetched via `FetchContent`).
 - **PlaygroundGame** — executable; links `PlaygroundEngine`. The actual game/demo.
 - **PlaygroundReflection** — standalone executable, unrelated to the engine. A scratch pad for `std::meta` (C++26 reflection: `^^T`, `template for`, `[:member:]` splicers). Build-guarded to GCC 16+.
+- **PlaygroundTests** — executable; links `PlaygroundEngine`. doctest-based test suite, run via CTest. See [docs/TestingSystem.md](docs/TestingSystem.md).
 
 ## Architecture
 

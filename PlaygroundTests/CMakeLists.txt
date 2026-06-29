@@ -50,6 +50,8 @@ target_sources(PlaygroundTests
 		PRIVATE
 		src/TestMain.cpp
 		src/ReflectionTests.cpp
+		src/LogTests.cpp
+		src/Scratch.cpp
 )
 
 target_link_libraries(PlaygroundTests

@@ -4,8 +4,14 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
 
-int main(int argc, char** argv)
+import PlaygroundEngine.Log;
+
+int main(const int argc, char** argv)
 {
+    // The Engine ctor normally brings logging up; tests don't construct an Engine, so
+    // do it here. Without this, PGE_LOG dereferences a null logger.
+    PgE::Log::Init();
+
     doctest::Context context;
     context.applyCommandLine(argc, argv);
 

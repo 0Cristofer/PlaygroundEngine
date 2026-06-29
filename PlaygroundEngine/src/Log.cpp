@@ -29,7 +29,10 @@ namespace PgE
 			}
 			return spdlog::level::off;
 		}
+	}
 
+	namespace detail
+	{
 		std::string ExtractQualifiedName(const std::string_view signature)
 		{
 			// COMPILER-SPECIFIC: source_location::function_name() is implementation-defined.
@@ -77,7 +80,10 @@ namespace PgE
 			}
 			return result;
 		}
+	}
 
+	namespace
+	{
 		// Interns each call site's parsed name so the pointer handed to spdlog's
 		// non-owning source_loc lives for the program's duration — safe for any sink,
 		// including a future asynchronous one. Keyed on the function_name() pointer,
@@ -90,7 +96,7 @@ namespace PgE
 			const std::scoped_lock lock(poolMutex);
 			auto [entry, inserted] = pool.try_emplace(signature);
 			if (inserted)
-				entry->second = ExtractQualifiedName(signature);
+				entry->second = detail::ExtractQualifiedName(signature);
 			return entry->second.c_str();
 		}
 	}
