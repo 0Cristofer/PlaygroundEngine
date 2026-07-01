@@ -16,6 +16,58 @@ Key design principles relevant to coding decisions:
 
 The project deliberately rides the bleeding edge of the C++ toolchain: **C++26, named modules, `import std`, and `std::meta` reflection**. This drives most of the non-obvious constraints below.
 
+## Working method
+
+Applies to every agent. Autonomous runs also load [.claude/agents/autonomous-worker.md](.claude/agents/autonomous-worker.md), which overrides only the *Interaction* rules below; process, style, and validation still hold. The five steps are a loop, not a line: if a later step invalidates an earlier one, go back. In pair mode raise it with the user; in autonomous mode reanalyze and resketch.
+
+**Right-size the process first.** Classify the task and state the level you are working at:
+- *Mechanical*: a feature inside settled architecture (e.g. an editor asset picker). Skip literature review and formal sketching; analyze lightly, implement, test.
+- *Substantial*: a new API or non-trivial change within an existing system. Full process, lighter on step 1's industry survey.
+- *Architectural*: a new system or cross-system contract (render pipeline, asset management, reflection). Full depth; step 1 is the most important part.
+
+Do not run the heavy path on light work.
+
+**1. Analyze**
+- Survey what already exists first: read the surrounding code and the relevant design doc before reasoning about solutions.
+- What exactly is being solved? Exact scope? Constraints and goals?
+- How does industry/literature solve it (consult `engine-architect`)? Applicable here? Drawbacks, why it was done that way, can we do better?
+- Common use cases? Should it be broken into smaller pieces?
+- For any new type or API, consider its serialization, replication, and C#-boundary implications, and which error-handling zone it lives in (see [docs/CoreConventions.md](docs/CoreConventions.md)).
+- Iterate until the direction is clear.
+
+**2. Plan & sketch**
+- Define architecture layers, the user-facing API/use cases, interaction points with other systems/layers.
+- Sketch the main classes and data structures; mark work with TODOs.
+- Re-read the plan; restart it if it does not hold.
+
+**3. Implement**
+- Follow the hard rules: formatting/naming/braces are in `.editorconfig`, enforced by `.clang-tidy`; build is warnings-as-errors.
+- Validate a bleeding-edge language or library assumption with a throwaway compile before building on it (GCC 16 has known gaps: LTO disabled, `-freflection` quirks).
+- Implement TODOs incrementally, validating each against the `scratch` test case (see [docs/TestingSystem.md](docs/TestingSystem.md)).
+- When done, review and remove leftovers.
+
+**4. Test**
+- From the analysis, write tests for the real use cases and edge cases; promote settled behavior out of `scratch` into named tests.
+- Tests must exercise real logic: clean, clear, non-redundant. Run `ctest -C Debug` and report actual output.
+
+**5. Finalize**
+- Run `/code-review` on the diff; for architectural work, have `engine-architect` review the design. Self-reading your own code is not an unbiased review.
+- Confirm it builds clean and tests pass. That is the definition of done.
+- Note next steps, improvements, and what was left out of scope. For a new system, sketch how a user would use it.
+
+**Interaction (pair mode, the default)**
+- The user guides the process and takes the final stance on each step; surface trade-offs at genuine forks and let them decide.
+- Push the user's assumptions: ask questions, think outside the box, rather than accepting the framing.
+- Confirm before large, irreversible, or outward-facing actions; do not run ahead.
+
+**Code style** (mechanical rules live in `.editorconfig` / `.clang-tidy`; follow, do not restate)
+- Never use the '—' (em dash) character in prose, comments, commit messages, or reports; it reads as machine-written. Use commas, parentheses, colons, or separate sentences.
+- Names spelled out in full, unless a very common acronym.
+- Blank lines separate distinct logic blocks.
+- Functions are clear in intent and do one job; split when doing too much (`OnClick()` calls `Purchase()`; it is not itself the purchase).
+- Class interfaces read like documentation; keep them clean, and if internals must surface, organize them clearly.
+- Comments only where logic is genuinely complex or assumes low-level knowledge; code should be self-documenting. Put comments inside their block, never floating above it where they would read as API docs (real API docs come later, once the surface stabilizes).
+
 ## Design rationale notes
 
 Background for the decisions in `docs/` — useful when evaluating proposals or extending designs; the docs state only the decisions.
