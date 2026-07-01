@@ -58,7 +58,7 @@ TEST_CASE("object stringification walks fields")
     const Person person{"John", 25};
 
     CHECK(PgE::ToString(person)
-          == R"({ReflectionTestTypes::Person::name: "John", ReflectionTestTypes::Person::age: 25})");
+          == R"({ReflectionTestTypes::Person::Name: "John", ReflectionTestTypes::Person::Age: 25})");
 }
 
 // Function reflection: return type, name, and parameter (type + name) for each
