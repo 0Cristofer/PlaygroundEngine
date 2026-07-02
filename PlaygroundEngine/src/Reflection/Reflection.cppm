@@ -1,7 +1,9 @@
 export module PlaygroundEngine.Reflection;
 
-export import PlaygroundEngine.Reflection.TypeInfo;
-
+export import :TypeInfo;
+export import :FieldInfo;
+export import :FuncInfo;
+export import :TypedRef;
 export import :Builder;
 
 import std;
@@ -19,5 +21,4 @@ namespace PgE
 	{
 		return TypeOf<T>().ObjectToString(&value);
 	}
-
 }

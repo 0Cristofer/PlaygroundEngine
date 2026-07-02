@@ -63,6 +63,7 @@ Do not run the heavy path on light work.
 **Code style** (mechanical rules live in `.editorconfig` / `.clang-tidy`; follow, do not restate)
 - Never use the '—' (em dash) character in prose, comments, commit messages, or reports; it reads as machine-written. Use commas, parentheses, colons, or separate sentences.
 - Names spelled out in full, unless a very common acronym.
+- Always use designated initializers when constructing structs (`Foo{.x = 1, .y = 2}`), so field intent is explicit and initialization survives field reordering.
 - Blank lines separate distinct logic blocks.
 - Functions are clear in intent and do one job; split when doing too much (`OnClick()` calls `Purchase()`; it is not itself the purchase).
 - Class interfaces read like documentation; keep them clean, and if internals must surface, organize them clearly.

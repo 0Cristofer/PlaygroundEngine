@@ -1,4 +1,4 @@
-module PlaygroundEngine.Reflection.TypeInfo;
+module PlaygroundEngine.Reflection;
 
 import :FieldInfo;
 

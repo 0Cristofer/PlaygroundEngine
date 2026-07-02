@@ -1,6 +1,6 @@
 export module PlaygroundEngine.Reflection.TypeRegistry;
 
-export import PlaygroundEngine.Reflection.TypeInfo;
+export import PlaygroundEngine.Reflection;
 
 import PlaygroundEngine.Reflection;
 

@@ -1,7 +1,9 @@
-export module PlaygroundEngine.Reflection.TypeInfo;
+export module PlaygroundEngine.Reflection:TypeInfo;
 
-export import :FieldInfo;
-export import :FuncInfo;
+import PlaygroundEngine.Reflection.TypeInfoTraits;
+
+import :FieldInfo;
+import :FuncInfo;
 
 import std;
 
@@ -26,6 +28,8 @@ namespace PgE
 
 		std::string ObjectToString(const void* obj) const;
 		std::string FunctionsToString() const;
+		std::span<const FuncInfo> GetFunctions() const;
+		std::vector<const FuncInfo*> FindFunctionsByName(std::string_view name) const;
 
 	private:
 		std::string_view _displayName;

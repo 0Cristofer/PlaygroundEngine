@@ -70,6 +70,43 @@ One `TypeInfo` contract over C++, C#, and visual scripting. Each runtime keeps i
 - World serialization/replication run per component type over contiguous storage, via one generated erased op-table per component type. Layout data enables C# direct access to component memory.
 - Reflection runs at boundaries (load, save, replicate, edit, bind) — never in the frame loop.
 
+## The Erased Op-Table
+
+Constraint 2 splits reflection into a typed compile-time layer and an erased runtime layer. The **op-table** is the concrete form of that erased layer: per type, the set of type-erased operations a consumer can perform on a `void*` without knowing the static type. It is the reflection system's own vtable, with two differences: it lives outside the object (referenced from `TypeInfo`, not embedded in every instance), and it is generated from metadata rather than emitted by the compiler.
+
+The operations are everything that can be done to a type or an instance of it:
+- **construct** / **destroy**: lifetime, placement-agnostic (return by value or into a caller-supplied slot; see Object Model Consequences).
+- **get field** / **set field**: erased property access, addressed by stable member id.
+- **invoke**: call a reflected function with erased arguments and return value.
+- **stringify** / **serialize**: render or encode an instance.
+
+**Where the ops live.** The table is not a monolith that supersedes `FieldInfo` / `FuncInfo`. The member-scoped ops are leaves on the metadata objects that own them: `invoke` on `FuncInfo`, `get` / `set` on `FieldInfo`. Only the type-scoped ops (`construct`, `destroy`, `stringify`) have no member to attach to and hang on `TypeInfo` directly. The op-table proper is the type-level aggregator that dispatches into those leaves. This is why the erased surface can be grown one thunk at a time before any unified table exists: `TypeInfo`'s stringify thunk and `FuncInfo`'s invoke thunk are already op-table entries under this model.
+
+**Two dimensions the table must eventually span:**
+- **Providers** (use case 8): native tables are filled by the compile-time builder via `std::meta`, managed types by the .NET runtime, script types by the interpreter. One table shape, three fillers. This is the mechanism that lets a single `TypeInfo` contract cover all three runtimes.
+- **Storage** (ECS consequences): one generated table per component type drives serialization and replication over contiguous storage, and its layout data lets C# read component memory directly.
+
+**Not being implemented now.** The erased ops are being built incrementally on the existing metadata objects (`TypeInfo`, `FieldInfo`, `FuncInfo`), not as the unified op-table abstraction. Consolidating them into a first-class per-type table, with the provider indirection and a uniform erased-reference type, is deferred. Each reason is a missing input to that convergence point:
+- **Stable member identity.** A type-level `getField(obj, id)` / `invoke(obj, id, ...)` addresses members by stable id; that scheme is the highest-priority open question below and is not yet fixed.
+- **Storage model.** `construct`'s signature (return-by-value vs. placement into chunk storage) depends on the ECS layout, which does not exist yet (the GameObject model is a placeholder).
+- **Provider seam.** Only the native provider exists; designing the multi-provider indirection against a single provider risks fixing the wrong seam.
+- **Erased-reference / const model.** A bare `void*` discards const, so an erased mutating call cannot be rejected at the boundary. How the erased reference carries mutability (and provenance) is a table-wide decision, not a per-op one. As an exploratory spike, `FuncInfo` enforces const at the leaf via split `Invoke(void*)` / `InvokeConst(const void*)` entry points (const-qualification is metadata; the type system decides which entry point a caller can reach). This borrows C++'s own const system rather than inventing an erased-reference type. The fat `{ptr, mutability}` reference is now prototyped as `TypedRef` for the invoke leaf (see [Erased invocation ABI](#erased-invocation-abi-the-invoke-leaf) below); its table-wide adoption across every op is still the open decision.
+
+A convergence point is designed after the things converging into it. The op-table becomes a dedicated design pass once the stable-id scheme exists, or when the second provider or the ECS storage model forces its shape.
+
+### Erased invocation ABI (the invoke leaf)
+
+The `invoke` leaf on `FuncInfo` is a borrowed-pointer, type-tagged ABI, not a value-boxing one. An earlier `std::any` sketch was rejected: `std::any` owns values, so it cannot represent reference or out-parameters and forces every argument and return type to be copy-constructible. The chosen model follows the UE `UFunction` / Qt `void**` / Mono `void**` / libffi convergence: the caller owns all argument and return storage, and the erased layer only borrows it or constructs into it, never owns.
+
+- **Erased reference.** `TypedRef { const TypeInfo* type; void* data; bool isConst; }` is a borrowed, type-tagged, const-tagged pointer to caller storage. It is used for both arguments and the return slot, and is the concrete prototype of the table-wide `{ptr, mutability}` erased reference deferred above; `get` / `set` field are expected to adopt it at op-table convergence.
+- **Entry points.** `Invoke(void*, ...)` and `Invoke(const void*, ...)` are two overloads, thin forwarders over a single stored thunk pointer (the shape that lets a managed or script provider fill the same slot). Overload resolution on the object pointer's constness routes the caller: a const instance can only bind the `const void*` overload, which returns `ConstViolation` for a mutating function. Statics report `IsConst() == true` and ignore the object pointer.
+- **Argument binding.** The generated thunk binds each argument by the parameter's own type: mutable-ref params bind (and reject a const `TypedRef`), const-ref params bind, rvalue-ref and move-only by-value params move, copyable by-value params copy. A copyable argument survives the call; the erased layer does not consume it. (Opt-in move for copyable by-value params is a future additive `TypedRef` flag, deferred until a profiled boundary needs it.)
+- **Return slot.** The thunk constructs the return into the caller's `ret` storage, so move-only returns work and no copyability is required. A **reference return** is erased as a pointer to the referent (stored into the slot and tagged as that pointer type, which keeps it distinct from a same-typed value return); the typed sugar surfaces it as `std::reference_wrapper<T>`. `ret` is type-checked like an argument (`ReturnTypeMismatch`, including a value slot handed to a `void` function, which is rejected without calling it); `ret == {}` discards a value return and also covers `void`.
+- **Errors.** `std::expected<void, InvokeError>` with `ArityMismatch`, `TypeMismatch`, `ConstViolation`, `ReturnTypeMismatch`, plus the failing argument index. These checks are the malformed-input defense for the RPC path (use case 2), not only caller ergonomics.
+- **Typed sugar.** `funcInfo.InvokeAs<R>(obj, args...)` builds the `TypedRef` array from real C++ arguments and moves `R` out; the object pointer's constness selects the matching `Invoke` overload. It tags each argument with the argument's own reflected type, so a mismatch is rejected rather than reinterpreted. This is why the metadata types and the builder that produces `TypeOf` share one module: the member's out-of-line definition needs `TypeOf`. It is runtime-checked convenience; the compile-time-checked call (`Fn` known statically) is the separate typed layer (`InvokeStaticTyped<Fn>`), not this.
+
+Overload disambiguation and cross-build function identity are deferred to the stable-id scheme: `TypeInfo` exposes the whole overload set (`FindFunctionsByName`) and the caller selects one `FuncInfo`.
+
 ## Converging Requirements
 
 | Requirement | Demanded by |
@@ -88,6 +125,7 @@ One `TypeInfo` contract over C++, C#, and visual scripting. Each runtime keeps i
 
 - **Stable ID scheme** — how type/field IDs are derived (qualified-name hash? annotation override for renames?), how renames migrate, and whether type/field/object/asset identity unify into one scheme. Highest priority: consumed by replication, hot reload, save/load, the C# boundary, and all three runtimes.
 - **Text asset format** — YAML, TOML, or custom; deferred until the asset system (the backend is pluggable).
+- **Op-table consolidation** — when to unify the incrementally-built erased ops into a first-class per-type table (see [The Erased Op-Table](#the-erased-op-table)). Gated on the stable-id scheme, the ECS storage model, and the arrival of a second provider.
 
 ## Next Step
 
