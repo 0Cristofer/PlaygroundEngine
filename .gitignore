@@ -6,3 +6,5 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 todo.txt
+# Ignore worktrees' IDE settings under this name
+.idea/.idea.PGE*
