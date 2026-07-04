@@ -2,11 +2,27 @@ module PlaygroundEngine.Reflection;
 
 import :FieldInfo;
 import :FuncInfo;
+import :TypedRef;
 
 import std;
 
 namespace PgE
 {
+	namespace
+	{
+		std::string FieldToString(const FieldInfo& field, const void* obj)
+		{
+			if (const auto ref = field.GetRef(obj))
+				return field.GetTypeInfo().ObjectToString(ref->Data);
+
+			alignas(std::uintmax_t) std::byte slot[sizeof(std::uintmax_t)];
+			if (field.GetValue(obj, TypedRef{.Type = &field.GetTypeInfo(), .Data = slot, .IsConst = false}))
+				return field.GetTypeInfo().ObjectToString(slot);
+
+			return "<unreadable>";
+		}
+	}
+
 	std::string TypeInfo::ObjectToString(const void* obj) const
 	{
 		if (_stringifyThunk)
@@ -14,15 +30,14 @@ namespace PgE
 
 		std::string out = "{";
 		bool firstField = true;
-		for (const FieldInfo& f : _fields)
+		for (const FieldInfo& field : _fields)
 		{
-			const void* addr = static_cast<const std::byte*>(obj) + f.GetByteOffset();
 			if (!firstField)
 				out += ", ";
 			firstField = false;
-			out += f.GetName();
+			out += field.GetName();
 			out += ": ";
-			out += f.GetTypeInfo().ObjectToString(addr);
+			out += FieldToString(field, obj);
 		}
 		return out + "}";
 	}
@@ -78,5 +93,58 @@ namespace PgE
 		}
 
 		return matches;
+	}
+
+	const FieldInfo* TypeInfo::FindFieldByName(const std::string_view name) const
+	{
+		// Fields are unique by name, so the first match is the only one. Linear scan, same rationale
+		// as FindFunctionsByName.
+		for (const FieldInfo& field : _fields)
+		{
+			if (field.GetName() == name)
+				return &field;
+		}
+
+		return nullptr;
+	}
+
+	// ReSharper disable CppPassValueParameterByConstReference
+	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view name,
+	                                                        const TypedRef out) const
+	{
+		const FieldInfo* field = FindFieldByName(name);
+		if (!field)
+			return std::unexpected(FieldError{FieldError::FieldNotFound});
+
+		return field->GetValue(obj, out);
+	}
+
+	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view name,
+	                                                        const TypedRef in) const
+	{
+		const FieldInfo* field = FindFieldByName(name);
+		if (!field)
+			return std::unexpected(FieldError{FieldError::FieldNotFound});
+
+		return field->SetValue(obj, in);
+	}
+	// ReSharper restore CppPassValueParameterByConstReference
+
+	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(void* obj, const std::string_view name) const
+	{
+		const FieldInfo* field = FindFieldByName(name);
+		if (!field)
+			return std::unexpected(FieldError{FieldError::FieldNotFound});
+
+		return field->GetRef(obj);
+	}
+
+	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(const void* obj, const std::string_view name) const
+	{
+		const FieldInfo* field = FindFieldByName(name);
+		if (!field)
+			return std::unexpected(FieldError{FieldError::FieldNotFound});
+
+		return field->GetRef(obj);
 	}
 }

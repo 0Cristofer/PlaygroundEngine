@@ -9,5 +9,6 @@ namespace PgE
 		const TypeInfo* const Type = nullptr;
 		void* const Data = nullptr;
 		const bool IsConst = false;
+		const bool Movable = false;
 	};
 }

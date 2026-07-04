@@ -80,7 +80,8 @@ namespace PgE
 				TypedRef{
 					.Type = &TypeOf<std::remove_cvref_t<Arguments>>(),
 					.Data = const_cast<void*>(static_cast<const void*>(std::addressof(arguments))),
-					.IsConst = std::is_const_v<std::remove_reference_t<Arguments>>
+					.IsConst = std::is_const_v<std::remove_reference_t<Arguments>>,
+					.Movable = !std::is_lvalue_reference_v<Arguments>
 				}...
 			};
 

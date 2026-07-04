@@ -1,9 +1,22 @@
+module;
+
+#include <meta>
+
 export module PlaygroundEngine.Reflection.TypeInfoTraits;
 
 import std;
 
 namespace PgE
 {
+	namespace detail
+	{
+		template <typename T>
+		consteval std::string_view TypeName()
+		{
+			return std::define_static_string(std::meta::display_string_of(^^T));
+		}
+	}
+
 	export struct TypeInfoTraitsDefaults
 	{
 		static constexpr bool IS_LEAF = false;
@@ -11,12 +24,12 @@ namespace PgE
 		template <typename T>
 		static std::string Stringify(const T& obj)
 		{
+			// Every type stays reflectable: a leaf with no formatter or trait falls back to its reflected
+			// type name, so it renders as a placeholder rather than failing to compile.
 			if constexpr (std::formattable<T, char>)
 				return std::format("{}", obj);
 			else
-				static_assert(false, "Leaf type needs a TypeInfoTraits<T>::Stringify specialization");
-
-			return "";
+				return std::format("<{}>", detail::TypeName<T>());
 		}
 	};
 
@@ -41,7 +54,7 @@ namespace PgE
 	{
 		static std::string Stringify(const T* obj)
 		{
-				return std::format("{}", static_cast<const void*>(obj));
+			return std::format("{}", static_cast<const void*>(obj));
 		}
 	};
 }
