@@ -305,6 +305,13 @@ TEST_CASE("reflected type name is correct")
 	CHECK(PgE::TypeOf<int>().GetDisplayName() == "int");
 }
 
+TEST_CASE("TypeOf deduces the type from a value and matches the explicit form")
+{
+	constexpr Widget widget{};
+	CHECK(&PgE::TypeOf(widget) == &PgE::TypeOf<Widget>());
+	CHECK(&PgE::TypeOf(42) == &PgE::TypeOf<int>());
+}
+
 TEST_CASE("leaf values stringify through TypeInfoTraits")
 {
 	CHECK(PgE::ToString(42) == "42");
@@ -336,7 +343,7 @@ TEST_CASE("reflected member function invokes and returns")
 {
 	Widget widget{3, 4};
 
-	const std::vector<const PgE::FuncInfo*> areas = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Area");
+	const std::vector<const PgE::FunctionInfo*> areas = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Area");
 	REQUIRE(areas.size() == 1);
 
 	const auto result = areas.front()->InvokeAs<int>(&widget);
@@ -349,7 +356,7 @@ TEST_CASE("reflected member function mutates its instance")
 {
 	Widget widget{1, 1};
 
-	const PgE::FuncInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
+	const PgE::FunctionInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
 	const auto result = resize->InvokeAs(&widget, 2, 5);
 
 	REQUIRE(result.has_value());
@@ -360,7 +367,7 @@ TEST_CASE("reflected member function mutates its instance")
 TEST_CASE("invoke reports arity and type mismatches")
 {
 	Widget widget{};
-	const PgE::FuncInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
+	const PgE::FunctionInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
 
 	int width = 2;
 	const PgE::TypedRef tooFew[] = {{.Type = &PgE::TypeOf<int>(), .Data = &width, .IsConst = false}};
@@ -416,7 +423,7 @@ TEST_CASE("reflected function returning a reference yields a live reference")
 TEST_CASE("value-return sugar on a void function reports ReturnTypeMismatch")
 {
 	Widget widget{};
-	const PgE::FuncInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
+	const PgE::FunctionInfo* resize = PgE::TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
 
 	const auto result = resize->InvokeAs<int>(&widget, 2, 5);
 	REQUIRE_FALSE(result.has_value());
@@ -427,7 +434,7 @@ TEST_CASE("value-return sugar on a void function reports ReturnTypeMismatch")
 TEST_CASE("const argument to a move-only parameter is rejected")
 {
 	Sink sink{};
-	const PgE::FuncInfo* consume = PgE::TypeOf<Sink>().FindFunctionsByIdentifier("Consume").front();
+	const PgE::FunctionInfo* consume = PgE::TypeOf<Sink>().FindFunctionsByIdentifier("Consume").front();
 
 	MoveOnly readOnlyArg;
 	const PgE::TypedRef constArg[] = {{&PgE::TypeOf<MoveOnly>(), &readOnlyArg, true}};
@@ -726,7 +733,7 @@ TEST_CASE("nested struct and pointer fields")
 TEST_CASE("invoke moves a by-value argument only for rvalues")
 {
 	Consumer consumer{};
-	const PgE::FuncInfo* store = PgE::TypeOf<Consumer>().FindFunctionsByIdentifier("Store").front();
+	const PgE::FunctionInfo* store = PgE::TypeOf<Consumer>().FindFunctionsByIdentifier("Store").front();
 
 	Tracked byCopy;
 	byCopy.Value = 3;
@@ -747,7 +754,7 @@ TEST_CASE("InvokeAs moves a move-only argument into a parameter")
 	MoveOnly item;
 	item.Tag = 4;
 
-	const PgE::FuncInfo* consume = PgE::TypeOf<Sink>().FindFunctionsByIdentifier("Consume").front();
+	const PgE::FunctionInfo* consume = PgE::TypeOf<Sink>().FindFunctionsByIdentifier("Consume").front();
 	REQUIRE(consume->InvokeAs(&sink, std::move(item)).has_value());
 	CHECK(sink.Value == 4);
 }
@@ -758,7 +765,7 @@ TEST_CASE("invoke copies a by-value argument with a deleted move constructor")
 	CopyOnlyParam argument;
 	argument.Value = 6;
 
-	const PgE::FuncInfo* take = PgE::TypeOf<CopyConsumer>().FindFunctionsByIdentifier("Take").front();
+	const PgE::FunctionInfo* take = PgE::TypeOf<CopyConsumer>().FindFunctionsByIdentifier("Take").front();
 	REQUIRE(take->InvokeAs(&consumer, argument).has_value());
 	CHECK(consumer.Stored == 6);
 }
@@ -862,14 +869,14 @@ TEST_CASE("annotations attach to types, functions, and parameters alike")
 
 	const auto functions = type.FindFunctionsByIdentifier("Hurt");
 	REQUIRE(functions.size() == 1);
-	const PgE::FuncInfo* hurt = functions.front();
+	const PgE::FunctionInfo* hurt = functions.front();
 
 	const auto functionDocs = hurt->GetAnnotations<Doc>();
 	REQUIRE(functionDocs.size() == 1);
 	CHECK(std::string_view{functionDocs.front()->Text} == "apply damage, return remaining health");
 
 	// Parameter-level annotation.
-	const std::span<const PgE::ParamInfo> params = hurt->GetParams();
+	const std::span<const PgE::ParameterInfo> params = hurt->GetParams();
 	REQUIRE(params.size() == 1);
 	const auto paramRanges = params.front().GetAnnotations<Range>();
 	REQUIRE(paramRanges.size() == 1);
@@ -904,7 +911,7 @@ TEST_CASE("identifier and display name are exposed separately on every declarati
 	CHECK(functions.front()->GetIdentifier() == "Hurt");
 	CHECK(functions.front()->GetDisplayName() == "int ReflectionTestTypes::Gadget::Hurt(int)");
 
-	const std::span<const PgE::ParamInfo> params = functions.front()->GetParams();
+	const std::span<const PgE::ParameterInfo> params = functions.front()->GetParams();
 	REQUIRE(params.size() == 1);
 	CHECK(params.front().GetIdentifier() == "amount");
 	CHECK(params.front().GetDisplayName()

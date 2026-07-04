@@ -3,7 +3,7 @@ export module PlaygroundEngine.Reflection:TypeInfo;
 import PlaygroundEngine.Reflection.TypeInfoTraits;
 
 import :FieldInfo;
-import :FuncInfo;
+import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
 
@@ -19,7 +19,7 @@ namespace PgE
 	public:
 		constexpr TypeInfo(const std::string_view identifier, const std::string_view displayName,
 		                   const std::span<const FieldInfo> fields,
-		                   const std::span<const FuncInfo> functions,
+		                   const std::span<const FunctionInfo> functions,
 		                   std::string (*stringifyThunk)(const void*),
 		                   const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations),
@@ -31,8 +31,8 @@ namespace PgE
 
 		std::string ObjectToString(const void* obj) const;
 		std::string FunctionsToString() const;
-		std::span<const FuncInfo> GetFunctions() const;
-		std::vector<const FuncInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
+		std::span<const FunctionInfo> GetFunctions() const;
+		std::vector<const FunctionInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 
@@ -95,7 +95,7 @@ namespace PgE
 
 	private:
 		std::span<const FieldInfo> _fields;
-		std::span<const FuncInfo> _functions;
+		std::span<const FunctionInfo> _functions;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
 	};
 }

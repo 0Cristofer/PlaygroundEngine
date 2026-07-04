@@ -2,10 +2,10 @@ export module PlaygroundEngine.Reflection;
 
 export import :TypeInfo;
 export import :FieldInfo;
-export import :FuncInfo;
+export import :FunctionInfo;
 export import :TypedRef;
 export import :DeclarationInfo;
-export import :Builder;
+export import :TypeBuilder;
 
 import std;
 
@@ -15,6 +15,12 @@ namespace PgE
 	constexpr const TypeInfo& TypeOf()
 	{
 		return detail::TypeOfMeta<^^T>();
+	}
+
+	export template <typename T>
+	constexpr const TypeInfo& TypeOf(const T&)
+	{
+		return TypeOf<T>();
 	}
 
 	export template <typename T>

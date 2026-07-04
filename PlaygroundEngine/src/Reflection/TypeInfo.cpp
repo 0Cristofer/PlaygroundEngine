@@ -1,7 +1,7 @@
 module PlaygroundEngine.Reflection;
 
 import :FieldInfo;
-import :FuncInfo;
+import :FunctionInfo;
 import :TypedRef;
 
 import std;
@@ -46,7 +46,7 @@ namespace PgE
 	{
 		std::string out;
 		bool firstFunc = true;
-		for (const FuncInfo& function : _functions)
+		for (const FunctionInfo& function : _functions)
 		{
 			if (!firstFunc)
 				out += '\n';
@@ -57,7 +57,7 @@ namespace PgE
 			out += "(";
 
 			bool firstParam = true;
-			for (const ParamInfo& param : function.GetParams())
+			for (const ParameterInfo& param : function.GetParams())
 			{
 				if (!firstParam)
 					out += ", ";
@@ -76,17 +76,17 @@ namespace PgE
 		return out;
 	}
 
-	std::span<const FuncInfo> TypeInfo::GetFunctions() const
+	std::span<const FunctionInfo> TypeInfo::GetFunctions() const
 	{
 		return _functions;
 	}
 
-	std::vector<const FuncInfo*> TypeInfo::FindFunctionsByIdentifier(const std::string_view identifier) const
+	std::vector<const FunctionInfo*> TypeInfo::FindFunctionsByIdentifier(const std::string_view identifier) const
 	{
 		// Linear scan: function counts per type are small and lookups happen at boundaries, not the
 		// frame loop. Acceleration, if ever needed, belongs at the registry keyed by stable id.
-		std::vector<const FuncInfo*> matches;
-		for (const FuncInfo& function : _functions)
+		std::vector<const FunctionInfo*> matches;
+		for (const FunctionInfo& function : _functions)
 		{
 			if (function.GetIdentifier() == identifier)
 				matches.push_back(&function);

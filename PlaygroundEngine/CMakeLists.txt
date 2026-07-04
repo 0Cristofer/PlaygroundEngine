@@ -76,7 +76,7 @@ target_sources(PlaygroundEngine
         src/Reflection/TypeInfo.cpp
         src/Reflection/TypeRegistry.cpp
         src/Reflection/FieldInfo.cpp
-        src/Reflection/FuncInfo.cpp
+        src/Reflection/FunctionInfo.cpp
 
 
         PUBLIC
@@ -93,10 +93,14 @@ target_sources(PlaygroundEngine
         src/Component/TransformComponent.cppm
         src/Reflection/TypeInfo.cppm
         src/Reflection/Reflection.cppm
-        src/Reflection/Builder.cppm
+        src/Reflection/Builder/MetaCommon.cppm
+        src/Reflection/Builder/AnnotationsBuilder.cppm
+        src/Reflection/Builder/FieldsBuilder.cppm
+        src/Reflection/Builder/FunctionsBuilder.cppm
+        src/Reflection/Builder/TypeBuilder.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/FieldInfo.cppm
-        src/Reflection/FuncInfo.cppm
+        src/Reflection/FunctionInfo.cppm
         src/Reflection/TypedRef.cppm
         src/Reflection/DeclarationInfo.cppm
         src/Reflection/TypeInfoTraits.cppm
