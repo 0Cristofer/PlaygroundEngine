@@ -1,7 +1,7 @@
 export module PlaygroundEngine.Reflection:FieldInfo;
 
 import :TypedRef;
-import :Annotation;
+import :DeclarationInfo;
 
 import std;
 
@@ -30,20 +30,21 @@ namespace PgE
 	export using FieldSetter = std::expected<void, FieldError> (*)(void* obj, TypedRef in);
 	export using FieldReferencer = TypedRef (*)(void* obj);
 
-	export class FieldInfo : public Annotated
+	export class FieldInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FieldInfo(const TypeInfo* typeInfo, const std::string_view name, const int byteOffset,
-		                    const int bitOffset, const FieldGetter getter, const FieldSetter setter,
+		constexpr FieldInfo(const TypeInfo* typeInfo, const std::string_view identifier,
+		                    const std::string_view displayName, const int byteOffset, const int bitOffset,
+		                    const FieldGetter getter, const FieldSetter setter,
 		                    const FieldReferencer referencer,
 		                    const std::span<const AnnotationInfo> annotations) :
-			Annotated(annotations), _typeInfo(typeInfo), _name(name), _byteOffset(byteOffset),
-			_bitOffset(bitOffset), _getter(getter), _setter(setter), _referencer(referencer)
+			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo),
+			_byteOffset(byteOffset), _bitOffset(bitOffset), _getter(getter), _setter(setter),
+			_referencer(referencer)
 		{
 		}
 
 		int GetByteOffset() const;
-		std::string_view GetName() const;
 		const TypeInfo& GetTypeInfo() const;
 
 		std::expected<void, FieldError> GetValue(const void* obj, TypedRef out) const;
@@ -56,7 +57,9 @@ namespace PgE
 		std::expected<T, FieldError> GetAs(const void* obj) const
 		{
 			alignas(T) std::byte storage[sizeof(T)];
-			if (const auto result = GetValue(obj, TypedRef{.Type = &TypeOf<T>(), .Data = storage, .IsConst = false}); !result)
+			if (const auto result = GetValue(obj, TypedRef{
+				                                 .Type = &TypeOf<T>(), .Data = storage, .IsConst = false
+			                                 }); !result)
 				return std::unexpected(result.error());
 
 			T* pointer = std::launder(reinterpret_cast<T*>(storage));
@@ -114,7 +117,6 @@ namespace PgE
 
 	private:
 		const TypeInfo* _typeInfo = nullptr;
-		std::string_view _name;
 		int _byteOffset;
 		int _bitOffset;
 		FieldGetter _getter = nullptr;

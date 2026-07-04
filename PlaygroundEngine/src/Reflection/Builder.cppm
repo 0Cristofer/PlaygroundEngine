@@ -10,7 +10,7 @@ import :TypeInfo;
 import :FieldInfo;
 import :FuncInfo;
 import :TypedRef;
-import :Annotation;
+import :DeclarationInfo;
 
 import std;
 
@@ -25,6 +25,16 @@ namespace PgE::detail
 	std::string StringifyValue(const void* obj)
 	{
 		return TypeInfoTraits<T>::Stringify(*static_cast<const T*>(obj));
+	}
+
+	consteval std::string_view IdentifierOf(const std::meta::info entity)
+	{
+		return std::meta::has_identifier(entity) ? std::meta::identifier_of(entity) : std::string_view{};
+	}
+
+	consteval std::string_view DisplayStringOf(const std::meta::info entity)
+	{
+		return std::meta::display_string_of(entity);
 	}
 
 	template <std::meta::info Anno>
@@ -180,7 +190,8 @@ namespace PgE::detail
 	{
 		const auto [bytes, bits] = std::meta::offset_of(MetaMemberInfo);
 		return FieldInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaMemberInfo))>(),
-		                 std::meta::identifier_of(MetaMemberInfo), bytes, bits,
+		                 IdentifierOf(MetaMemberInfo), DisplayStringOf(MetaMemberInfo),
+		                 bytes, bits,
 		                 MakeFieldGetter<MetaTypeInfo, MetaMemberInfo>(),
 		                 MakeFieldSetter<MetaTypeInfo, MetaMemberInfo>(),
 		                 MakeFieldReferencer<MetaTypeInfo, MetaMemberInfo>(),
@@ -236,10 +247,8 @@ namespace PgE::detail
 	template <const std::meta::info MetaParamInfo>
 	consteval ParamInfo MakeParam()
 	{
-		constexpr std::string_view name = std::meta::has_identifier(MetaParamInfo)
-			                                  ? std::meta::identifier_of(MetaParamInfo)
-			                                  : std::string_view{};
-		return ParamInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParamInfo))>(), name,
+		return ParamInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParamInfo))>(),
+		                 IdentifierOf(MetaParamInfo), DisplayStringOf(MetaParamInfo),
 		                 MakeAnnotations<MetaParamInfo>());
 	}
 
@@ -413,7 +422,7 @@ namespace PgE::detail
 			std::meta::is_const(MetaFuncInfo) || std::meta::is_static_member(MetaFuncInfo);
 
 		return FuncInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::return_type_of(MetaFuncInfo))>(),
-		                std::meta::identifier_of(MetaFuncInfo),
+		                IdentifierOf(MetaFuncInfo), DisplayStringOf(MetaFuncInfo),
 		                MakeParams<MetaFuncInfo>(),
 		                constCallable,
 		                &InvokeThunk<T, MetaFuncInfo>,
@@ -450,7 +459,8 @@ namespace PgE::detail
 	constexpr const TypeInfo& TypeOfMeta()
 	{
 		using T = [:MetaTypeInfo:];
-		constexpr std::string_view displayName = std::meta::display_string_of(MetaTypeInfo);
+		constexpr std::string_view identifier = IdentifierOf(MetaTypeInfo);
+		constexpr std::string_view displayName = DisplayStringOf(MetaTypeInfo);
 
 		static constexpr auto Fields = GetFieldsFromType<MetaTypeInfo>();
 		static constexpr auto Functions = GetFunctionsFromType<MetaTypeInfo>();
@@ -461,12 +471,13 @@ namespace PgE::detail
 		// StringifyValue can't form a const T*; it stays true for primitives and classes.
 		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			static constexpr TypeInfo TypeInfo(displayName, Fields, Functions, &StringifyValue<T>, Annotations);
+			static constexpr TypeInfo TypeInfo(identifier, displayName, Fields, Functions, &StringifyValue<T>,
+			                                   Annotations);
 			return TypeInfo;
 		}
 		else
 		{
-			static constexpr TypeInfo TypeInfo(displayName, Fields, Functions, nullptr, Annotations);
+			static constexpr TypeInfo TypeInfo(identifier, displayName, Fields, Functions, nullptr, Annotations);
 			return TypeInfo;
 		}
 	}
