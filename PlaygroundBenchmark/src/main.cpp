@@ -81,9 +81,9 @@ int main(int argc, char** argv)
 
 	Widget widget{.Width = startingDimension, .Height = startingDimension + 1};
 
-	const FuncInfo* area = TypeOf<Widget>().FindFunctionsByName("Area").front();
-	const FuncInfo* resize = TypeOf<Widget>().FindFunctionsByName("Resize").front();
-	const FuncInfo* mix = TypeOf<Widget>().FindFunctionsByName("Mix").front();
+	const FuncInfo* area = TypeOf<Widget>().FindFunctionsByIdentifier("Area").front();
+	const FuncInfo* resize = TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
+	const FuncInfo* mix = TypeOf<Widget>().FindFunctionsByIdentifier("Mix").front();
 
 	// Every loop body advances a `dimension` that is barriered so the optimizer must treat it as
 	// freshly changed each iteration, feeds it into the call, and accumulates the result. The

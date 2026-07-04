@@ -12,17 +12,13 @@ namespace PgE
 		return _byteOffset;
 	}
 
-	std::string_view FieldInfo::GetName() const
-	{
-		return _name;
-	}
-
 	const TypeInfo& FieldInfo::GetTypeInfo() const
 	{
 		return *_typeInfo;
 	}
 
 	// ReSharper disable CppPassValueParameterByConstReference
+
 	std::expected<void, FieldError> FieldInfo::GetValue(const void* obj, const TypedRef out) const
 	{
 		if (!_getter)
@@ -38,6 +34,7 @@ namespace PgE
 
 		return _setter(obj, in);
 	}
+
 	// ReSharper restore CppPassValueParameterByConstReference
 
 	std::expected<TypedRef, FieldError> FieldInfo::GetRef(void* obj) const

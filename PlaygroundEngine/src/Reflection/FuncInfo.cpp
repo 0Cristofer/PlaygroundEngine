@@ -7,19 +7,9 @@ import std;
 
 namespace PgE
 {
-	std::string_view ParamInfo::GetName() const
-	{
-		return _name;
-	}
-
 	const TypeInfo& ParamInfo::GetTypeInfo() const
 	{
 		return *_typeInfo;
-	}
-
-	std::string_view FuncInfo::GetName() const
-	{
-		return _name;
 	}
 
 	const TypeInfo& FuncInfo::GetReturnType() const
@@ -38,6 +28,7 @@ namespace PgE
 	}
 
 	// ReSharper disable CppPassValueParameterByConstReference
+
 	std::expected<void, InvokeError> FuncInfo::Invoke(void* obj, const std::span<const TypedRef> args,
 	                                                  const TypedRef ret) const
 	{
@@ -52,5 +43,6 @@ namespace PgE
 
 		return _invoke(const_cast<void*>(obj), args, ret);
 	}
+
 	// ReSharper restore CppPassValueParameterByConstReference
 }

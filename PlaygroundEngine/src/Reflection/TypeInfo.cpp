@@ -35,7 +35,7 @@ namespace PgE
 			if (!firstField)
 				out += ", ";
 			firstField = false;
-			out += field.GetName();
+			out += field.GetIdentifier();
 			out += ": ";
 			out += FieldToString(field, obj);
 		}
@@ -53,7 +53,7 @@ namespace PgE
 			firstFunc = false;
 			out += function.GetReturnType().GetDisplayName();
 			out += " ";
-			out += function.GetName();
+			out += function.GetIdentifier();
 			out += "(";
 
 			bool firstParam = true;
@@ -64,10 +64,10 @@ namespace PgE
 				firstParam = false;
 
 				out += param.GetTypeInfo().GetDisplayName();
-				if (!param.GetName().empty())
+				if (!param.GetIdentifier().empty())
 				{
 					out += " ";
-					out += param.GetName();
+					out += param.GetIdentifier();
 				}
 			}
 
@@ -81,27 +81,27 @@ namespace PgE
 		return _functions;
 	}
 
-	std::vector<const FuncInfo*> TypeInfo::FindFunctionsByName(std::string_view name) const
+	std::vector<const FuncInfo*> TypeInfo::FindFunctionsByIdentifier(const std::string_view identifier) const
 	{
 		// Linear scan: function counts per type are small and lookups happen at boundaries, not the
 		// frame loop. Acceleration, if ever needed, belongs at the registry keyed by stable id.
 		std::vector<const FuncInfo*> matches;
 		for (const FuncInfo& function : _functions)
 		{
-			if (function.GetName() == name)
+			if (function.GetIdentifier() == identifier)
 				matches.push_back(&function);
 		}
 
 		return matches;
 	}
 
-	const FieldInfo* TypeInfo::FindFieldByName(const std::string_view name) const
+	const FieldInfo* TypeInfo::FindFieldByIdentifier(const std::string_view identifier) const
 	{
-		// Fields are unique by name, so the first match is the only one. Linear scan, same rationale
-		// as FindFunctionsByName.
+		// Fields are unique by identifier, so the first match is the only one. Linear scan, same rationale
+		// as FindFunctionsByIdentifier.
 		for (const FieldInfo& field : _fields)
 		{
-			if (field.GetName() == name)
+			if (field.GetIdentifier() == identifier)
 				return &field;
 		}
 
@@ -109,39 +109,41 @@ namespace PgE
 	}
 
 	// ReSharper disable CppPassValueParameterByConstReference
-	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view name,
+
+	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier,
 	                                                        const TypedRef out) const
 	{
-		const FieldInfo* field = FindFieldByName(name);
+		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 
 		return field->GetValue(obj, out);
 	}
 
-	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view name,
+	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view identifier,
 	                                                        const TypedRef in) const
 	{
-		const FieldInfo* field = FindFieldByName(name);
+		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 
 		return field->SetValue(obj, in);
 	}
+
 	// ReSharper restore CppPassValueParameterByConstReference
 
-	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(void* obj, const std::string_view name) const
+	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(void* obj, const std::string_view identifier) const
 	{
-		const FieldInfo* field = FindFieldByName(name);
+		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 
 		return field->GetRef(obj);
 	}
 
-	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(const void* obj, const std::string_view name) const
+	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(const void* obj, const std::string_view identifier) const
 	{
-		const FieldInfo* field = FindFieldByName(name);
+		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 

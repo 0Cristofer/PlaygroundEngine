@@ -1,10 +1,7 @@
-module;
-
-#include <meta>
-
 export module PlaygroundEngine.Reflection:FuncInfo;
 
 import :TypedRef;
+import :DeclarationInfo;
 
 import std;
 
@@ -36,34 +33,34 @@ namespace PgE
 	using InvokeResult = std::conditional_t<std::is_reference_v<Return>,
 	                                        std::reference_wrapper<std::remove_reference_t<Return>>, Return>;
 
-	export class ParamInfo
+	export class ParamInfo : public DeclarationInfo
 	{
 	public:
-		constexpr ParamInfo(const TypeInfo* typeInfo, const std::string_view name) :
-			_typeInfo(typeInfo), _name(name)
+		constexpr ParamInfo(const TypeInfo* typeInfo, const std::string_view identifier,
+		                    const std::string_view displayName,
+		                    const std::span<const AnnotationInfo> annotations) :
+			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo)
 		{
 		}
 
-		std::string_view GetName() const;
 		const TypeInfo& GetTypeInfo() const;
 
 	private:
 		const TypeInfo* _typeInfo;
-		std::string_view _name;
 	};
 
-	export class FuncInfo
+	export class FuncInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FuncInfo(const TypeInfo* returnType, const std::string_view name,
-		                   const std::span<const ParamInfo> params, const bool constCallable,
-		                   const Invoker invoke) :
-			_returnType(returnType), _name(name), _params(params), _constCallable(constCallable),
-			_invoke(invoke)
+		constexpr FuncInfo(const TypeInfo* returnType, const std::string_view identifier,
+		                   const std::string_view displayName, const std::span<const ParamInfo> params,
+		                   const bool constCallable, const Invoker invoke,
+		                   const std::span<const AnnotationInfo> annotations) :
+			DeclarationInfo(identifier, displayName, annotations), _returnType(returnType),
+			_params(params), _constCallable(constCallable), _invoke(invoke)
 		{
 		}
 
-		std::string_view GetName() const;
 		const TypeInfo& GetReturnType() const;
 		std::span<const ParamInfo> GetParams() const;
 		bool IsConst() const;
@@ -120,7 +117,6 @@ namespace PgE
 
 	private:
 		const TypeInfo* _returnType = nullptr;
-		std::string_view _name;
 		std::span<const ParamInfo> _params;
 		bool _constCallable = false;
 		Invoker _invoke = nullptr;
