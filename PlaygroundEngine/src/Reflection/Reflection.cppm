@@ -2,7 +2,7 @@ export module PlaygroundEngine.Reflection;
 
 export import :TypeInfo;
 export import :FieldInfo;
-export import :FuncInfo;
+export import :FunctionInfo;
 export import :TypedRef;
 export import :DeclarationInfo;
 export import :Builder;

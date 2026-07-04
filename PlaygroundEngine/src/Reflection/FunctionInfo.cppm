@@ -1,4 +1,4 @@
-export module PlaygroundEngine.Reflection:FuncInfo;
+export module PlaygroundEngine.Reflection:FunctionInfo;
 
 import :TypedRef;
 import :DeclarationInfo;
@@ -33,10 +33,10 @@ namespace PgE
 	using InvokeResult = std::conditional_t<std::is_reference_v<Return>,
 	                                        std::reference_wrapper<std::remove_reference_t<Return>>, Return>;
 
-	export class ParamInfo : public DeclarationInfo
+	export class ParameterInfo : public DeclarationInfo
 	{
 	public:
-		constexpr ParamInfo(const TypeInfo* typeInfo, const std::string_view identifier,
+		constexpr ParameterInfo(const TypeInfo* typeInfo, const std::string_view identifier,
 		                    const std::string_view displayName,
 		                    const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo)
@@ -49,11 +49,11 @@ namespace PgE
 		const TypeInfo* _typeInfo;
 	};
 
-	export class FuncInfo : public DeclarationInfo
+	export class FunctionInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FuncInfo(const TypeInfo* returnType, const std::string_view identifier,
-		                   const std::string_view displayName, const std::span<const ParamInfo> params,
+		constexpr FunctionInfo(const TypeInfo* returnType, const std::string_view identifier,
+		                   const std::string_view displayName, const std::span<const ParameterInfo> params,
 		                   const bool constCallable, const Invoker invoke,
 		                   const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations), _returnType(returnType),
@@ -62,7 +62,7 @@ namespace PgE
 		}
 
 		const TypeInfo& GetReturnType() const;
-		std::span<const ParamInfo> GetParams() const;
+		std::span<const ParameterInfo> GetParams() const;
 		bool IsConst() const;
 
 		std::expected<void, InvokeError> Invoke(void* obj, std::span<const TypedRef> args,
@@ -117,7 +117,7 @@ namespace PgE
 
 	private:
 		const TypeInfo* _returnType = nullptr;
-		std::span<const ParamInfo> _params;
+		std::span<const ParameterInfo> _params;
 		bool _constCallable = false;
 		Invoker _invoke = nullptr;
 	};

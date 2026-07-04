@@ -1,41 +1,41 @@
 module PlaygroundEngine.Reflection;
 
-import :FuncInfo;
+import :FunctionInfo;
 import :TypedRef;
 
 import std;
 
 namespace PgE
 {
-	const TypeInfo& ParamInfo::GetTypeInfo() const
+	const TypeInfo& ParameterInfo::GetTypeInfo() const
 	{
 		return *_typeInfo;
 	}
 
-	const TypeInfo& FuncInfo::GetReturnType() const
+	const TypeInfo& FunctionInfo::GetReturnType() const
 	{
 		return *_returnType;
 	}
 
-	std::span<const ParamInfo> FuncInfo::GetParams() const
+	std::span<const ParameterInfo> FunctionInfo::GetParams() const
 	{
 		return _params;
 	}
 
-	bool FuncInfo::IsConst() const
+	bool FunctionInfo::IsConst() const
 	{
 		return _constCallable;
 	}
 
 	// ReSharper disable CppPassValueParameterByConstReference
 
-	std::expected<void, InvokeError> FuncInfo::Invoke(void* obj, const std::span<const TypedRef> args,
+	std::expected<void, InvokeError> FunctionInfo::Invoke(void* obj, const std::span<const TypedRef> args,
 	                                                  const TypedRef ret) const
 	{
 		return _invoke(obj, args, ret);
 	}
 
-	std::expected<void, InvokeError> FuncInfo::Invoke(const void* obj, const std::span<const TypedRef> args,
+	std::expected<void, InvokeError> FunctionInfo::Invoke(const void* obj, const std::span<const TypedRef> args,
 	                                                  const TypedRef ret) const
 	{
 		if (!IsConst())
