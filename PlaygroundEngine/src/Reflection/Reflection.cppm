@@ -18,6 +18,12 @@ namespace PgE
 	}
 
 	export template <typename T>
+	constexpr const TypeInfo& TypeOf(const T&)
+	{
+		return TypeOf<T>();
+	}
+
+	export template <typename T>
 	std::string ToString(const T& value)
 	{
 		return TypeOf<T>().ObjectToString(&value);

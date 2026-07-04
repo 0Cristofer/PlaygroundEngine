@@ -305,6 +305,13 @@ TEST_CASE("reflected type name is correct")
 	CHECK(PgE::TypeOf<int>().GetDisplayName() == "int");
 }
 
+TEST_CASE("TypeOf deduces the type from a value and matches the explicit form")
+{
+	constexpr Widget widget{};
+	CHECK(&PgE::TypeOf(widget) == &PgE::TypeOf<Widget>());
+	CHECK(&PgE::TypeOf(42) == &PgE::TypeOf<int>());
+}
+
 TEST_CASE("leaf values stringify through TypeInfoTraits")
 {
 	CHECK(PgE::ToString(42) == "42");

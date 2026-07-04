@@ -26,7 +26,7 @@ import std;
 namespace PgE::detail
 {
 	template <std::meta::info MetaType>
-	constexpr const TypeInfo& TypeOfMeta()
+	consteval TypeInfo MakeType()
 	{
 		using T = [:MetaType:];
 		constexpr std::string_view identifier = IdentifierOf(MetaType);
@@ -41,14 +41,19 @@ namespace PgE::detail
 		// StringifyValue can't form a const T*; it stays true for primitives and classes.
 		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			static constexpr TypeInfo Result(identifier, displayName, Fields, Functions, &StringifyValue<T>,
-			                                 Annotations);
-			return Result;
+			return TypeInfo(identifier, displayName, Fields, Functions, &StringifyValue<T>,
+			                Annotations);
 		}
 		else
 		{
-			static constexpr TypeInfo Result(identifier, displayName, Fields, Functions, nullptr, Annotations);
-			return Result;
+			return TypeInfo(identifier, displayName, Fields, Functions, nullptr, Annotations);
 		}
+	}
+
+	template <std::meta::info MetaType>
+	constexpr const TypeInfo& TypeOfMeta()
+	{
+		static constexpr TypeInfo Type = MakeType<MetaType>();
+		return Type;
 	}
 }
