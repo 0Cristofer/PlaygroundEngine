@@ -2,9 +2,9 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:BuilderAnnotations;
+export module PlaygroundEngine.Reflection:AnnotationsBuilder;
 
-import :BuilderCommon;
+import :MetaCommon;
 import :DeclarationInfo;
 
 import std;

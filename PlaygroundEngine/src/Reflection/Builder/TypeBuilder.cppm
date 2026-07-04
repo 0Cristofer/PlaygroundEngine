@@ -2,22 +2,26 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:Builder;
+export module PlaygroundEngine.Reflection:TypeBuilder;
 
 import PlaygroundEngine.Reflection.TypeInfoTraits;
 
-export import :BuilderCommon;
-export import :BuilderAnnotations;
-export import :BuilderFields;
-export import :BuilderFunctions;
+export import :MetaCommon;
+export import :AnnotationsBuilder;
+export import :FieldsBuilder;
+export import :FunctionsBuilder;
 import :TypeInfo;
 
 import std;
 
-// Assembles the runtime TypeInfo for a type and holds the sole definition of the TypeOfMeta recursion
-// knot (declared in :BuilderCommon). Instantiating it here pulls in the field and function builders,
-// which recurse back into TypeOfMeta for member and signature types; the definition being visible only
-// in this partition is what keeps the sub-builders dependent on the declaration alone.
+// The home for building a type's runtime TypeInfo: it orchestrates the per-kind builders (fields,
+// functions, annotations, and later bases, size, enumerators) into one TypeInfo. New kinds of type
+// information are added here, delegating collection-heavy work to their own :*Builder partition.
+//
+// It also holds the sole definition of the TypeOfMeta recursion knot (declared in :MetaCommon).
+// Instantiating it here pulls in the sub-builders, which recurse back into TypeOfMeta for member and
+// signature types; the definition being visible only in this partition is what keeps the sub-builders
+// dependent on the declaration alone, so the partition import graph stays acyclic.
 
 namespace PgE::detail
 {

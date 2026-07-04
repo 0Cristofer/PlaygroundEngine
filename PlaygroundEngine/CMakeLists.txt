@@ -93,11 +93,11 @@ target_sources(PlaygroundEngine
         src/Component/TransformComponent.cppm
         src/Reflection/TypeInfo.cppm
         src/Reflection/Reflection.cppm
-        src/Reflection/Builder/Builder.cppm
-        src/Reflection/Builder/BuilderCommon.cppm
-        src/Reflection/Builder/BuilderAnnotations.cppm
-        src/Reflection/Builder/BuilderFields.cppm
-        src/Reflection/Builder/BuilderFunctions.cppm
+        src/Reflection/Builder/MetaCommon.cppm
+        src/Reflection/Builder/AnnotationsBuilder.cppm
+        src/Reflection/Builder/FieldsBuilder.cppm
+        src/Reflection/Builder/FunctionsBuilder.cppm
+        src/Reflection/Builder/TypeBuilder.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/FieldInfo.cppm
         src/Reflection/FunctionInfo.cppm

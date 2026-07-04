@@ -2,12 +2,12 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:BuilderFields;
+export module PlaygroundEngine.Reflection:FieldsBuilder;
 
 import PlaygroundEngine.Reflection.TypeInfoTraits;
 
-import :BuilderCommon;
-import :BuilderAnnotations;
+import :MetaCommon;
+import :AnnotationsBuilder;
 import :TypeInfo;
 import :FieldInfo;
 import :TypedRef;

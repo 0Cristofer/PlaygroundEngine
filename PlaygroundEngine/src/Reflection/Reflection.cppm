@@ -5,7 +5,7 @@ export import :FieldInfo;
 export import :FunctionInfo;
 export import :TypedRef;
 export import :DeclarationInfo;
-export import :Builder;
+export import :TypeBuilder;
 
 import std;
 

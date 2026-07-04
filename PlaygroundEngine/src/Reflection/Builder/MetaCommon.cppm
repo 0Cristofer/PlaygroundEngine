@@ -2,7 +2,7 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:BuilderCommon;
+export module PlaygroundEngine.Reflection:MetaCommon;
 
 import PlaygroundEngine.Reflection.TypeInfoTraits;
 
@@ -12,7 +12,7 @@ import std;
 
 // Shared foundation for the reflection builders. Holds the recursion knot: TypeOfMeta is only
 // declared here, so the field/function builders can reference &TypeOfMeta<memberType>() without
-// instantiating it. The single definition lives in the :Builder assembler partition, which is the
+// instantiating it. The single definition lives in the :TypeBuilder assembler partition, which is the
 // only unit that imports the sub-builders. That keeps the partition import graph acyclic.
 
 namespace PgE::detail
