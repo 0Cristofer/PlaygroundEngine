@@ -5,6 +5,7 @@ import PlaygroundEngine.Reflection.TypeInfoTraits;
 import :FieldInfo;
 import :FuncInfo;
 import :TypedRef;
+import :Annotation;
 
 import std;
 
@@ -13,15 +14,17 @@ namespace PgE
 	export template <typename T>
 	constexpr const TypeInfo& TypeOf();
 
-	export class TypeInfo
+	export class TypeInfo : public Annotated
 	{
 	public:
 		constexpr TypeInfo(const std::string_view name, const std::span<const FieldInfo> fields,
 		                   const std::span<const FuncInfo> functions,
-		                   std::string (*stringifyThunk)(const void*)) : _displayName(name),
-		                                                                 _fields(fields),
-		                                                                 _functions(functions),
-		                                                                 _stringifyThunk(stringifyThunk)
+		                   std::string (*stringifyThunk)(const void*),
+		                   const std::span<const AnnotationInfo> annotations) : Annotated(annotations),
+			_displayName(name),
+			_fields(fields),
+			_functions(functions),
+			_stringifyThunk(stringifyThunk)
 		{
 		}
 

@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection:FieldInfo;
 
 import :TypedRef;
+import :Annotation;
 
 import std;
 
@@ -29,14 +30,15 @@ namespace PgE
 	export using FieldSetter = std::expected<void, FieldError> (*)(void* obj, TypedRef in);
 	export using FieldReferencer = TypedRef (*)(void* obj);
 
-	export class FieldInfo
+	export class FieldInfo : public Annotated
 	{
 	public:
 		constexpr FieldInfo(const TypeInfo* typeInfo, const std::string_view name, const int byteOffset,
 		                    const int bitOffset, const FieldGetter getter, const FieldSetter setter,
-		                    const FieldReferencer referencer) :
-			_typeInfo(typeInfo), _name(name), _byteOffset(byteOffset), _bitOffset(bitOffset),
-			_getter(getter), _setter(setter), _referencer(referencer)
+		                    const FieldReferencer referencer,
+		                    const std::span<const AnnotationInfo> annotations) :
+			Annotated(annotations), _typeInfo(typeInfo), _name(name), _byteOffset(byteOffset),
+			_bitOffset(bitOffset), _getter(getter), _setter(setter), _referencer(referencer)
 		{
 		}
 

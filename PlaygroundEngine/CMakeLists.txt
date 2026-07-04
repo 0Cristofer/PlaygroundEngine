@@ -98,6 +98,7 @@ target_sources(PlaygroundEngine
         src/Reflection/FieldInfo.cppm
         src/Reflection/FuncInfo.cppm
         src/Reflection/TypedRef.cppm
+        src/Reflection/Annotation.cppm
         src/Reflection/TypeInfoTraits.cppm
 
 		PUBLIC

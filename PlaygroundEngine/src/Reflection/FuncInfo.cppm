@@ -5,6 +5,7 @@ module;
 export module PlaygroundEngine.Reflection:FuncInfo;
 
 import :TypedRef;
+import :Annotation;
 
 import std;
 
@@ -36,11 +37,12 @@ namespace PgE
 	using InvokeResult = std::conditional_t<std::is_reference_v<Return>,
 	                                        std::reference_wrapper<std::remove_reference_t<Return>>, Return>;
 
-	export class ParamInfo
+	export class ParamInfo : public Annotated
 	{
 	public:
-		constexpr ParamInfo(const TypeInfo* typeInfo, const std::string_view name) :
-			_typeInfo(typeInfo), _name(name)
+		constexpr ParamInfo(const TypeInfo* typeInfo, const std::string_view name,
+		                    const std::span<const AnnotationInfo> annotations) :
+			Annotated(annotations), _typeInfo(typeInfo), _name(name)
 		{
 		}
 
@@ -52,14 +54,14 @@ namespace PgE
 		std::string_view _name;
 	};
 
-	export class FuncInfo
+	export class FuncInfo : public Annotated
 	{
 	public:
 		constexpr FuncInfo(const TypeInfo* returnType, const std::string_view name,
 		                   const std::span<const ParamInfo> params, const bool constCallable,
-		                   const Invoker invoke) :
-			_returnType(returnType), _name(name), _params(params), _constCallable(constCallable),
-			_invoke(invoke)
+		                   const Invoker invoke, const std::span<const AnnotationInfo> annotations) :
+			Annotated(annotations), _returnType(returnType), _name(name), _params(params),
+			_constCallable(constCallable), _invoke(invoke)
 		{
 		}
 

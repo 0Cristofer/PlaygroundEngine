@@ -10,6 +10,7 @@ import :TypeInfo;
 import :FieldInfo;
 import :FuncInfo;
 import :TypedRef;
+import :Annotation;
 
 import std;
 
@@ -24,6 +25,53 @@ namespace PgE::detail
 	std::string StringifyValue(const void* obj)
 	{
 		return TypeInfoTraits<T>::Stringify(*static_cast<const T*>(obj));
+	}
+
+	template <std::meta::info Anno>
+	struct AnnotationConstant
+	{
+		// Materializes one annotation value into static storage, keyed by its reflection so
+		// each distinct annotation gets its own constant with a stable, program-lifetime
+		// address. The split alias keeps the spliced type out of a template argument
+		// (GCC -Wtemplate-body).
+
+		using Declared = [:std::meta::type_of(Anno):];
+		using Type = std::remove_cvref_t<Declared>;
+		static constexpr Type Value = std::meta::extract<Type>(Anno);
+	};
+
+	template <std::meta::info Anno>
+	consteval AnnotationInfo MakeAnnotation()
+	{
+		// The type tag is &TypeOfMeta<...>(), the same instance a caller reaches through
+		// &TypeOf<A>(), so a runtime GetAnnotation<A>() matches by pointer identity.
+		return AnnotationInfo{
+			.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(Anno))>(),
+			.Value = &AnnotationConstant<Anno>::Value,
+		};
+	}
+
+	consteval std::vector<std::meta::info> GetAnnotationList(const std::meta::info entity)
+	{
+		std::vector<std::meta::info> annotations;
+		for (const std::meta::info annotation : std::meta::annotations_of(entity))
+			annotations.push_back(annotation);
+		return annotations;
+	}
+
+	template <std::meta::info Entity, std::size_t... I>
+	consteval auto MakeNAnnotations(std::index_sequence<I...>)
+	{
+		[[maybe_unused]] constexpr auto annotations = std::define_static_array(GetAnnotationList(Entity));
+		return std::array<AnnotationInfo, sizeof...(I)>{MakeAnnotation<annotations[I]>()...};
+	}
+
+	template <std::meta::info Entity>
+	constexpr std::span<const AnnotationInfo> MakeAnnotations()
+	{
+		constexpr auto count = GetAnnotationList(Entity).size();
+		static constexpr auto Annotations = MakeNAnnotations<Entity>(std::make_index_sequence<count>{});
+		return Annotations;
 	}
 
 	template <std::meta::info MetaTypeInfo, std::meta::info MetaMemberInfo>
@@ -135,7 +183,8 @@ namespace PgE::detail
 		                 std::meta::identifier_of(MetaMemberInfo), bytes, bits,
 		                 MakeFieldGetter<MetaTypeInfo, MetaMemberInfo>(),
 		                 MakeFieldSetter<MetaTypeInfo, MetaMemberInfo>(),
-		                 MakeFieldReferencer<MetaTypeInfo, MetaMemberInfo>());
+		                 MakeFieldReferencer<MetaTypeInfo, MetaMemberInfo>(),
+		                 MakeAnnotations<MetaMemberInfo>());
 	}
 
 	template <std::meta::info MetaTypeInfo, std::size_t... I>
@@ -190,7 +239,8 @@ namespace PgE::detail
 		constexpr std::string_view name = std::meta::has_identifier(MetaParamInfo)
 			                                  ? std::meta::identifier_of(MetaParamInfo)
 			                                  : std::string_view{};
-		return ParamInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParamInfo))>(), name);
+		return ParamInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParamInfo))>(), name,
+		                 MakeAnnotations<MetaParamInfo>());
 	}
 
 	template <std::meta::info MetaFuncInfo, std::size_t... I>
@@ -204,8 +254,8 @@ namespace PgE::detail
 	constexpr std::span<const ParamInfo> MakeParams()
 	{
 		constexpr auto numParams = std::meta::parameters_of(MetaFuncInfo).size();
-		static constexpr auto params = MakeNParams<MetaFuncInfo>(std::make_index_sequence<numParams>{});
-		return params;
+		static constexpr auto Params = MakeNParams<MetaFuncInfo>(std::make_index_sequence<numParams>{});
+		return Params;
 	}
 
 	template <std::meta::info Param>
@@ -366,7 +416,8 @@ namespace PgE::detail
 		                std::meta::identifier_of(MetaFuncInfo),
 		                MakeParams<MetaFuncInfo>(),
 		                constCallable,
-		                &InvokeThunk<T, MetaFuncInfo>);
+		                &InvokeThunk<T, MetaFuncInfo>,
+		                MakeAnnotations<MetaFuncInfo>());
 	}
 
 	template <std::meta::info MetaTypeInfo, std::size_t... I>
@@ -401,22 +452,22 @@ namespace PgE::detail
 		using T = [:MetaTypeInfo:];
 		constexpr std::string_view displayName = std::meta::display_string_of(MetaTypeInfo);
 
-		// ReSharper disable CppInconsistentNaming
-		static constexpr auto fields = GetFieldsFromType<MetaTypeInfo>();
-		static constexpr auto functions = GetFunctionsFromType<MetaTypeInfo>();
+		static constexpr auto Fields = GetFieldsFromType<MetaTypeInfo>();
+		static constexpr auto Functions = GetFunctionsFromType<MetaTypeInfo>();
+
+		static constexpr auto Annotations = MakeAnnotations<MetaTypeInfo>();
 
 		// std::is_object_v excludes void (reached here as a function return type), where
 		// StringifyValue can't form a const T*; it stays true for primitives and classes.
-		if constexpr (fields.empty() && std::is_object_v<T>)
+		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			static constexpr TypeInfo typeInfo(displayName, fields, functions, &StringifyValue<T>);
-			return typeInfo;
+			static constexpr TypeInfo TypeInfo(displayName, Fields, Functions, &StringifyValue<T>, Annotations);
+			return TypeInfo;
 		}
 		else
 		{
-			static constexpr TypeInfo typeInfo(displayName, fields, functions, nullptr);
-			return typeInfo;
+			static constexpr TypeInfo TypeInfo(displayName, Fields, Functions, nullptr, Annotations);
+			return TypeInfo;
 		}
-		// ReSharper restore CppInconsistentNaming
 	}
 }

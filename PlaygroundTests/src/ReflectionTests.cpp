@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <meta>
 
 import std;
 import PlaygroundEngine.Reflection;
@@ -189,6 +190,36 @@ namespace ReflectionTestTypes
 	struct ChildNoOverride : Base
 	{
 	};
+
+	// Value-carrying annotations plus an empty tag. Doc stores its string through
+	// define_static_string so the value is a self-contained constant (see the reflection
+	// design notes on structural annotation values).
+	struct Range { double Min; double Max; };
+
+	struct Doc
+	{
+		const char* Text;
+		consteval Doc(const char* text) : Text(std::define_static_string(std::string_view{text})) {}
+	};
+
+	struct Serializable {};
+
+	// One type carrying annotations on every declaration kind: the type itself, a field,
+	// a member function, and a parameter. Exercises the shared Annotated surface uniformly.
+	struct [[=Serializable{}]] Gadget
+	{
+		[[=Range{0.0, 100.0}]] [[=Doc{"hit points"}]]
+		int Health = 100;
+
+		// The same annotation type repeated: legal, kept in declaration order, not deduplicated.
+		[[=Doc{"primary"}]] [[=Doc{"secondary"}]]
+		int Nickname = 0;
+
+		int Plain = 0;
+
+		[[=Doc{"apply damage, return remaining health"}]]
+		int Hurt([[=Range{0.0, 1000.0}]] int amount) { Health -= amount; return Health; }
+	};
 	// ReSharper restore CppParameterMayBeConst
 	// ReSharper restore CppDeclaratorNeverUsed
 	// ReSharper restore CppPassValueParameterByConstReference
@@ -219,6 +250,10 @@ using ReflectionTestTypes::Palette;
 using ReflectionTestTypes::Base;
 using ReflectionTestTypes::Child;
 using ReflectionTestTypes::ChildNoOverride;
+using ReflectionTestTypes::Range;
+using ReflectionTestTypes::Doc;
+using ReflectionTestTypes::Serializable;
+using ReflectionTestTypes::Gadget;
 
 TEST_CASE("reflected type name is correct")
 {
@@ -708,4 +743,93 @@ TEST_CASE("invoking through a base type calls the overwritten function")
 	CHECK(baseFunctions.front()->InvokeAs<int>(&child).value() == 2);
 	CHECK(baseFunctions.front()->InvokeAs<int>(&childNoOverride).value() == 1);
 	CHECK(childFunctions.front()->InvokeAs<int>(&child).value() == 2);
+}
+
+TEST_CASE("field annotations expose their values")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Gadget>();
+
+	const PgE::FieldInfo* health = type.FindFieldByName("Health");
+	REQUIRE(health != nullptr);
+
+	const auto ranges = health->GetAnnotations<Range>();
+	REQUIRE(ranges.size() == 1);
+	CHECK(ranges.front()->Min == 0.0);
+	CHECK(ranges.front()->Max == 100.0);
+
+	const auto docs = health->GetAnnotations<Doc>();
+	REQUIRE(docs.size() == 1);
+	CHECK(std::string_view{docs.front()->Text} == "hit points");
+
+	CHECK(health->HasAnnotation<Range>());
+	CHECK(health->GetAnnotations().size() == 2);
+
+	// A cv/ref-qualified query normalizes to the same stored annotation.
+	CHECK(health->GetAnnotations<const Range&>() == ranges);
+	CHECK(health->HasAnnotation<const Range>());
+}
+
+TEST_CASE("repeated annotations of one type are all returned in declaration order")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Gadget>();
+
+	const PgE::FieldInfo* nickname = type.FindFieldByName("Nickname");
+	REQUIRE(nickname != nullptr);
+
+	const auto docs = nickname->GetAnnotations<Doc>();
+	REQUIRE(docs.size() == 2);
+	CHECK(std::string_view{docs[0]->Text} == "primary");
+	CHECK(std::string_view{docs[1]->Text} == "secondary");
+}
+
+TEST_CASE("absent annotations query as empty")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Gadget>();
+
+	const PgE::FieldInfo* plain = type.FindFieldByName("Plain");
+	REQUIRE(plain != nullptr);
+
+	CHECK(plain->GetAnnotations<Range>().empty());
+	CHECK_FALSE(plain->HasAnnotation<Doc>());
+	CHECK(plain->GetAnnotations().empty());
+
+	// An annotated field is still empty for a type it does not carry.
+	const PgE::FieldInfo* health = type.FindFieldByName("Health");
+	REQUIRE(health != nullptr);
+	CHECK(health->GetAnnotations<Serializable>().empty());
+}
+
+TEST_CASE("annotations attach to types, functions, and parameters alike")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Gadget>();
+
+	// Type-level annotation, through the same Annotated surface.
+	CHECK(type.HasAnnotation<Serializable>());
+	CHECK(type.GetAnnotations<Serializable>().size() == 1);
+
+	const auto functions = type.FindFunctionsByName("Hurt");
+	REQUIRE(functions.size() == 1);
+	const PgE::FuncInfo* hurt = functions.front();
+
+	const auto functionDocs = hurt->GetAnnotations<Doc>();
+	REQUIRE(functionDocs.size() == 1);
+	CHECK(std::string_view{functionDocs.front()->Text} == "apply damage, return remaining health");
+
+	// Parameter-level annotation.
+	const std::span<const PgE::ParamInfo> params = hurt->GetParams();
+	REQUIRE(params.size() == 1);
+	const auto paramRanges = params.front().GetAnnotations<Range>();
+	REQUIRE(paramRanges.size() == 1);
+	CHECK(paramRanges.front()->Max == 1000.0);
+}
+
+TEST_CASE("empty tag annotation is present but carries no data")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Gadget>();
+
+	// The value pointer is non-null even for an empty tag: presence, not payload.
+	const auto tags = type.GetAnnotations<Serializable>();
+	REQUIRE(tags.size() == 1);
+	CHECK(tags.front() != nullptr);
+	CHECK(type.HasAnnotation<Serializable>());
 }
