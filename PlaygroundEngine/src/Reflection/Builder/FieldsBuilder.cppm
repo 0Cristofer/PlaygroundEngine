@@ -150,7 +150,7 @@ namespace PgE::detail
 		{
 			return std::array<FieldInfo, 0>{};
 		}
-		else if constexpr (std::meta::is_class_type(MetaType))
+		else if constexpr (IsClassOrUnion(MetaType))
 		{
 			constexpr auto fieldCount = std::define_static_array(
 				std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked())).size();

@@ -238,7 +238,7 @@ namespace PgE::detail
 		{
 			return std::array<FunctionInfo, 0>{};
 		}
-		else if constexpr (std::meta::is_class_type(MetaType))
+		else if constexpr (IsClassOrUnion(MetaType))
 		{
 			constexpr auto functionCount = std::define_static_array(GetMemberFunctions(MetaType)).size();
 			return MakeFunctionArray<MetaType>(std::make_index_sequence<functionCount>{});

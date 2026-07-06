@@ -97,6 +97,7 @@ target_sources(PlaygroundEngine
         src/Reflection/Builder/AnnotationsBuilder.cppm
         src/Reflection/Builder/FieldsBuilder.cppm
         src/Reflection/Builder/FunctionsBuilder.cppm
+        src/Reflection/Builder/TraitsBuilder.cppm
         src/Reflection/Builder/TypeBuilder.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/FieldInfo.cppm

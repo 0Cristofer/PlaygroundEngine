@@ -108,10 +108,9 @@ namespace PgE
 		return nullptr;
 	}
 
-	// ReSharper disable CppPassValueParameterByConstReference
 
 	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier,
-	                                                        const TypedRef out) const
+	                                                        TypedRef out) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
