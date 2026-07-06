@@ -27,7 +27,7 @@ namespace PgE
 	};
 
 	export using Invoker =
-	std::expected<void, InvokeError> (*)(void* obj, std::span<const TypedRef> args, TypedRef ret);
+	std::expected<void, InvokeError> (*)(void* obj, std::span<const TypedRef> args, const TypedRef& ret);
 
 	export template <typename Return>
 	using InvokeResult = std::conditional_t<std::is_reference_v<Return>,
@@ -37,8 +37,8 @@ namespace PgE
 	{
 	public:
 		constexpr ParameterInfo(const TypeInfo* typeInfo, const std::string_view identifier,
-		                    const std::string_view displayName,
-		                    const std::span<const AnnotationInfo> annotations) :
+		                        const std::string_view displayName,
+		                        const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo)
 		{
 		}
@@ -53,9 +53,9 @@ namespace PgE
 	{
 	public:
 		constexpr FunctionInfo(const TypeInfo* returnType, const std::string_view identifier,
-		                   const std::string_view displayName, const std::span<const ParameterInfo> params,
-		                   const bool constCallable, const Invoker invoke,
-		                   const std::span<const AnnotationInfo> annotations) :
+		                       const std::string_view displayName, const std::span<const ParameterInfo> params,
+		                       const bool constCallable, const Invoker invoke,
+		                       const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations), _returnType(returnType),
 			_params(params), _constCallable(constCallable), _invoke(invoke)
 		{
@@ -66,9 +66,9 @@ namespace PgE
 		bool IsConst() const;
 
 		std::expected<void, InvokeError> Invoke(void* obj, std::span<const TypedRef> args,
-		                                        TypedRef ret = {}) const;
+		                                        const TypedRef& ret = {}) const;
 		std::expected<void, InvokeError> Invoke(const void* obj, std::span<const TypedRef> args,
-		                                        TypedRef ret = {}) const;
+		                                        const TypedRef& ret = {}) const;
 
 		template <typename Return = void, typename Object, typename... Arguments>
 		std::expected<InvokeResult<Return>, InvokeError> InvokeAs(Object* obj, Arguments&&... arguments) const

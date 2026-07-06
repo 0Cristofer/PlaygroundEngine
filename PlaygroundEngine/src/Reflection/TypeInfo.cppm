@@ -64,7 +64,7 @@ namespace PgE
 	{
 	public:
 		constexpr TypeInfo(const std::string_view identifier, const std::string_view displayName,
-		                   const TypeTraits traits,
+		                   const TypeTraits& traits,
 		                   const std::span<const FieldInfo> fields,
 		                   const std::span<const FunctionInfo> functions,
 		                   std::string (*stringifyThunk)(const void*),
@@ -89,8 +89,8 @@ namespace PgE
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 
-		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, TypedRef out) const;
-		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, TypedRef in) const;
+		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
+		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
 
 		std::expected<TypedRef, FieldError> GetFieldRef(void* obj, std::string_view identifier) const;
 		std::expected<TypedRef, FieldError> GetFieldRef(const void* obj, std::string_view identifier) const;

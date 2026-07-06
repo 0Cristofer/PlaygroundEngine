@@ -21,7 +21,7 @@ import std;
 namespace PgE::detail
 {
 	template <std::meta::info MetaType, std::meta::info MetaField>
-	std::expected<void, FieldError> FieldGetThunk(const void* obj, const TypedRef out)
+	std::expected<void, FieldError> FieldGetThunk(const void* obj, const TypedRef& out)
 	{
 		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];
@@ -35,7 +35,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>
-	std::expected<void, FieldError> FieldSetThunk(void* obj, const TypedRef in)
+	std::expected<void, FieldError> FieldSetThunk(void* obj, const TypedRef& in)
 	{
 		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];

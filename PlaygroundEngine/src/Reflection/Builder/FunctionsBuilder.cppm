@@ -148,7 +148,7 @@ namespace PgE::detail
 	template <typename T, std::meta::info MetaFunction, std::size_t... I>
 	std::expected<void, InvokeError> InvokeThunkImpl([[maybe_unused]] void* obj,
 	                                                 [[maybe_unused]] std::span<const TypedRef> args,
-	                                                 [[maybe_unused]] const TypedRef ret,
+	                                                 [[maybe_unused]] const TypedRef& ret,
 	                                                 std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto parameters =
@@ -188,7 +188,7 @@ namespace PgE::detail
 			const TypeInfo* returnTag =
 				&TypeOfMeta<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>();
 			if (ret.Type != nullptr && ret.Type != returnTag)
-				return std::unexpected(InvokeError{InvokeError::ReturnTypeMismatch, 0});
+				return std::unexpected(InvokeError{.Reason = InvokeError::ReturnTypeMismatch, .ArgumentIndex = 0});
 
 			Return result = DoCall<T, MetaFunction>(obj, args, std::index_sequence<I...>{});
 			if (ret.Type != nullptr)
@@ -199,11 +199,11 @@ namespace PgE::detail
 	}
 
 	template <typename T, std::meta::info MetaFunction>
-	std::expected<void, InvokeError> InvokeThunk(void* obj, std::span<const TypedRef> args, TypedRef ret)
+	std::expected<void, InvokeError> InvokeThunk(void* obj, std::span<const TypedRef> args, const TypedRef& ret)
 	{
 		constexpr std::size_t parameterCount = std::meta::parameters_of(MetaFunction).size();
 		if (args.size() != parameterCount)
-			return std::unexpected(InvokeError{InvokeError::ArityMismatch, 0});
+			return std::unexpected(InvokeError{.Reason = InvokeError::ArityMismatch, .ArgumentIndex = 0});
 
 		return InvokeThunkImpl<T, MetaFunction>(obj, args, ret, std::make_index_sequence<parameterCount>{});
 	}
