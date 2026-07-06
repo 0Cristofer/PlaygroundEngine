@@ -108,10 +108,9 @@ namespace PgE
 		return nullptr;
 	}
 
-	// ReSharper disable CppPassValueParameterByConstReference
 
 	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier,
-	                                                        const TypedRef out) const
+	                                                        const TypedRef& out) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
@@ -121,7 +120,7 @@ namespace PgE
 	}
 
 	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view identifier,
-	                                                        const TypedRef in) const
+	                                                        const TypedRef& in) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
@@ -129,8 +128,6 @@ namespace PgE
 
 		return field->SetValue(obj, in);
 	}
-
-	// ReSharper restore CppPassValueParameterByConstReference
 
 	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(void* obj, const std::string_view identifier) const
 	{

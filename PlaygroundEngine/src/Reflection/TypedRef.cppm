@@ -6,9 +6,9 @@ namespace PgE
 
 	export struct TypedRef
 	{
-		const TypeInfo* const Type = nullptr;
-		void* const Data = nullptr;
-		const bool IsConst = false;
-		const bool Movable = false;
+		const TypeInfo* Type = nullptr;
+		void* Data = nullptr;
+		bool IsConst = false;
+		bool Movable = false;
 	};
 }

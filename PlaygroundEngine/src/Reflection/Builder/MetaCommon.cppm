@@ -35,4 +35,11 @@ namespace PgE::detail
 	{
 		return std::meta::display_string_of(entity);
 	}
+
+	consteval bool IsClassOrUnion(const std::meta::info type)
+	{
+		// Both carry reflectable data members and member functions, but is_class_type is false for a
+		// union, so the member-walking builders must admit both.
+		return std::meta::is_class_type(type) || std::meta::is_union_type(type);
+	}
 }

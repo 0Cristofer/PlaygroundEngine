@@ -26,8 +26,8 @@ namespace PgE
 		Kind Reason;
 	};
 
-	export using FieldGetter = std::expected<void, FieldError> (*)(const void* obj, TypedRef out);
-	export using FieldSetter = std::expected<void, FieldError> (*)(void* obj, TypedRef in);
+	export using FieldGetter = std::expected<void, FieldError> (*)(const void* obj, const TypedRef& out);
+	export using FieldSetter = std::expected<void, FieldError> (*)(void* obj, const TypedRef& in);
 	export using FieldReferencer = TypedRef (*)(void* obj);
 
 	export class FieldInfo : public DeclarationInfo
@@ -47,8 +47,8 @@ namespace PgE
 		int GetByteOffset() const;
 		const TypeInfo& GetTypeInfo() const;
 
-		std::expected<void, FieldError> GetValue(const void* obj, TypedRef out) const;
-		std::expected<void, FieldError> SetValue(void* obj, TypedRef in) const;
+		std::expected<void, FieldError> GetValue(const void* obj, const TypedRef& out) const;
+		std::expected<void, FieldError> SetValue(void* obj, const TypedRef& in) const;
 
 		std::expected<TypedRef, FieldError> GetRef(void* obj) const;
 		std::expected<TypedRef, FieldError> GetRef(const void* obj) const;

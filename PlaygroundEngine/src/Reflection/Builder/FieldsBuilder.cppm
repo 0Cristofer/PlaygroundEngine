@@ -21,7 +21,7 @@ import std;
 namespace PgE::detail
 {
 	template <std::meta::info MetaType, std::meta::info MetaField>
-	std::expected<void, FieldError> FieldGetThunk(const void* obj, const TypedRef out)
+	std::expected<void, FieldError> FieldGetThunk(const void* obj, const TypedRef& out)
 	{
 		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];
@@ -35,7 +35,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>
-	std::expected<void, FieldError> FieldSetThunk(void* obj, const TypedRef in)
+	std::expected<void, FieldError> FieldSetThunk(void* obj, const TypedRef& in)
 	{
 		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];
@@ -150,7 +150,7 @@ namespace PgE::detail
 		{
 			return std::array<FieldInfo, 0>{};
 		}
-		else if constexpr (std::meta::is_class_type(MetaType))
+		else if constexpr (IsClassOrUnion(MetaType))
 		{
 			constexpr auto fieldCount = std::define_static_array(
 				std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked())).size();

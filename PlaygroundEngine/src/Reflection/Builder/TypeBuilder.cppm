@@ -10,6 +10,7 @@ export import :MetaCommon;
 export import :AnnotationsBuilder;
 export import :FieldsBuilder;
 export import :FunctionsBuilder;
+export import :TraitsBuilder;
 import :TypeInfo;
 
 import std;
@@ -37,16 +38,18 @@ namespace PgE::detail
 
 		static constexpr auto Annotations = MakeAnnotations<MetaType>();
 
+		constexpr TypeTraits traits = MakeTraits<MetaType>();
+
 		// std::is_object_v excludes void (reached here as a function return type), where
 		// StringifyValue can't form a const T*; it stays true for primitives and classes.
 		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			return TypeInfo(identifier, displayName, Fields, Functions, &StringifyValue<T>,
+			return TypeInfo(identifier, displayName, traits, Fields, Functions, &StringifyValue<T>,
 			                Annotations);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, Fields, Functions, nullptr, Annotations);
+			return TypeInfo(identifier, displayName, traits, Fields, Functions, nullptr, Annotations);
 		}
 	}
 

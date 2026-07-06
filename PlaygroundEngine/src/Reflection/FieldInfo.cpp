@@ -17,9 +17,7 @@ namespace PgE
 		return *_typeInfo;
 	}
 
-	// ReSharper disable CppPassValueParameterByConstReference
-
-	std::expected<void, FieldError> FieldInfo::GetValue(const void* obj, const TypedRef out) const
+	std::expected<void, FieldError> FieldInfo::GetValue(const void* obj, const TypedRef& out) const
 	{
 		if (!_getter)
 			return std::unexpected(FieldError{FieldError::NotReadable});
@@ -27,15 +25,13 @@ namespace PgE
 		return _getter(obj, out);
 	}
 
-	std::expected<void, FieldError> FieldInfo::SetValue(void* obj, const TypedRef in) const
+	std::expected<void, FieldError> FieldInfo::SetValue(void* obj, const TypedRef& in) const
 	{
 		if (!_setter)
 			return std::unexpected(FieldError{FieldError::NotWritable});
 
 		return _setter(obj, in);
 	}
-
-	// ReSharper restore CppPassValueParameterByConstReference
 
 	std::expected<TypedRef, FieldError> FieldInfo::GetRef(void* obj) const
 	{

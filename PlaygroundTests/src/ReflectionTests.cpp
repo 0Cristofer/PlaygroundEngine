@@ -222,6 +222,19 @@ namespace ReflectionTestTypes
 	{
 	};
 
+	// Polymorphic and abstract: cannot be constructed, so its traits differ from a concrete class.
+	struct AbstractShape
+	{
+		virtual ~AbstractShape() = default;
+		virtual int Sides() const = 0;
+	};
+
+	union Scalar
+	{
+		int AsInt;
+		float AsFloat;
+	};
+
 	// Value-carrying annotations plus an empty tag. Doc stores its string through
 	// define_static_string so the value is a self-contained constant (see the reflection
 	// design notes on structural annotation values).
@@ -295,6 +308,8 @@ using ReflectionTestTypes::Palette;
 using ReflectionTestTypes::Base;
 using ReflectionTestTypes::Child;
 using ReflectionTestTypes::ChildNoOverride;
+using ReflectionTestTypes::AbstractShape;
+using ReflectionTestTypes::Scalar;
 using ReflectionTestTypes::Range;
 using ReflectionTestTypes::Doc;
 using ReflectionTestTypes::Serializable;
@@ -927,4 +942,150 @@ TEST_CASE("empty tag annotation is present but carries no data")
 	REQUIRE(tags.size() == 1);
 	CHECK(tags.front() != nullptr);
 	CHECK(type.HasAnnotation<Serializable>());
+}
+
+TEST_CASE("type layout reports size and alignment")
+{
+	CHECK(PgE::TypeOf<int>().GetSize() == sizeof(int));
+	CHECK(PgE::TypeOf<int>().GetAlignment() == alignof(int));
+
+	CHECK(PgE::TypeOf<Widget>().GetSize() == sizeof(Widget));
+	CHECK(PgE::TypeOf<Widget>().GetAlignment() == alignof(Widget));
+
+	CHECK(PgE::TypeOf<int[4]>().GetSize() == sizeof(int[4]));
+
+	// void has no object representation, so it reports a zero layout instead of failing to reflect.
+	CHECK(PgE::TypeOf<void>().GetSize() == 0);
+	CHECK(PgE::TypeOf<void>().GetAlignment() == 0);
+}
+
+TEST_CASE("type kind classifies every category")
+{
+	CHECK(PgE::TypeOf<void>().GetKind() == PgE::TypeKind::Void);
+	CHECK(PgE::TypeOf<std::nullptr_t>().GetKind() == PgE::TypeKind::NullPointer);
+	CHECK(PgE::TypeOf<int>().GetKind() == PgE::TypeKind::Integral);
+	CHECK(PgE::TypeOf<bool>().GetKind() == PgE::TypeKind::Integral);
+	CHECK(PgE::TypeOf<double>().GetKind() == PgE::TypeKind::FloatingPoint);
+	CHECK(PgE::TypeOf<Shade>().GetKind() == PgE::TypeKind::Enum);
+	CHECK(PgE::TypeOf<Scalar>().GetKind() == PgE::TypeKind::Union);
+	CHECK(PgE::TypeOf<Widget>().GetKind() == PgE::TypeKind::Class);
+	CHECK(PgE::TypeOf<int[4]>().GetKind() == PgE::TypeKind::Array);
+	CHECK(PgE::TypeOf<int*>().GetKind() == PgE::TypeKind::Pointer);
+	CHECK(PgE::TypeOf<int Widget::*>().GetKind() == PgE::TypeKind::MemberObjectPointer);
+	CHECK(PgE::TypeOf<int (Widget::*)() const>().GetKind() == PgE::TypeKind::MemberFunctionPointer);
+	CHECK(PgE::TypeOf<int(int)>().GetKind() == PgE::TypeKind::Function);
+	CHECK(PgE::TypeOf<int&>().GetKind() == PgE::TypeKind::LValueReference);
+	CHECK(PgE::TypeOf<int&&>().GetKind() == PgE::TypeKind::RValueReference);
+}
+
+TEST_CASE("union members are reflected and accessible")
+{
+	Scalar scalar{};
+	const PgE::TypeInfo& type = PgE::TypeOf<Scalar>();
+
+	const PgE::FieldInfo* asInt = type.FindFieldByIdentifier("AsInt");
+	REQUIRE(asInt != nullptr);
+	CHECK(&asInt->GetTypeInfo() == &PgE::TypeOf<int>());
+
+	// Each field reads the member that was last written (the active one), so access is well-defined.
+	REQUIRE(type.SetFieldAs(&scalar, "AsInt", 7).has_value());
+	CHECK(*type.GetFieldAs<int>(&scalar, "AsInt") == 7);
+
+	REQUIRE(type.SetFieldAs(&scalar, "AsFloat", 1.5f).has_value());
+	CHECK(*type.GetFieldAs<float>(&scalar, "AsFloat") == 1.5f);
+}
+
+TEST_CASE("a function type reflects as a layout-less Function")
+{
+	// A bare function type has no object representation: it reflects with a zero layout and none of
+	// the object-property traits, so reflecting one is well-formed rather than a hard error.
+	const PgE::TypeInfo& type = PgE::TypeOf<int(double, char)>();
+	const PgE::TypeTraits& traits = type.GetTraits();
+
+	CHECK(traits.Kind == PgE::TypeKind::Function);
+	CHECK(traits.Size == 0);
+	CHECK(traits.Alignment == 0);
+	CHECK_FALSE(traits.IsTriviallyCopyable);
+	CHECK_FALSE(traits.IsDefaultConstructible);
+}
+
+TEST_CASE("trait predicates read from the type system")
+{
+	const PgE::TypeTraits& widget = PgE::TypeOf<Widget>().GetTraits();
+	CHECK(widget.IsTriviallyCopyable);
+	CHECK(widget.IsDefaultConstructible);
+	CHECK_FALSE(widget.IsPolymorphic);
+	CHECK_FALSE(widget.IsAbstract);
+
+	// A std::string member makes Person non-blittable.
+	CHECK_FALSE(PgE::TypeOf<Person>().GetTraits().IsTriviallyCopyable);
+
+	// Signedness is meaningful only for arithmetic types.
+	CHECK(PgE::TypeOf<int>().GetTraits().IsSigned);
+	CHECK_FALSE(PgE::TypeOf<unsigned>().GetTraits().IsSigned);
+	CHECK_FALSE(PgE::TypeOf<Widget>().GetTraits().IsSigned);
+
+	const PgE::TypeTraits& base = PgE::TypeOf<Base>().GetTraits();
+	CHECK(base.IsPolymorphic);
+	CHECK_FALSE(base.IsAbstract);
+
+	const PgE::TypeTraits& shape = PgE::TypeOf<AbstractShape>().GetTraits();
+	CHECK(shape.IsPolymorphic);
+	CHECK(shape.IsAbstract);
+	CHECK_FALSE(shape.IsDefaultConstructible);
+
+	// Doc declares only a consteval converting constructor, so it is not default constructible.
+	CHECK_FALSE(PgE::TypeOf<Doc>().GetTraits().IsDefaultConstructible);
+}
+
+TEST_CASE("raw-storage lifecycle traits")
+{
+	// A plain-int aggregate: constructible, droppable, and comparable purely as bytes.
+	const PgE::TypeTraits& widget = PgE::TypeOf<Widget>().GetTraits();
+	CHECK(widget.IsTriviallyDefaultConstructible);
+	CHECK(widget.IsTriviallyDestructible);
+	CHECK(widget.IsStandardLayout);
+	CHECK(widget.HasUniqueObjectRepresentations);
+
+	// A std::string member pulls in a destructor and a non-trivial default constructor.
+	const PgE::TypeTraits& person = PgE::TypeOf<Person>().GetTraits();
+	CHECK_FALSE(person.IsTriviallyDefaultConstructible);
+	CHECK_FALSE(person.IsTriviallyDestructible);
+
+	// A default member initializer keeps the type default constructible but not trivially so.
+	const PgE::TypeTraits& counter = PgE::TypeOf<Counter>().GetTraits();
+	CHECK(counter.IsDefaultConstructible);
+	CHECK_FALSE(counter.IsTriviallyDefaultConstructible);
+
+	// A polymorphic type is never standard layout (the vtable pointer breaks it).
+	CHECK_FALSE(PgE::TypeOf<AbstractShape>().GetTraits().IsStandardLayout);
+}
+
+TEST_CASE("construction, polymorphism, and shape traits")
+{
+	const PgE::TypeTraits& widget = PgE::TypeOf<Widget>().GetTraits();
+	CHECK(widget.IsAggregate);
+	CHECK_FALSE(widget.HasVirtualDestructor);
+	CHECK_FALSE(widget.IsEmpty);
+
+	// Base declares a virtual destructor; that is what makes owning deletion through it safe.
+	CHECK(PgE::TypeOf<Base>().GetTraits().HasVirtualDestructor);
+
+	// A user-provided constructor disqualifies aggregate-ness.
+	CHECK_FALSE(PgE::TypeOf<Doc>().GetTraits().IsAggregate);
+
+	// An empty tag type.
+	CHECK(PgE::TypeOf<Serializable>().GetTraits().IsEmpty);
+}
+
+TEST_CASE("template-instance and scoped-enum traits")
+{
+	// std::string is a template specialization; a plain struct is not.
+	CHECK(PgE::TypeOf<std::string>().GetTraits().IsTemplateInstance);
+	CHECK(PgE::TypeOf<int>().GetTraits().IsTemplateInstance == false);
+	CHECK_FALSE(PgE::TypeOf<Widget>().GetTraits().IsTemplateInstance);
+
+	// Shade is an enum class; the flag is meaningful only for enums.
+	CHECK(PgE::TypeOf<Shade>().GetTraits().IsScopedEnum);
+	CHECK_FALSE(PgE::TypeOf<int>().GetTraits().IsScopedEnum);
 }
