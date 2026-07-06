@@ -61,7 +61,33 @@ FetchContent_MakeAvailable(spdlog)
 target_compile_definitions(spdlog INTERFACE SPDLOG_HEADER_ONLY)
 # --- spdlog setup --
 
-target_link_libraries(PlaygroundEngine PUBLIC spdlog::spdlog)
+# --- GLFW setup --
+FetchContent_Declare(
+		glfw
+		GIT_REPOSITORY https://github.com/glfw/glfw.git
+		GIT_TAG 3.4
+		SYSTEM
+		FIND_PACKAGE_ARGS
+		NAMES glfw3
+)
+
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+set(GLFW_BUILD_WAYLAND ON CACHE BOOL "" FORCE)
+set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(glfw)
+# --- GLFW setup --
+
+target_link_libraries(PlaygroundEngine
+		PUBLIC
+		spdlog::spdlog
+		PRIVATE
+		glfw
+)
 
 target_sources(PlaygroundEngine
         PRIVATE
@@ -73,6 +99,7 @@ target_sources(PlaygroundEngine
         src/Component/TransformComponent.cpp
         src/App.cpp
         src/main.cpp
+		src/Window.cpp
         src/Reflection/TypeInfo.cpp
         src/Reflection/TypeRegistry.cpp
         src/Reflection/FieldInfo.cpp
@@ -89,9 +116,12 @@ target_sources(PlaygroundEngine
         src/Engine.cppm
         src/App.cppm
         src/World.cppm
-        src/Component/Components.cppm
-        src/Component/ComponentBase.cppm
-        src/Component/TransformComponent.cppm
+        src/Window.cppm
+		src/WindowTypes.cppm
+		src/WindowBackend.GLFW.cppm
+		src/Component/Components.cppm
+		src/Component/ComponentBase.cppm
+		src/Component/TransformComponent.cppm
         src/Reflection/TypeInfo.cppm
         src/Reflection/Reflection.cppm
         src/Reflection/Builder/MetaCommon.cppm
