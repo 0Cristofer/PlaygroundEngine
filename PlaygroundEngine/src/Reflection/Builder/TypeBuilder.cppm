@@ -11,7 +11,9 @@ export import :AnnotationsBuilder;
 export import :FieldsBuilder;
 export import :FunctionsBuilder;
 export import :TraitsBuilder;
+export import :EnumeratorsBuilder;
 import :TypeInfo;
+import :EnumerationInfo;
 
 import std;
 
@@ -40,9 +42,20 @@ namespace PgE::detail
 
 		constexpr TypeTraits traits = MakeTraits<MetaType>();
 
+		if constexpr (std::meta::is_enum_type(MetaType))
+		{
+			static constexpr auto Enumerators = MakeEnumeratorsFromType<MetaType>();
+			static constexpr EnumerationInfo Enumeration(&TypeOfMeta<^^std::underlying_type_t<T>>(),
+			                                             Enumerators);
+
+			// An enum renders as its enumerator name through TypeInfoTraits, reached by the same
+			// StringifyValue thunk every other leaf uses; this branch exists only to attach the facet.
+			return TypeInfo(identifier, displayName, traits, Fields, Functions, &StringifyValue<T>,
+			                Annotations, &Enumeration);
+		}
 		// std::is_object_v excludes void (reached here as a function return type), where
 		// StringifyValue can't form a const T*; it stays true for primitives and classes.
-		if constexpr (Fields.empty() && std::is_object_v<T>)
+		else if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
 			return TypeInfo(identifier, displayName, traits, Fields, Functions, &StringifyValue<T>,
 			                Annotations);
@@ -56,7 +69,18 @@ namespace PgE::detail
 	template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta()
 	{
-		static constexpr TypeInfo Type = MakeType<MetaType>();
-		return Type;
+		// Key the cached TypeInfo on the canonical type, not the spelling: every alias of a type
+		// (std::uint16_t, std::underlying_type_t<E>, unsigned short) must resolve to one instance, so the
+		// pointer identity that annotation matching, serialization, and C# dedup rely on holds regardless
+		// of how a type was named at the query site.
+		if constexpr (std::meta::dealias(MetaType) != MetaType)
+		{
+			return TypeOfMeta<std::meta::dealias(MetaType)>();
+		}
+		else
+		{
+			static constexpr TypeInfo Type = MakeType<MetaType>();
+			return Type;
+		}
 	}
 }
