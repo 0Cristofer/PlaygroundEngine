@@ -10,6 +10,7 @@ namespace ReflectionTestTypes
 	// ReSharper disable CppDeclaratorNeverUsed
 	// ReSharper disable CppParameterMayBeConst
 	// ReSharper disable CppPassValueParameterByConstReference
+	// ReSharper disable CppEnumeratorNeverUsed
 	// Mirrors the shape the game used to probe at startup: a string leaf and an int.
 	struct Person
 	{
@@ -190,7 +191,8 @@ namespace ReflectionTestTypes
 		void Take(CopyOnlyParam item) { Stored = item.Value; }
 	};
 
-	// A leaf with no std::format support and no trait: reflectable, stringified by type-name fallback.
+	// An enum with the default (int) underlying type. Stringifies to its enumerator name, which also
+	// propagates through Palette's Primary field.
 	enum class Shade { Red, Green };
 
 	struct Palette
@@ -198,6 +200,21 @@ namespace ReflectionTestTypes
 		Shade Primary = Shade::Green;
 		int Count = 2;
 	};
+
+	// A leaf with no std::format support, no trait, and no enumerators: reflectable, stringified by the
+	// type-name fallback.
+	struct Opaque {};
+
+	// Enum with an explicit unsigned underlying type and gappy, flag-shaped values. None = 0 exercises the
+	// zero-valued lookup; a bit-or'd combination (Read | Write) is a valid value no enumerator names.
+	enum class Permissions : std::uint16_t { None = 0, Read = 1, Write = 2, Execute = 4 };
+
+	// Signed underlying type with a negative enumerator, to pin the two's-complement round-trip through the
+	// uint64 bit pattern.
+	enum class Temperature : std::int16_t { Freezing = -10, Boiling = 100 };
+
+	// Unscoped enum, to confirm the enumerator walk is not scoped-only.
+	enum Direction { North, South, East, West };
 
 	struct Base
 	{
@@ -281,6 +298,7 @@ namespace ReflectionTestTypes
 	// ReSharper restore CppParameterMayBeConst
 	// ReSharper restore CppDeclaratorNeverUsed
 	// ReSharper restore CppPassValueParameterByConstReference
+	// ReSharper restore CppEnumeratorNeverUsed
 }
 
 using ReflectionTestTypes::Person;
@@ -305,6 +323,10 @@ using ReflectionTestTypes::CopyOnlyParam;
 using ReflectionTestTypes::CopyConsumer;
 using ReflectionTestTypes::Shade;
 using ReflectionTestTypes::Palette;
+using ReflectionTestTypes::Opaque;
+using ReflectionTestTypes::Permissions;
+using ReflectionTestTypes::Temperature;
+using ReflectionTestTypes::Direction;
 using ReflectionTestTypes::Base;
 using ReflectionTestTypes::Child;
 using ReflectionTestTypes::ChildNoOverride;
@@ -787,6 +809,12 @@ TEST_CASE("invoke copies a by-value argument with a deleted move constructor")
 
 TEST_CASE("non-formattable leaf falls back to its type name")
 {
+	// Opaque has no fields, no std::format support, and is not an enum, so it hits the type-name fallback.
+	CHECK(PgE::ToString(Opaque{}) == "<ReflectionTestTypes::Opaque>");
+}
+
+TEST_CASE("enum field is accessible and stringifies to its enumerator name")
+{
 	Palette palette{};
 	const PgE::TypeInfo& type = PgE::TypeOf<Palette>();
 
@@ -794,7 +822,89 @@ TEST_CASE("non-formattable leaf falls back to its type name")
 	REQUIRE(type.SetFieldAs(&palette, "Primary", Shade::Red).has_value());
 	CHECK(palette.Primary == Shade::Red);
 
-	CHECK(PgE::ToString(palette) == "{Primary: <ReflectionTestTypes::Shade>, Count: 2}");
+	// The enum name propagates through the owning struct's field walk.
+	CHECK(PgE::ToString(palette) == "{Primary: Red, Count: 2}");
+}
+
+TEST_CASE("enumeration facet exposes enumerators, values, and underlying type")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Permissions>();
+	REQUIRE(type.GetKind() == PgE::TypeKind::Enum);
+
+	const PgE::EnumerationInfo* enumeration = type.GetEnumeration();
+	REQUIRE(enumeration != nullptr);
+
+	// The underlying type is reflected as the same TypeInfo instance TypeOf<uint16_t> yields.
+	const PgE::TypeInfo& underlying = enumeration->GetUnderlyingType();
+	CHECK(&underlying == &PgE::TypeOf<std::uint16_t>());
+	CHECK(underlying.GetKind() == PgE::TypeKind::Integral);
+	CHECK(underlying.GetSize() == sizeof(std::uint16_t));
+
+	// Enumerators are listed in declaration order, each with its value.
+	const auto enumerators = enumeration->GetEnumerators();
+	REQUIRE(enumerators.size() == 4);
+	CHECK(enumerators[0].GetIdentifier() == "None");
+	CHECK(enumerators[0].GetValue() == 0);
+	CHECK(enumerators[1].GetIdentifier() == "Read");
+	CHECK(enumerators[1].GetValue() == 1);
+	CHECK(enumerators[3].GetIdentifier() == "Execute");
+	CHECK(enumerators[3].GetValue() == 4);
+
+	// Lookups resolve both directions; a miss is a null result, not a crash.
+	CHECK(enumeration->FindByIdentifier("Write")->GetValue() == 2);
+	CHECK(enumeration->FindByValue(4)->GetIdentifier() == "Execute");
+	CHECK(enumeration->FindByIdentifier("Delete") == nullptr);
+	CHECK(enumeration->FindByValue(99) == nullptr);
+}
+
+TEST_CASE("non-enum types carry no enumeration facet")
+{
+	CHECK(PgE::TypeOf<int>().GetEnumeration() == nullptr);
+	CHECK(PgE::TypeOf<Palette>().GetEnumeration() == nullptr);
+}
+
+TEST_CASE("enum name round-trips through the typed sugar")
+{
+	CHECK(PgE::EnumToName(Permissions::Write) == "Write");
+	CHECK(PgE::EnumFromName<Permissions>("Execute") == Permissions::Execute);
+
+	// A bit-or'd value no enumerator names has no exact name, but still renders numerically.
+	constexpr auto combined = static_cast<Permissions>(
+		static_cast<std::uint16_t>(Permissions::Read) | static_cast<std::uint16_t>(Permissions::Write));
+	CHECK(PgE::EnumToName(combined) == std::nullopt);
+	CHECK(PgE::ToString(combined) == "3");
+
+	// An unknown name does not parse.
+	CHECK(PgE::EnumFromName<Permissions>("Sudo") == std::nullopt);
+}
+
+TEST_CASE("signed enumerator round-trips through the uint64 bit pattern")
+{
+	const PgE::EnumerationInfo* enumeration = PgE::TypeOf<Temperature>().GetEnumeration();
+	REQUIRE(enumeration != nullptr);
+	CHECK(&enumeration->GetUnderlyingType() == &PgE::TypeOf<std::int16_t>());
+
+	// -10 as int16 widened to uint64 is its two's-complement bit pattern; the stored value matches, and a
+	// lookup by that pattern recovers the name.
+	constexpr auto freezingBits = static_cast<std::uint64_t>(static_cast<std::int16_t>(-10));
+	CHECK(enumeration->FindByIdentifier("Freezing")->GetValue() == freezingBits);
+	CHECK(enumeration->FindByValue(freezingBits)->GetIdentifier() == "Freezing");
+
+	CHECK(PgE::EnumToName(Temperature::Freezing) == "Freezing");
+	CHECK(PgE::EnumFromName<Temperature>("Freezing") == Temperature::Freezing);
+	CHECK(PgE::ToString(Temperature::Freezing) == "Freezing");
+
+	// An unnamed negative value falls back to its signed number, not the raw uint64 bits.
+	CHECK(PgE::ToString(static_cast<Temperature>(-5)) == "-5");
+}
+
+TEST_CASE("unscoped enum is reflected like a scoped one")
+{
+	const PgE::EnumerationInfo* enumeration = PgE::TypeOf<Direction>().GetEnumeration();
+	REQUIRE(enumeration != nullptr);
+	CHECK(enumeration->GetEnumerators().size() == 4);
+	CHECK(PgE::EnumToName(Direction::East) == "East");
+	CHECK(PgE::ToString(Direction::West) == "West");
 }
 
 TEST_CASE("invoking through a base type calls the overwritten function")

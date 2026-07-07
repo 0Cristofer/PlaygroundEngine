@@ -124,6 +124,7 @@ Overload disambiguation and cross-build function identity are deferred to the st
 ## Open Questions
 
 - **Stable ID scheme** — how type/field IDs are derived (qualified-name hash? annotation override for renames?), how renames migrate, and whether type/field/object/asset identity unify into one scheme. Highest priority: consumed by replication, hot reload, save/load, the C# boundary, and all three runtimes.
+  - *Settled within one build:* runtime `TypeInfo` instance identity is canonical per type. `TypeOfMeta` dealiases before caching, so every alias spelling (`std::uint16_t`, `std::underlying_type_t<E>`, `unsigned short`) resolves to one `TypeInfo` and pointer identity equals type identity, which is what annotation matching, serialization, and C# dedup compare on. Open here is only the *cross-build, name-based* ID.
 - **Text asset format** — YAML, TOML, or custom; deferred until the asset system (the backend is pluggable).
 - **Op-table consolidation** — when to unify the incrementally-built erased ops into a first-class per-type table (see [The Erased Op-Table](#the-erased-op-table)). Gated on the stable-id scheme, the ECS storage model, and the arrival of a second provider.
 

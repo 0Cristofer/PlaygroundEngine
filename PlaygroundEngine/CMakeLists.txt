@@ -77,6 +77,7 @@ target_sources(PlaygroundEngine
         src/Reflection/TypeRegistry.cpp
         src/Reflection/FieldInfo.cpp
         src/Reflection/FunctionInfo.cpp
+        src/Reflection/EnumerationInfo.cpp
 
 
         PUBLIC
@@ -98,6 +99,7 @@ target_sources(PlaygroundEngine
         src/Reflection/Builder/FieldsBuilder.cppm
         src/Reflection/Builder/FunctionsBuilder.cppm
         src/Reflection/Builder/TraitsBuilder.cppm
+        src/Reflection/Builder/EnumeratorsBuilder.cppm
         src/Reflection/Builder/TypeBuilder.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/FieldInfo.cppm
@@ -105,6 +107,7 @@ target_sources(PlaygroundEngine
         src/Reflection/TypedRef.cppm
         src/Reflection/DeclarationInfo.cppm
         src/Reflection/TypeInfoTraits.cppm
+        src/Reflection/EnumerationInfo.cppm
 
         PUBLIC
         FILE_SET HEADERS

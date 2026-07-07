@@ -6,6 +6,7 @@ import :FieldInfo;
 import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
+import :EnumerationInfo;
 
 import std;
 
@@ -68,19 +69,26 @@ namespace PgE
 		                   const std::span<const FieldInfo> fields,
 		                   const std::span<const FunctionInfo> functions,
 		                   std::string (*stringifyThunk)(const void*),
-		                   const std::span<const AnnotationInfo> annotations) :
+		                   const std::span<const AnnotationInfo> annotations,
+		                   const EnumerationInfo* enumeration = nullptr) :
 			DeclarationInfo(identifier, displayName, annotations),
 			_traits(traits),
 			_fields(fields),
 			_functions(functions),
-			_stringifyThunk(stringifyThunk)
+			_stringifyThunk(stringifyThunk),
+			_enumeration(enumeration)
 		{
 		}
 
 		const TypeTraits& GetTraits() const { return _traits; }
+
 		TypeKind GetKind() const { return _traits.Kind; }
+
 		std::size_t GetSize() const { return _traits.Size; }
+
 		std::size_t GetAlignment() const { return _traits.Alignment; }
+
+		const EnumerationInfo* GetEnumeration() const { return _enumeration; }
 
 		std::string ObjectToString(const void* obj) const;
 		std::string FunctionsToString() const;
@@ -89,7 +97,8 @@ namespace PgE
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 
-		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
+		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier,
+		                                              const TypedRef& out) const;
 		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
 
 		std::expected<TypedRef, FieldError> GetFieldRef(void* obj, std::string_view identifier) const;
@@ -126,7 +135,8 @@ namespace PgE
 		}
 
 		template <typename T>
-		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(void* obj, const std::string_view identifier) const
+		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(
+			void* obj, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -151,5 +161,6 @@ namespace PgE
 		std::span<const FieldInfo> _fields;
 		std::span<const FunctionInfo> _functions;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
+		const EnumerationInfo* _enumeration = nullptr;
 	};
 }
