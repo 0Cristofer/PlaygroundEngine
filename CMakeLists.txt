@@ -1,4 +1,4 @@
-# Enables c++20 modules support. UUID specific to cmake 4.3 https://github.com/Kitware/CMake/blob/v4.3.0/Help/dev/experimental.rst
+# Enables c++20 modules support. UUID specific to cmake 4.4 https://github.com/Kitware/CMake/blob/v4.4.0/Help/dev/experimental.rst
 set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "f35a9ac6-8463-4d38-8eec-5d6008153e7d")
 
 cmake_minimum_required(VERSION 4.3)
