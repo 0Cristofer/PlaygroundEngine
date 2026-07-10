@@ -12,28 +12,97 @@
 
 import std;
 import PlaygroundEngine.Log;
+import PlaygroundEngine.Reflection;
 import PlaygroundEngine.Window;
+
+// ReSharper disable CppEnumeratorNeverUsed
+namespace
+{
+	// Move-only but move-assignable (like unique_ptr / Poly): copy ctor deleted, move ops defaulted.
+	struct Movable
+	{
+		int Tag = 0;
+		Movable() = default;
+		Movable(const Movable&) = delete;
+		Movable(Movable&&) = default;
+		Movable& operator=(Movable&&) = default;
+	};
+
+	struct Holder
+	{
+		Movable Item;
+	};
+
+	enum class Colors
+	{
+		Red = 1,
+		Green = 2,
+		Yellow = 3,
+		Blue = 4
+	};
+
+	class A
+	{
+	public:
+		A F()
+		{
+			return A();
+		}
+	};
+}
+
+// ReSharper restore CppEnumeratorNeverUsed
 
 TEST_CASE("scratch" * doctest::skip())
 {
-    auto window = PgE::Window::Create(PgE::WindowSpecification{
-        .Title = "Playground Window", .Width = 960, .Height = 540});
+	Holder holder{};
+	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
 
-    if (!window)
-    {
-        PGE_LOG(Error, "Window creation failed: reason={}", static_cast<int>(window.error()));
-        return;
-    }
+	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
+	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(),
+	        valueGet ? -1 : static_cast<int>(valueGet.error().Reason));
 
-    PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(),
-            (*window)->GetTitle());
+	Movable source;
+	source.Tag = 5;
+	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
+	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(),
+	        valueSet ? -1 : static_cast<int>(valueSet.error().Reason));
 
-    while (!(*window)->ShouldClose())
-    {
-        (*window)->PollEvents();
-        (*window)->SwapBuffers();
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
-    }
+	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
+	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
+	if (borrow)
+	{
+		Movable replacement;
+		replacement.Tag = 42;
+		borrow->get() = std::move(replacement);
+		PGE_LOG(Info, "borrow move-assigned; Item.Tag={}", holder.Item.Tag);
+	}
 
-    PGE_LOG(Info, "Window loop finished (shouldClose={})", (*window)->ShouldClose());
+	for (const auto& typeOfColors = PgE::TypeOf<Colors>(); auto enumeratorInfo : typeOfColors.GetEnumeration()->GetEnumerators())
+	{
+		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
+	}
+	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
+	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
+
+	auto window = PgE::Window::Create(PgE::WindowSpecification{
+		.Title = "Playground Window", .Width = 960, .Height = 540});
+
+	if (!window)
+	{
+		PGE_LOG(Error, "Window creation failed: reason={}", static_cast<int>(window.error()));
+		return;
+	}
+
+	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(),
+			(*window)->GetTitle());
+
+	while (!(*window)->ShouldClose())
+	{
+		(*window)->PollEvents();
+		(*window)->SwapBuffers();
+		std::this_thread::sleep_for(std::chrono::milliseconds(16));
+	}
+
+	PGE_LOG(Info, "Window loop finished (shouldClose={})", (*window)->ShouldClose());
 }

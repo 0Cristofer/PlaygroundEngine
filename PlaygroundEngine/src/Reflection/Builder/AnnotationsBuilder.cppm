@@ -33,7 +33,7 @@ namespace PgE::detail
 		// The type tag is &TypeOfMeta<...>(), the same instance a caller reaches through
 		// &TypeOf<A>(), so a runtime GetAnnotation<A>() matches by pointer identity.
 		return AnnotationInfo{
-			.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(Annotation))>(),
+			.Type = TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(Annotation))>(),
 			.Value = &AnnotationStorage<Annotation>::Value,
 		};
 	}

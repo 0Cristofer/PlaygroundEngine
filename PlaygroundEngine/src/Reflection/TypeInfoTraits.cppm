@@ -54,7 +54,12 @@ namespace PgE
 	{
 		static std::string Stringify(const T* obj)
 		{
-			return std::format("{}", static_cast<const void*>(obj));
+			// Only a pointer to an object can be cast to const void* for its address; a function pointer
+			// cannot, so it renders as a placeholder rather than its (not very useful) numeric value.
+			if constexpr (std::is_object_v<T>)
+				return std::format("{}", static_cast<const void*>(obj));
+			else
+				return obj ? "<function>" : "<null>";
 		}
 	};
 

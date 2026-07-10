@@ -8,7 +8,7 @@ namespace PgE
 {
 	const TypeInfo& EnumerationInfo::GetUnderlyingType() const
 	{
-		return *_underlyingType;
+		return _underlyingType.Get();
 	}
 
 	const EnumeratorInfo* EnumerationInfo::FindByIdentifier(const std::string_view identifier) const

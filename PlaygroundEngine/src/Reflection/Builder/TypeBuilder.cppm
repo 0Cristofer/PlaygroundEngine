@@ -45,8 +45,8 @@ namespace PgE::detail
 		if constexpr (std::meta::is_enum_type(MetaType))
 		{
 			static constexpr auto Enumerators = MakeEnumeratorsFromType<MetaType>();
-			static constexpr EnumerationInfo Enumeration(&TypeOfMeta<^^std::underlying_type_t<T>>(),
-			                                             Enumerators);
+			static constexpr EnumerationInfo Enumeration(
+				TypeReferenceTo<^^std::underlying_type_t<T>>(), Enumerators);
 
 			// An enum renders as its enumerator name through TypeInfoTraits, reached by the same
 			// StringifyValue thunk every other leaf uses; this branch exists only to attach the facet.

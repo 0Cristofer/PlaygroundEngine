@@ -191,6 +191,56 @@ namespace ReflectionTestTypes
 		void Take(CopyOnlyParam item) { Stored = item.Value; }
 	};
 
+	// A type whose own metadata names itself: a factory returning it by value, a method taking it by
+	// reference, and one returning it by reference. Each self-reference needs the type's TypeInfo before
+	// its construction has finished; the lazy TypeReference is what lets construction close first.
+	struct Node
+	{
+		int Value = 0;
+
+		Node Clone() const { return Node{Value}; }
+		void CopyFrom(const Node& other) { Value = other.Value; }
+		Node& Self() { return *this; }
+	};
+
+	// Two types that name each other by value: building either needs the other's TypeInfo, which needs
+	// the first, a mutual cycle the lazy resolver breaks. Declared here, defined once both are complete.
+	struct Pong;
+
+	struct Ping
+	{
+		Pong Bounce() const;
+	};
+
+	struct Pong
+	{
+		Ping Bounce() const;
+	};
+
+	inline Pong Ping::Bounce() const { return Pong{}; }
+	inline Ping Pong::Bounce() const { return Ping{}; }
+
+	// Private member functions are reflected and invocable, the way private fields already are.
+	struct WithPrivate
+	{
+		int Value = 0;
+
+	private:
+		int Doubled() const { return Value * 2; }
+		void SetValue(int v) { Value = v; }
+	};
+
+	// An rvalue-ref-qualified overload cannot be called on the erased lvalue object the thunk holds, so it
+	// reflects as metadata with no invoker (like a bitfield reflecting with no borrow). Normal overloads on
+	// the same type stay invocable.
+	struct RefQualified
+	{
+		int Value = 0;
+
+		int OnRvalue() && { return Value; }
+		int OnAny() const { return Value; }
+	};
+
 	// An enum with the default (int) underlying type. Stringifies to its enumerator name, which also
 	// propagates through Palette's Primary field.
 	enum class Shade { Red, Green };
@@ -321,6 +371,11 @@ using ReflectionTestTypes::Tracked;
 using ReflectionTestTypes::Consumer;
 using ReflectionTestTypes::CopyOnlyParam;
 using ReflectionTestTypes::CopyConsumer;
+using ReflectionTestTypes::Node;
+using ReflectionTestTypes::Ping;
+using ReflectionTestTypes::Pong;
+using ReflectionTestTypes::WithPrivate;
+using ReflectionTestTypes::RefQualified;
 using ReflectionTestTypes::Shade;
 using ReflectionTestTypes::Palette;
 using ReflectionTestTypes::Opaque;
@@ -485,6 +540,68 @@ TEST_CASE("const argument to a move-only parameter is rejected")
 	const auto accepted = consume->Invoke(&sink, mutableArg);
 	REQUIRE(accepted.has_value());
 	CHECK(sink.Value == 9);
+}
+
+TEST_CASE("a type whose signature names itself reflects and resolves back to itself")
+{
+	const PgE::TypeInfo& node = PgE::TypeOf<Node>();
+
+	// A factory returning the type by value: the return type resolves to the very TypeInfo under
+	// construction, the case that used to fail the consteval build.
+	const PgE::FunctionInfo* clone = node.FindFunctionsByIdentifier("Clone").front();
+	CHECK(&clone->GetReturnType() == &node);
+
+	// A self-typed reference parameter and a self-returning-by-reference method resolve the same way,
+	// since the builder erases cvref before keying the reference.
+	const PgE::FunctionInfo* copyFrom = node.FindFunctionsByIdentifier("CopyFrom").front();
+	CHECK(&copyFrom->GetParams().front().GetTypeInfo() == &node);
+	CHECK(&node.FindFunctionsByIdentifier("Self").front()->GetReturnType() == &node);
+
+	// The reflected factory is still callable end to end.
+	Node original{7};
+	const auto cloned = clone->InvokeAs<Node>(&original);
+	REQUIRE(cloned.has_value());
+	CHECK(cloned->Value == 7);
+}
+
+TEST_CASE("mutually referential types reflect without a construction cycle")
+{
+	const PgE::TypeInfo& ping = PgE::TypeOf<Ping>();
+	const PgE::TypeInfo& pong = PgE::TypeOf<Pong>();
+
+	CHECK(&ping.FindFunctionsByIdentifier("Bounce").front()->GetReturnType() == &pong);
+	CHECK(&pong.FindFunctionsByIdentifier("Bounce").front()->GetReturnType() == &ping);
+}
+
+TEST_CASE("reflection invokes private member functions")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<WithPrivate>();
+	WithPrivate obj{21};
+
+	const PgE::FunctionInfo* doubled = type.FindFunctionsByIdentifier("Doubled").front();
+	const auto read = doubled->InvokeAs<int>(&obj);
+	REQUIRE(read.has_value());
+	CHECK(*read == 42);
+
+	const PgE::FunctionInfo* setValue = type.FindFunctionsByIdentifier("SetValue").front();
+	REQUIRE(setValue->InvokeAs(&obj, 5).has_value());
+	CHECK(obj.Value == 5);
+}
+
+TEST_CASE("a function the thunk cannot call reflects as metadata but is not invocable")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<RefQualified>();
+	RefQualified obj{7};
+
+	// The rvalue-ref-qualified overload is reflected, but invoking it reports NotInvocable rather than
+	// failing to compile or crashing on a null thunk.
+	const PgE::FunctionInfo* onRvalue = type.FindFunctionsByIdentifier("OnRvalue").front();
+	const auto rejected = onRvalue->InvokeAs<int>(&obj);
+	REQUIRE_FALSE(rejected.has_value());
+	CHECK(rejected.error().Reason == PgE::InvokeError::NotInvocable);
+
+	// A normal overload on the same type still invokes.
+	CHECK(type.FindFunctionsByIdentifier("OnAny").front()->InvokeAs<int>(&obj).value() == 7);
 }
 
 TEST_CASE("typed field access reads and writes by name")

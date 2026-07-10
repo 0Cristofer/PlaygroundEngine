@@ -41,7 +41,7 @@ namespace PgE::detail
 	template <const std::meta::info MetaParameter>
 	consteval ParameterInfo MakeParameter()
 	{
-		return ParameterInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>(),
+		return ParameterInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>(),
 		                     IdentifierOf(MetaParameter), DisplayStringOf(MetaParameter),
 		                     MakeAnnotations<MetaParameter>());
 	}
@@ -133,10 +133,17 @@ namespace PgE::detail
 		// bound prvalue (guaranteed copy elision): no extra move, and a type with a deleted move
 		// constructor still binds by copy.
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
+
+		// Call through &[:MetaFunction:] rather than a direct member splice. GCC applies member access
+		// control to a spliced call expression (obj->[:M:](...)) even when M came from access_context::
+		// unchecked(), but not to forming a pointer from the reflection nor to calling through it. Routing
+		// the call through the pointer is what lets reflection invoke private member functions, the way C#
+		// reflection can, and keeps the private-member metadata symmetric with fields.
+		constexpr auto pointer = &[:MetaFunction:];
 		if constexpr (std::meta::is_static_member(MetaFunction))
-			return [:MetaFunction:](ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			return pointer(ArgumentBinding<parameters[I]>::Bind(args[I])...);
 		else
-			return static_cast<T*>(obj)->[:MetaFunction:](ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			return (static_cast<T*>(obj)->*pointer)(ArgumentBinding<parameters[I]>::Bind(args[I])...);
 	}
 
 	template <typename PointerType>
@@ -208,6 +215,41 @@ namespace PgE::detail
 		return InvokeThunkImpl<T, MetaFunction>(obj, args, ret, std::make_index_sequence<parameterCount>{});
 	}
 
+	template <typename T, std::meta::info MetaFunction, std::size_t... I>
+	consteval bool IsInvocableImpl(std::index_sequence<I...>)
+	{
+		// Mirror DoCall exactly: same &[:MetaFunction:] pointer call, same ArgumentBinding::Bind for each
+		// argument (so a copy-only by-value parameter is tested by copy, not by a would-be-deleted move). A
+		// member function our thunk cannot call on the erased lvalue object (an rvalue-ref-qualified overload,
+		// say) reflects as metadata with no invoker, the way a bitfield reflects with no borrow, rather than
+		// failing the whole type's build.
+		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
+		if constexpr (std::meta::is_static_member(MetaFunction))
+			return requires {
+				(&[:MetaFunction:])(ArgumentBinding<parameters[I]>::Bind(std::declval<const TypedRef&>())...);
+			};
+		else
+			return requires(T* obj) {
+				(obj->*(&[:MetaFunction:]))(ArgumentBinding<parameters[I]>::Bind(std::declval<const TypedRef&>())...);
+			};
+	}
+
+	template <typename T, std::meta::info MetaFunction>
+	consteval bool IsInvocable()
+	{
+		return IsInvocableImpl<T, MetaFunction>(
+			std::make_index_sequence<std::meta::parameters_of(MetaFunction).size()>{});
+	}
+
+	template <typename T, std::meta::info MetaFunction>
+	consteval Invoker MakeInvoker()
+	{
+		if constexpr (IsInvocable<T, MetaFunction>())
+			return &InvokeThunk<T, MetaFunction>;
+		else
+			return nullptr;
+	}
+
 	template <std::meta::info MetaType, std::meta::info MetaFunction>
 	consteval FunctionInfo MakeFunction()
 	{
@@ -215,11 +257,11 @@ namespace PgE::detail
 		const bool constCallable =
 			std::meta::is_const(MetaFunction) || std::meta::is_static_member(MetaFunction);
 
-		return FunctionInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>(),
+		return FunctionInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>(),
 		                    IdentifierOf(MetaFunction), DisplayStringOf(MetaFunction),
 		                    MakeParameters<MetaFunction>(),
 		                    constCallable,
-		                    &InvokeThunk<T, MetaFunction>,
+		                    MakeInvoker<T, MetaFunction>(),
 		                    MakeAnnotations<MetaFunction>());
 	}
 

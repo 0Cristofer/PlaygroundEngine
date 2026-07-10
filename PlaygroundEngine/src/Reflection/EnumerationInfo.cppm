@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection:EnumerationInfo;
 
 import :DeclarationInfo;
+import :TypeReference;
 
 import std;
 
@@ -36,7 +37,7 @@ namespace PgE
 		// is an annotation on the type, read through HasAnnotation.
 
 	public:
-		constexpr EnumerationInfo(const TypeInfo* underlyingType,
+		constexpr EnumerationInfo(const TypeReference underlyingType,
 		                          const std::span<const EnumeratorInfo> enumerators) :
 			_underlyingType(underlyingType), _enumerators(enumerators)
 		{
@@ -50,7 +51,7 @@ namespace PgE
 		const EnumeratorInfo* FindByValue(std::uint64_t value) const;
 
 	private:
-		const TypeInfo* _underlyingType = nullptr;
+		TypeReference _underlyingType;
 		std::span<const EnumeratorInfo> _enumerators;
 	};
 }
