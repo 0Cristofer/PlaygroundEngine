@@ -7,6 +7,7 @@ export module PlaygroundEngine.Reflection:MetaCommon;
 import PlaygroundEngine.Reflection.TypeInfoTraits;
 
 import :TypeInfo;
+import :TypeReference;
 
 import std;
 
@@ -19,6 +20,22 @@ namespace PgE::detail
 {
 	template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta();
+
+	template <std::meta::info MetaType>
+	consteval TypeReference TypeReferenceTo()
+	{
+		// Every cross-type reference stored in the metadata (a field's type, a parameter or return type, an
+		// annotation's type, an enum's underlying type) is bound the same way: to the address of TypeOfMeta,
+		// not a call. Deferring the call to first runtime read is what lets a type name itself or another
+		// type still under construction. See TypeReference.
+		//
+		// Bind to the canonical (dealiased) type so we never instantiate TypeOfMeta on an alias spelling.
+		// TypeOfMeta already dealiases internally, so the alias instantiation would only tail-call this one;
+		// skipping it also dodges a GCC-16 reflection mangling collision where the alias's argument is
+		// dropped from the symbol, making distinct alias instantiations (e.g. underlying_type_t of two enums)
+		// resolve to one duplicately-defined symbol.
+		return TypeReference{.Resolve = &TypeOfMeta<std::meta::dealias(MetaType)>};
+	}
 
 	template <typename T>
 	std::string StringifyValue(const void* obj)

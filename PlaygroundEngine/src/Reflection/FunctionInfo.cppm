@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection:FunctionInfo;
 
 import :TypedRef;
+import :TypeReference;
 import :DeclarationInfo;
 
 import std;
@@ -20,6 +21,7 @@ namespace PgE
 			TypeMismatch,
 			ConstViolation,
 			ReturnTypeMismatch,
+			NotInvocable,
 		};
 
 		Kind Reason;
@@ -36,7 +38,7 @@ namespace PgE
 	export class ParameterInfo : public DeclarationInfo
 	{
 	public:
-		constexpr ParameterInfo(const TypeInfo* typeInfo, const std::string_view identifier,
+		constexpr ParameterInfo(const TypeReference typeInfo, const std::string_view identifier,
 		                        const std::string_view displayName,
 		                        const std::span<const AnnotationInfo> annotations) :
 			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo)
@@ -46,13 +48,13 @@ namespace PgE
 		const TypeInfo& GetTypeInfo() const;
 
 	private:
-		const TypeInfo* _typeInfo;
+		TypeReference _typeInfo;
 	};
 
 	export class FunctionInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FunctionInfo(const TypeInfo* returnType, const std::string_view identifier,
+		constexpr FunctionInfo(const TypeReference returnType, const std::string_view identifier,
 		                       const std::string_view displayName, const std::span<const ParameterInfo> params,
 		                       const bool constCallable, const Invoker invoke,
 		                       const std::span<const AnnotationInfo> annotations) :
@@ -116,7 +118,7 @@ namespace PgE
 		}
 
 	private:
-		const TypeInfo* _returnType = nullptr;
+		TypeReference _returnType;
 		std::span<const ParameterInfo> _params;
 		bool _constCallable = false;
 		Invoker _invoke = nullptr;

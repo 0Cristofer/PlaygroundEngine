@@ -135,6 +135,7 @@ target_sources(PlaygroundEngine
         src/Reflection/FieldInfo.cppm
         src/Reflection/FunctionInfo.cppm
         src/Reflection/TypedRef.cppm
+        src/Reflection/TypeReference.cppm
         src/Reflection/DeclarationInfo.cppm
         src/Reflection/TypeInfoTraits.cppm
         src/Reflection/EnumerationInfo.cppm

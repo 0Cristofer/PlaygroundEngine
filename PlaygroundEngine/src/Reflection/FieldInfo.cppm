@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection:FieldInfo;
 
 import :TypedRef;
+import :TypeReference;
 import :DeclarationInfo;
 
 import std;
@@ -33,7 +34,7 @@ namespace PgE
 	export class FieldInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FieldInfo(const TypeInfo* typeInfo, const std::string_view identifier,
+		constexpr FieldInfo(const TypeReference typeInfo, const std::string_view identifier,
 		                    const std::string_view displayName, const int byteOffset, const int bitOffset,
 		                    const FieldGetter getter, const FieldSetter setter,
 		                    const FieldReferencer referencer,
@@ -116,7 +117,7 @@ namespace PgE
 		}
 
 	private:
-		const TypeInfo* _typeInfo = nullptr;
+		TypeReference _typeInfo;
 		int _byteOffset;
 		int _bitOffset;
 		FieldGetter _getter = nullptr;

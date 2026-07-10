@@ -14,7 +14,7 @@ namespace PgE
 
 	const TypeInfo& FieldInfo::GetTypeInfo() const
 	{
-		return *_typeInfo;
+		return _typeInfo.Get();
 	}
 
 	std::expected<void, FieldError> FieldInfo::GetValue(const void* obj, const TypedRef& out) const

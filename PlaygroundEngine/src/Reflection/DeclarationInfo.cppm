@@ -1,5 +1,7 @@
 export module PlaygroundEngine.Reflection:DeclarationInfo;
 
+import :TypeReference;
+
 import std;
 
 namespace PgE
@@ -11,7 +13,7 @@ namespace PgE
 
 	export struct AnnotationInfo
 	{
-		const TypeInfo* Type = nullptr;
+		TypeReference Type;
 		const void* Value = nullptr;
 	};
 
@@ -43,7 +45,7 @@ namespace PgE
 
 			std::vector<const AnnotationType*> annotations;
 			for (const auto& [Type, Value] : _annotations)
-				if (Type == &TypeOf<AnnotationType>())
+				if (&Type.Get() == &TypeOf<AnnotationType>())
 					annotations.push_back(static_cast<const AnnotationType*>(Value));
 			return annotations;
 		}
@@ -52,7 +54,7 @@ namespace PgE
 		bool HasAnnotation() const
 		{
 			for (const auto& [Type, Value] : _annotations)
-				if (Type == &TypeOf<std::remove_cvref_t<A>>())
+				if (&Type.Get() == &TypeOf<std::remove_cvref_t<A>>())
 					return true;
 			return false;
 		}

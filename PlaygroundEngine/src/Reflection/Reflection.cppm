@@ -4,6 +4,7 @@ export import :TypeInfo;
 export import :FieldInfo;
 export import :FunctionInfo;
 export import :TypedRef;
+export import :TypeReference;
 export import :DeclarationInfo;
 export import :EnumerationInfo;
 export import :TypeBuilder;

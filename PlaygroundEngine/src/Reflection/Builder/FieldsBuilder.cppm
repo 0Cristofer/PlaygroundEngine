@@ -125,7 +125,7 @@ namespace PgE::detail
 	consteval FieldInfo MakeField()
 	{
 		const auto [bytes, bits] = std::meta::offset_of(MetaField);
-		return FieldInfo(&TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
+		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
 		                 IdentifierOf(MetaField), DisplayStringOf(MetaField),
 		                 bytes, bits,
 		                 MakeFieldGetter<MetaType, MetaField>(),
