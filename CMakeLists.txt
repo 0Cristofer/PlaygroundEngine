@@ -81,15 +81,17 @@ if (LINUX)
 endif ()
 
 # Global options to ensure all compilation (including cmake internal) steps are using the same flags.
-# -freflection MUST stay global: CMake builds the `import std` module via an internal target that
-# reads these global options, and -freflection alters module declarations - building the std module
-# BMI without it while consumers import it WITH it gives "conflicting type for imported declaration"
-# (e.g. __mbstate_t). It cannot be scoped to first-party targets. The cost is that it leaks onto
-# FetchContent deps; any dep sub-target compiling below C++26 must be exempted case-by-case (see
-# PlaygroundTests disabling doctest's static-main lib).
+# -freflection MUST stay global across C++: CMake builds the `import std` module via an internal
+# target that reads these global options, and -freflection alters module declarations - building the
+# std module BMI without it while consumers import it WITH it gives "conflicting type for imported
+# declaration" (e.g. __mbstate_t). It cannot be scoped to first-party targets. It IS scoped to the
+# C++ language (COMPILE_LANGUAGE:CXX) so C dependencies (e.g. GLFW) don't get the flag and warn
+# "valid for C++/ObjC++ but not for C" on every TU; the std module target is C++, so it still applies.
+# The flag still leaks onto C++ FetchContent deps; any such sub-target compiling below C++26 must be
+# exempted case-by-case (see PlaygroundTests disabling doctest's static-main lib).
 add_compile_options(
 		$<$<CXX_COMPILER_ID:MSVC>:/utf-8>
-		$<$<CXX_COMPILER_ID:GNU>:-freflection>
+		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-freflection>
 )
 
 enable_testing()

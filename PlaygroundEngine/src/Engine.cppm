@@ -2,6 +2,7 @@ export module PlaygroundEngine;
 
 export import PlaygroundEngine.World;
 export import PlaygroundEngine.GameObject;
+export import PlaygroundEngine.Window;
 
 import PlaygroundEngine.App;
 

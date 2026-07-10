@@ -44,8 +44,8 @@ Networking is a first-class system, not a bolt-on. The architecture assumes netw
 
 These are the five pillars the engine needs to have working together — in their simplest form — before it graduating from the exploration phase. All are currently at the concept level; some have initial groundwork in place.
 
-### 1. Application Lifecycle `planned`
-Window creation, input handling, the main loop, platform abstraction. The entry point pattern is in place — the engine owns `main()` and the game supplies a descriptor — but the full lifecycle system is not yet designed.
+### 1. Application Lifecycle `in design`
+Window creation, input handling, the main loop, platform abstraction. The entry point pattern is in place — the engine owns `main()` and the game supplies a descriptor. The framework design (composition root, capability model, layer bands, frame loop, editor and play model, distribution) is settled at the general level in [docs/ApplicationArchitecture.md](docs/ApplicationArchitecture.md).
 
 ### 2. Realtime Simulation `planned`
 The world, entities, components, and the update loop. The decided direction is a full ECS — entities as generational handles, components as value types ([docs/CoreConventions.md](docs/CoreConventions.md)); the existing skeleton (World, GameObject, ComponentBase) is a placeholder that will be replaced. The design needs to account for networking from the start — replication, authority, and determinism influence the structure, not just the API surface.
@@ -165,6 +165,7 @@ cmake --build --preset linux-debug    # or linux-dev / linux-release
 | JSON deserialization via reflection | `PlaygroundReflection/src/` | Done |
 | Construction via annotated factory | `PlaygroundReflection/src/` | Done |
 | Reflection system API design | [docs/ReflectionSystem.md](docs/ReflectionSystem.md) | Active — use cases defined |
+| Application architecture (composition root, layers, frame loop, editor/play, distribution) | [docs/ApplicationArchitecture.md](docs/ApplicationArchitecture.md) | Settled at the general level |
 | Core conventions (object model, memory, std, errors) | [docs/CoreConventions.md](docs/CoreConventions.md) | Defined |
 | Testing system (doctest + CTest) | [docs/TestingSystem.md](docs/TestingSystem.md) | In use — unit/characterization |
 | 3D renderer | `PlaygroundGame/` | Early |

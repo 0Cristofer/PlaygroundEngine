@@ -12,64 +12,28 @@
 
 import std;
 import PlaygroundEngine.Log;
-import PlaygroundEngine.Reflection;
-
-// ReSharper disable CppEnumeratorNeverUsed
-namespace
-{
-	// Move-only but move-assignable (like unique_ptr / Poly): copy ctor deleted, move ops defaulted.
-	struct Movable
-	{
-		int Tag = 0;
-		Movable() = default;
-		Movable(const Movable&) = delete;
-		Movable(Movable&&) = default;
-		Movable& operator=(Movable&&) = default;
-	};
-
-	struct Holder
-	{
-		Movable Item;
-	};
-
-	enum class Colors
-	{
-		Red = 1,
-		Green = 2,
-		Yellow = 3,
-		Blue = 4
-	};
-}
-
-// ReSharper restore CppEnumeratorNeverUsed
+import PlaygroundEngine.Window;
 
 TEST_CASE("scratch" * doctest::skip())
 {
-	Holder holder{};
-	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
+    auto window = PgE::Window::Create(PgE::WindowSpecification{
+        .Title = "Playground Window", .Width = 960, .Height = 540});
 
-	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(),
-	        valueGet ? -1 : static_cast<int>(valueGet.error().Reason));
+    if (!window)
+    {
+        PGE_LOG(Error, "Window creation failed: reason={}", static_cast<int>(window.error()));
+        return;
+    }
 
-	Movable source;
-	source.Tag = 5;
-	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
-	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(),
-	        valueSet ? -1 : static_cast<int>(valueSet.error().Reason));
+    PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(),
+            (*window)->GetTitle());
 
-	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
-	if (borrow)
-	{
-		Movable replacement;
-		replacement.Tag = 42;
-		borrow->get() = std::move(replacement);
-		PGE_LOG(Info, "borrow move-assigned; Item.Tag={}", holder.Item.Tag);
-	}
+    while (!(*window)->ShouldClose())
+    {
+        (*window)->PollEvents();
+        (*window)->SwapBuffers();
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
 
-	for (const auto& typeOfColors = PgE::TypeOf<Colors>(); auto enumeratorInfo : typeOfColors.GetEnumeration()->GetEnumerators())
-	{
-		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
-	}
+    PGE_LOG(Info, "Window loop finished (shouldClose={})", (*window)->ShouldClose());
 }
