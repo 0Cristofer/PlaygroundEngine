@@ -17,7 +17,9 @@ namespace PgE
 
 		auto backend = WindowBackend::Create(specification);
 		if (!backend)
+		{
 			return std::unexpected(backend.error());
+		}
 
 		return std::unique_ptr<Window>(new Window(std::move(*backend), specification));
 	}

@@ -5,7 +5,7 @@ import PlaygroundGame;
 
 import std;
 
-PgE::AppDescriptorBase* PgE::GetAppDescriptor(PgE::CommandLine* commandLine)
+std::unique_ptr<PgE::AppDescriptorBase> PgE::GetAppDescriptor(CommandLine commandLine)
 {
-	return new PgG::PlaygroundGameAppDescriptor(commandLine);
+	return std::make_unique<PgG::PlaygroundGameAppDescriptor>(commandLine);
 }

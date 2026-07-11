@@ -10,45 +10,70 @@ import std;
 
 namespace PgE
 {
-	export class Engine;
-
-	export class CommandLine
+	export struct CommandLine
 	{
-	public:
-		CommandLine(int argc, char** argv) : Argc(argc), Argv(argv) {};
-		~CommandLine() = default;
+		int Argc = 0;
+		char** Argv = nullptr;
 
-		int Argc;
-		char** Argv;
+		// TODO: parsed accessors for the editor-spawn parameters
+		// (--world=, --editor-connect=, --wait-for-debugger).
+	};
+
+	export struct AppCapabilities
+	{
+		bool Presentation = true;
+		bool Rendering = true;
+		bool Audio = true;
+		bool Networking = false;
+	};
+
+	export enum class BootError : std::uint8_t
+	{
+		Platform = 1,
 	};
 
 	export class AppDescriptorBase
 	{
 	public:
-		AppDescriptorBase(CommandLine* commandLine) : _commandLine(std::unique_ptr<CommandLine>(commandLine)) {}
+		explicit AppDescriptorBase(const CommandLine commandLine) : _commandLine(commandLine) {}
+		virtual ~AppDescriptorBase() = default;
 
-		virtual std::unique_ptr<Engine> GetEngine(AppDescriptorBase* appDescriptor);
-		virtual std::unique_ptr<AppBase> GetApp() = 0;
+		[[nodiscard]] virtual AppCapabilities GetCapabilities() const
+		{
+			return AppCapabilities{};
+		}
+		[[nodiscard]] virtual std::unique_ptr<AppBase> GetApp() = 0;
 
-		std::unique_ptr<CommandLine> GetCommandLine();
-
-	protected:
-		~AppDescriptorBase() = default;
+		[[nodiscard]] const CommandLine& GetCommandLine() const { return _commandLine; }
 
 	private:
-		std::unique_ptr<CommandLine> _commandLine;
+		CommandLine _commandLine;
 	};
 
 	export class Engine
 	{
 	public:
-		Engine(AppDescriptorBase* appDescriptor);
+		explicit Engine(AppDescriptorBase& appDescriptor);
 
-		[[nodiscard]] World* GetWorld() const;
-		void Run();
+		[[nodiscard]] std::expected<void, BootError> Boot();
+		void StartRun();
+		void Shutdown();
+
+		void RequestStop();
 
 	private:
+		[[nodiscard]] std::expected<void, BootError> BootPresentation();
+
+		void Run();
+		void RunFrame();
+
+		AppDescriptorBase& _appDescriptor;
+		bool _running = false;
+
+		// Members double as the construction-order record: L1 first, then L2,
+		// app last; Shutdown() resets in reverse.
+		std::unique_ptr<Window> _window;
+		std::unique_ptr<World> _world;
 		std::unique_ptr<AppBase> _app;
-		std::unique_ptr<World> _currentWorld;
 	};
 }

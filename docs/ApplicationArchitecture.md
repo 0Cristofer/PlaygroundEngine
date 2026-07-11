@@ -21,7 +21,7 @@ The organizing decisions:
 3. **Every capability is optional.** Window, rendering, audio, and networking are flags the app declares; the root builds only what is declared. A dedicated server, the test harness, and a cook tool are different root configurations, not conditional compilation inside systems. The acceptance test: the dedicated server has zero `#if SERVER` in any system.
 4. **The frame loop is hand-authored code in L3.** Frame ordering is the contract, so it is written as literal calls, not derived from registration priorities. There is no `ISystem` base and no generic for-each-system update.
 5. **Systems interconnect through exactly three mechanisms**, one per kind of coupling (detailed below): constructor injection at boot, POD data seams at frame time, typed signals for rare notifications.
-6. **Extension is closed core, open rim.** The engine's own systems are a closed compile-time set wired concretely. Game-added systems register into named schedule phases and subscribe to published signals and queues through a wiring context; that narrow published surface is the only thing games can touch.
+6. **Extension is closed core, open rim.** The engine's own systems are a closed compile-time set wired concretely. Game-added systems register into named schedule phases and subscribe to published signals and queues through an `EngineContext`; that narrow published surface is the only thing games can touch.
 
 A *system* is a vertical slice spanning bands: for input, contract types at L0, producers at L1, semantic mapping at L2, a schedule position at L3. The peer-isolation rule applies between systems, not between every pair of modules inside one slice.
 
@@ -44,7 +44,7 @@ Placement calls already settled: the asset system splits (runtime core at L2, fi
 **Not settled:** everything inside that frame. Specifically:
 
 - The exact contents of each band. The band assignment table below is provisional, not a contract.
-- Class structure and API shapes. Everything sketched during exploration (the capability struct, the wiring context, queue types, the boot sequence, the frame loop body) is expected to change when implemented.
+- Class structure and API shapes. Everything sketched during exploration (the capability struct, the `EngineContext`, queue types, the boot sequence, the frame loop body) is expected to change when implemented.
 - Which schedule phases exist, their granularity, and within-phase ordering.
 - The C# boundary surface for descriptors, phases, and signals.
 - Per-system extension APIs; each is designed with its system.
@@ -85,10 +85,12 @@ The app descriptor declares plain-data capability flags (presentation, rendering
 Game-added systems get three things, each an extension of an existing framework piece:
 
 1. **A place to run:** named schedule phases (pre-simulation, simulation, post-simulation, pre-render) that accept registered callbacks. Phase callbacks must not assume main-thread execution; threading is a documented property of each phase.
-2. **A place to wire:** `AppBase::OnInitialized` receives a wiring context through which the game registers phase callbacks and subscribes to published signals and queues.
+2. **A place to wire:** `AppBase::OnBooted` receives an `EngineContext` through which the game registers phase callbacks, subscribes to published signals and queues, and reaches curated per-system extension APIs. `EngineContext` vends engine *capabilities*, never engine *lifecycle*: it is a distinct type from `Engine` precisely so game code cannot reach `Boot`/`Run`/`Shutdown`.
 3. **Lifetime:** the root constructs game systems last and tears them down first.
 
 The published surface is deliberately narrow because whatever a game can touch becomes frozen API. Games consume semantic input actions, never raw OS events. Deep customization (custom render passes, viewport handling) goes through per-system extension APIs designed with each system, never through subscription to a system's internal events.
+
+The narrow surface is *curated*, not *hidden*. As real systems land, `EngineContext` grows explicit accessors that vend each system's designed extension facade (not raw `System*` pointers). This is not the rejected service locator: the locator sin is *global, runtime-resolved* lookup that hides dependencies and surfaces them as null at startup; an `EngineContext` accessor is explicit, compile-time-checked, and has one birthplace. Two constraints keep it curated rather than "expose everything": what the app touches must cross to C# (raw native pointers do not, semantic facades do), and everything published becomes frozen API. The ergonomics answer for complex native games is therefore richer per-system facades on `EngineContext`, not direct system access.
 
 In the C# game band, a DI container is acceptable for the game's own service layer (analytics, backend, shop). Engine systems are constructed before any game code runs and are not resolvable services, and the engine's C# binding surface never requires a container.
 

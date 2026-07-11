@@ -2,6 +2,8 @@
 
 Status: implementation sketch for the L3 skeleton, the most basic shape that matches [ApplicationArchitecture.md](ApplicationArchitecture.md). Not a design document: this is the starting point for reshaping `Engine.cppm`/`Engine.cpp`/`App.cppm`/`main.cpp`, meant to be edited freely and deleted once implemented.
 
+**Implemented.** The boot skeleton below has shipped, and the presentation slice (step 4 of "Continue from here") is partway in. The code blocks here are the original snapshot and have since diverged; read the source as truth. Notable renames that shipped: `WiringContext` is now `EngineContext` (vends engine capabilities, not lifecycle) and `AppBase::OnInitialized` is now `OnBooted`; `BootPresentation()` creates the window and the frame loop polls events and exits on window close. Retained only for the remaining "Continue from here" roadmap; delete once the presentation slice is complete.
+
 ## The flow
 
 ```
