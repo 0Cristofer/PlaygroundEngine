@@ -104,7 +104,8 @@ target_sources(PlaygroundEngine
         src/Reflection/TypeRegistry.cpp
         src/Reflection/FieldInfo.cpp
         src/Reflection/FunctionInfo.cpp
-        src/Reflection/EnumerationInfo.cpp
+        src/Reflection/Reflection.cpp
+        src/Reflection/Facets/EnumerationFacet.cpp
 
 
         PUBLIC
@@ -122,23 +123,30 @@ target_sources(PlaygroundEngine
 		src/Component/Components.cppm
 		src/Component/ComponentBase.cppm
 		src/Component/TransformComponent.cppm
-        src/Reflection/TypeInfo.cppm
-        src/Reflection/Reflection.cppm
-        src/Reflection/Builder/MetaCommon.cppm
-        src/Reflection/Builder/AnnotationsBuilder.cppm
-        src/Reflection/Builder/FieldsBuilder.cppm
-        src/Reflection/Builder/FunctionsBuilder.cppm
-        src/Reflection/Builder/TraitsBuilder.cppm
-        src/Reflection/Builder/EnumeratorsBuilder.cppm
-        src/Reflection/Builder/TypeBuilder.cppm
+        src/Reflection/Builders/MetaCommon.cppm
+        src/Reflection/Builders/AnnotationsBuilder.cppm
+        src/Reflection/Builders/FieldsBuilder.cppm
+        src/Reflection/Builders/FunctionsBuilder.cppm
+        src/Reflection/Builders/TraitsBuilder.cppm
+        src/Reflection/Builders/TypeBuilder.cppm
+        src/Reflection/Facets/Builders/EnumerationFacetBuilder.cppm
+        src/Reflection/Facets/Builders/EnumeratorsBuilder.cppm
+        src/Reflection/Facets/Builders/SequenceFacetBuilder.cppm
+        src/Reflection/Facets/Builders/FacetsBuilder.cppm
+        src/Reflection/Facets/Builders/StringFacetBuilder.cppm
+        src/Reflection/Facets/EnumerationFacet.cppm
+        src/Reflection/Facets/Facets.cppm
+        src/Reflection/Facets/StringFacet.cppm
+        src/Reflection/Facets/SequenceFacet.cppm
         src/Reflection/TypeRegistry.cppm
         src/Reflection/FieldInfo.cppm
         src/Reflection/FunctionInfo.cppm
+        src/Reflection/Reflection.cppm
         src/Reflection/TypedRef.cppm
+        src/Reflection/TypeInfo.cppm
         src/Reflection/TypeReference.cppm
         src/Reflection/DeclarationInfo.cppm
         src/Reflection/TypeInfoTraits.cppm
-        src/Reflection/EnumerationInfo.cppm
 
         PUBLIC
         FILE_SET HEADERS

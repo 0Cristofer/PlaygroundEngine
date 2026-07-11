@@ -4,9 +4,8 @@ module;
 
 export module PlaygroundEngine.Reflection:FieldsBuilder;
 
-import PlaygroundEngine.Reflection.TypeInfoTraits;
-
 import :MetaCommon;
+import :FacetsBuilder;
 import :AnnotationsBuilder;
 import :TypeInfo;
 import :FieldInfo;
@@ -145,8 +144,7 @@ namespace PgE::detail
 	template <std::meta::info MetaType>
 	consteval auto MakeFieldsFromType()
 	{
-		using T = [:MetaType:];
-		if constexpr (TypeInfoTraits<T>::IsLeaf)
+		if constexpr (ProvidesSupersedingFacet<MetaType>())
 		{
 			return std::array<FieldInfo, 0>{};
 		}

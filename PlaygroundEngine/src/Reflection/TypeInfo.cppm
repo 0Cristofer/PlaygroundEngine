@@ -6,7 +6,8 @@ import :FieldInfo;
 import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
-import :EnumerationInfo;
+import :EnumerationFacet;
+import :Facets;
 
 import std;
 
@@ -64,43 +65,44 @@ namespace PgE
 	export class TypeInfo : public DeclarationInfo
 	{
 	public:
-		constexpr TypeInfo(const std::string_view identifier, const std::string_view displayName,
+		constexpr TypeInfo(const std::string_view identifier, const std::string_view displayName, const std::span<const AnnotationInfo> annotations,
 		                   const TypeTraits& traits,
-		                   const std::span<const FieldInfo> fields,
+		                   const std::span<const FacetEntry> facets,
 		                   const std::span<const FunctionInfo> functions,
-		                   std::string (*stringifyThunk)(const void*),
-		                   const std::span<const AnnotationInfo> annotations,
-		                   const EnumerationInfo* enumeration = nullptr) :
+		                   const std::span<const FieldInfo> fields,
+		                   std::string (*stringifyThunk)(const void*)) :
 			DeclarationInfo(identifier, displayName, annotations),
 			_traits(traits),
-			_fields(fields),
+			_facets(facets),
 			_functions(functions),
-			_stringifyThunk(stringifyThunk),
-			_enumeration(enumeration)
+			_fields(fields),
+			_stringifyThunk(stringifyThunk)
 		{
 		}
 
 		const TypeTraits& GetTraits() const { return _traits; }
-
 		TypeKind GetKind() const { return _traits.Kind; }
-
 		std::size_t GetSize() const { return _traits.Size; }
-
 		std::size_t GetAlignment() const { return _traits.Alignment; }
 
-		const EnumerationInfo* GetEnumeration() const { return _enumeration; }
+		std::span<const FacetEntry> GetFacets() const { return _facets; }
+		template <typename Facet>
+		const Facet* GetFacet() const
+		{
+			// Linear scan for now, this should be a small array
+			for (const FacetEntry& entry : _facets)
+				if (&entry.Key.Get() == &TypeOf<Facet>())
+					return static_cast<const Facet*>(entry.Data);
+			return nullptr;
+		}
 
-		std::string ObjectToString(const void* obj) const;
-		std::string FunctionsToString() const;
 		std::span<const FunctionInfo> GetFunctions() const;
 		std::vector<const FunctionInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
 
+		std::span<const FieldInfo> GetFields() const { return _fields; }
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
-
-		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier,
-		                                              const TypedRef& out) const;
+		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
 		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
-
 		std::expected<TypedRef, FieldError> GetFieldRef(void* obj, std::string_view identifier) const;
 		std::expected<TypedRef, FieldError> GetFieldRef(const void* obj, std::string_view identifier) const;
 
@@ -135,8 +137,7 @@ namespace PgE
 		}
 
 		template <typename T>
-		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(
-			void* obj, const std::string_view identifier) const
+		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(void* obj, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -146,8 +147,7 @@ namespace PgE
 		}
 
 		template <typename T>
-		std::expected<std::reference_wrapper<const T>, FieldError> GetFieldRefAs(const void* obj,
-			const std::string_view identifier) const
+		std::expected<std::reference_wrapper<const T>, FieldError> GetFieldRefAs(const void* obj, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -156,11 +156,14 @@ namespace PgE
 			return field->GetRefAs<T>(obj);
 		}
 
+		bool CanStringify() const { return _stringifyThunk; }
+		std::string Stringify(const void* obj) const { return _stringifyThunk(obj); }
+
 	private:
 		TypeTraits _traits;
-		std::span<const FieldInfo> _fields;
+		std::span<const FacetEntry> _facets;
 		std::span<const FunctionInfo> _functions;
+		std::span<const FieldInfo> _fields;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
-		const EnumerationInfo* _enumeration = nullptr;
 	};
 }

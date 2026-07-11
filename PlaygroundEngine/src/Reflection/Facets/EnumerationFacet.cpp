@@ -1,17 +1,17 @@
 module PlaygroundEngine.Reflection;
 
-import :EnumerationInfo;
+import :EnumerationFacet;
 
 import std;
 
 namespace PgE
 {
-	const TypeInfo& EnumerationInfo::GetUnderlyingType() const
+	const TypeInfo& EnumerationFacet::GetUnderlyingType() const
 	{
 		return _underlyingType.Get();
 	}
 
-	const EnumeratorInfo* EnumerationInfo::FindByIdentifier(const std::string_view identifier) const
+	const EnumeratorInfo* EnumerationFacet::FindByIdentifier(const std::string_view identifier) const
 	{
 		// Linear scan: enumerator counts are small and lookups happen at boundaries (serialize, edit),
 		// never in the frame loop. Same rationale as TypeInfo's field/function lookups.
@@ -24,7 +24,7 @@ namespace PgE
 		return nullptr;
 	}
 
-	const EnumeratorInfo* EnumerationInfo::FindByValue(const std::uint64_t value) const
+	const EnumeratorInfo* EnumerationFacet::FindByValue(const std::uint64_t value) const
 	{
 		// The first enumerator matching the bit pattern wins; aliased enumerators (two names, one value)
 		// resolve to the first declared, which is the deterministic choice serialization needs.

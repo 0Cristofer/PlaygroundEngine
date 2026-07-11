@@ -8,12 +8,16 @@ import PlaygroundEngine.Reflection.TypeInfoTraits;
 
 export import :MetaCommon;
 export import :AnnotationsBuilder;
+export import :FacetsBuilder;
+export import :StringFacetBuilder;
+export import :SequenceFacetBuilder;
+export import :EnumerationFacetBuilder;
 export import :FieldsBuilder;
 export import :FunctionsBuilder;
 export import :TraitsBuilder;
 export import :EnumeratorsBuilder;
 import :TypeInfo;
-import :EnumerationInfo;
+import :Facets;
 
 import std;
 
@@ -42,27 +46,18 @@ namespace PgE::detail
 
 		constexpr TypeTraits traits = MakeTraits<MetaType>();
 
-		if constexpr (std::meta::is_enum_type(MetaType))
-		{
-			static constexpr auto Enumerators = MakeEnumeratorsFromType<MetaType>();
-			static constexpr EnumerationInfo Enumeration(
-				TypeReferenceTo<^^std::underlying_type_t<T>>(), Enumerators);
+		static constexpr auto Facets = MakeFacetsFromType<MetaType>();
 
-			// An enum renders as its enumerator name through TypeInfoTraits, reached by the same
-			// StringifyValue thunk every other leaf uses; this branch exists only to attach the facet.
-			return TypeInfo(identifier, displayName, traits, Fields, Functions, &StringifyValue<T>,
-			                Annotations, &Enumeration);
-		}
-		// std::is_object_v excludes void (reached here as a function return type), where
-		// StringifyValue can't form a const T*; it stays true for primitives and classes.
-		else if constexpr (Fields.empty() && std::is_object_v<T>)
+		// A fieldless object is a leaf: it stringifies through its (total) trait, so it always gets a thunk.
+		// is_object_v excludes void (a function return type reached here), where StringifyValue can't form a
+		// const T*. A type with fields has no thunk and is rendered structurally by ObjectToString instead.
+		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			return TypeInfo(identifier, displayName, traits, Fields, Functions, &StringifyValue<T>,
-			                Annotations);
+			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, &StringifyValue<T>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, traits, Fields, Functions, nullptr, Annotations);
+			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, nullptr);
 		}
 	}
 

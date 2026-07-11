@@ -6,14 +6,14 @@ export module PlaygroundEngine.Reflection:EnumeratorsBuilder;
 
 import :MetaCommon;
 import :AnnotationsBuilder;
-import :EnumerationInfo;
+import :EnumerationFacet;
 import :DeclarationInfo;
 
 import std;
 
 // Builds the EnumeratorInfo list for an enumeration type from std::meta::enumerators_of. The enumerator
 // value is captured as the raw bit pattern of the underlying integer, widened to uint64_t; the underlying
-// type on the EnumerationInfo says how to read it back.
+// type on the EnumerationFacet says how to read it back.
 
 namespace PgE::detail
 {
