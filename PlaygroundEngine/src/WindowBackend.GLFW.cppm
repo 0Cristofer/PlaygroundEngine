@@ -30,7 +30,9 @@ namespace PgE
 		bool EnsurePlatformInitialized()
 		{
 			if (s_liveWindowCount > 0)
+			{
 				return true;
+			}
 
 			glfwSetErrorCallback(OnGlfwError);
 			return glfwInit() == GLFW_TRUE;
@@ -61,7 +63,9 @@ namespace PgE
 	std::expected<std::unique_ptr<WindowBackend>, WindowError> WindowBackend::Create(const WindowSpecification& specification)
 	{
 		if (!EnsurePlatformInitialized())
+		{
 			return std::unexpected(WindowError::PlatformInitializationFailed);
+		}
 
 		GLFWwindow* handle = glfwCreateWindow(
 			specification.Width, specification.Height, specification.Title.c_str(), nullptr, nullptr);
@@ -71,7 +75,9 @@ namespace PgE
 			// Roll back the init this call may have triggered so a failed creation
 			// doesn't leave the platform up with no windows behind it.
 			if (s_liveWindowCount == 0)
+			{
 				glfwTerminate();
+			}
 
 			return std::unexpected(WindowError::WindowCreationFailed);
 		}
@@ -82,7 +88,7 @@ namespace PgE
 		// A dedicated GraphicsContext will own this once the renderer exists.
 		glfwMakeContextCurrent(handle);
 
-		PGE_LOG(Info, "Created window \"{}\" ({}x{})", specification.Title, specification.Width, specification.Height);
+		PGE_LOG(Info, "Created GLFW window \"{}\" ({}x{})", specification.Title, specification.Width, specification.Height);
 
 		return std::unique_ptr<WindowBackend>(new WindowBackend(handle));
 	}
@@ -92,7 +98,9 @@ namespace PgE
 		glfwDestroyWindow(_handle);
 
 		if (--s_liveWindowCount == 0)
+		{
 			glfwTerminate();
+		}
 	}
 
 	void WindowBackend::PollEvents()

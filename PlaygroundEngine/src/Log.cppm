@@ -36,7 +36,7 @@ namespace PgE
 	export class Log
 	{
 	public:
-		static void Init();
+		static void Configure();
 
 		template <typename... Arguments>
 		static void Print(const LogLevel level, const std::source_location& location,

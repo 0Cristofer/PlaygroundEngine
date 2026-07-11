@@ -13,7 +13,31 @@ namespace PgE
 {
 	namespace
 	{
-		std::shared_ptr<spdlog::logger> s_logger;
+		std::shared_ptr<spdlog::logger> MakeDefaultLogger()
+		{
+			auto logger = spdlog::create<spdlog::sinks::stdout_color_sink_mt>("PlaygroundEngine");
+
+			// %-8l left-pads the level name to 8 (spdlog's longest, "critical") so the
+			// field is fixed-width. %! renders the source_loc function name, which carries our
+			// parsed namespace::class::function. Release omits the location field entirely.
+#ifdef PGE_DEV
+			logger->set_pattern("%^[%T] [%-8l] [%!] %v%$");
+#else
+			logger->set_pattern("%^[%T] [%-8l] %v%$");
+#endif
+			logger->set_level(spdlog::level::trace);
+			return logger;
+		}
+
+		// Ambient L0 facility (see ApplicationArchitecture.md): the logger is created on
+		// first use with a default stdout sink, so it is valid before Boot and after
+		// Shutdown, with no Engine. Configure() only swaps sinks and levels on this same
+		// instance. Function-local static init is thread-safe.
+		std::shared_ptr<spdlog::logger>& DefaultLogger()
+		{
+			static std::shared_ptr<spdlog::logger> logger = MakeDefaultLogger();
+			return logger;
+		}
 
 		constexpr spdlog::level ToSpdlogLevel(const LogLevel level)
 		{
@@ -101,21 +125,11 @@ namespace PgE
 		}
 	}
 
-	void Log::Init()
+	void Log::Configure()
 	{
-		s_logger = spdlog::create<spdlog::sinks::stdout_color_sink_mt>("PlaygroundEngine");
-
-		// %-8l left-pads the level name to 8 (spdlog's longest, "critical") so the
-		// field is fixed-width. %! renders the source_loc funcion name, which carries our
-		// parsed namespace::class::function. Release omits the location field entirely.
-#ifdef PGE_DEV
-		s_logger->set_pattern("%^[%T] [%-8l] [%!] %v%$");
-#else
-		s_logger->set_pattern("%^[%T] [%-8l] %v%$");
-#endif
-		s_logger->set_level(spdlog::level::trace);
-
-		PGE_LOG(Info, "Logging initialized");
+		// TODO: accept sink and level configuration from the composition root; today the
+		// default logger already carries the only knobs that exist (stdout sink, pattern,
+		// trace level), so this is the seam, not yet a behavior.
 	}
 
 	namespace detail
@@ -127,7 +141,7 @@ namespace PgE
 			const spdlog::source_loc spdlogLocation{
 				location.file_name(), location.line(), InternQualifiedName(location.function_name())};
 
-			s_logger->log(spdlogLocation, ToSpdlogLevel(level), message);
+			DefaultLogger()->log(spdlogLocation, ToSpdlogLevel(level), message);
 		}
 	}
 }

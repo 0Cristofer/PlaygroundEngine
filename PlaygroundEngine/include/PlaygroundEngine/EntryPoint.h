@@ -1,8 +1,9 @@
 #pragma once
 
 import PlaygroundEngine;
+import std;
 
 namespace PgE
 {
-	extern AppDescriptorBase* GetAppDescriptor(CommandLine* commandLine);
+	std::unique_ptr<AppDescriptorBase> GetAppDescriptor(CommandLine commandLine);
 }

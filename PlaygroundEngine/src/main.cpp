@@ -1,16 +1,23 @@
 #include "PlaygroundEngine/EntryPoint.h"
 
+import PlaygroundEngine;
 import std;
 
 int main(const int argc, char** argv)
 {
-	PgE::AppDescriptorBase* appDescriptor =
-		PgE::GetAppDescriptor(new PgE::CommandLine(argc, argv));
+	const std::unique_ptr<PgE::AppDescriptorBase> appDescriptor =
+		PgE::GetAppDescriptor(PgE::CommandLine{.Argc = argc, .Argv = argv});
 
-	const std::unique_ptr<PgE::Engine> engine = appDescriptor->GetEngine(appDescriptor);
+	PgE::Engine engine(*appDescriptor);
 
-	engine->Run();
-	engine->Run();
+	if (const auto booted = engine.Boot(); !booted)
+	{
+		engine.Shutdown();
+		return static_cast<int>(booted.error());
+	}
+
+	engine.StartRun();
+	engine.Shutdown();
 
 	return 0;
 }

@@ -12,12 +12,12 @@ std::unique_ptr<PgE::AppBase> PgG::PlaygroundGameAppDescriptor::GetApp()
 	return std::make_unique<App>();
 }
 
-void PgG::App::OnInitialized()
+void PgG::App::OnBooted(PgE::EngineContext&)
 {
 	PGE_LOG(Info);
 }
 
-void PgG::App::OnRun(PgE::World* world)
+void PgG::App::OnStartRun(PgE::World* world)
 {
 	static int a = 2;
 	PgE::GameObject* gO1 = world->AddGameObject();

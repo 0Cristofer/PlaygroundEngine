@@ -10,9 +10,7 @@ namespace PgG
 	export class PlaygroundGameAppDescriptor : public PgE::AppDescriptorBase
 	{
 	public:
-		PlaygroundGameAppDescriptor(PgE::CommandLine* commandLine) : AppDescriptorBase(commandLine) {}
-
-		virtual ~PlaygroundGameAppDescriptor() = default;
+		explicit PlaygroundGameAppDescriptor(const PgE::CommandLine commandLine) : AppDescriptorBase(commandLine) {}
 
 		std::unique_ptr<PgE::AppBase> GetApp() override;
 	};
@@ -20,7 +18,7 @@ namespace PgG
 	export class App : public PgE::AppBase
 	{
 	public:
-		void OnInitialized() override;
-		void OnRun(PgE::World* world) override;
+		void OnBooted(PgE::EngineContext& engine) override;
+		void OnStartRun(PgE::World* world) override;
 	};
 }

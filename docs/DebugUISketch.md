@@ -86,7 +86,7 @@ public:
 #endif
 ```
 
-Game systems register panels the same way through the `WiringContext`, inside the game's one `PGE_DEV` block.
+Game systems register panels the same way through the `EngineContext`, inside the game's one `PGE_DEV` block.
 
 ## Loop ordering
 
