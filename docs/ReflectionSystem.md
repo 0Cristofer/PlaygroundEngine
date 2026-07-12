@@ -1,4 +1,4 @@
-# Reflection System — Design
+# Reflection System, Design
 
 Use cases and requirements for the reflection system: the substrate for serialization, replication, editor tooling, GPU interop, and C#/visual-scripting integration. Engine-wide decisions referenced here live in [CoreConventions.md](CoreConventions.md).
 
@@ -7,7 +7,7 @@ Use cases and requirements for the reflection system: the substrate for serializ
 ## Constraints
 
 1. **`std::meta` never leaks into the public API.** This is a layering rule first: upper layers never care how metadata was produced. Compiler portability is a conformance bet, not an engine-tooling commitment: desktop timelines assume Clang and MSVC reach usable C++26 reflection soon enough (Windows realistically lands on Clang first), and consoles are aspirational and receive no design budget now. A pre-build generator populating the same API from annotated source stays *possible* under this rule, as a last resort rather than a plan. The binding constraint on metadata shape is use case 8: runtime providers must be able to construct the same API without `std::meta`.
-2. **Two layers, one source of truth.** A typed compile-time layer (serializers, generators — real types, no erasure) and an erased runtime layer (editor, visual scripting, module loading — uniform signatures over a registry). The erased layer is generated from the typed layer, never maintained in parallel. Validated patterns: `InvokeStaticTyped<Fn>` / `InvokeStatic` in `PlaygroundReflection/src/construction.h`.
+2. **Two layers, one source of truth.** A typed compile-time layer (serializers, generators, real types, no erasure) and an erased runtime layer (editor, visual scripting, module loading, uniform signatures over a registry). The erased layer is generated from the typed layer, never maintained in parallel. Validated patterns: `InvokeStaticTyped<Fn>` / `InvokeStatic` in `PlaygroundReflection/src/construction.h`.
 3. **Immutable between mutation barriers.** The registry mutates only at defined points (startup, module load/unload, editor asset changes); reads are lock-free in between. No lazy registration. Metadata thread-safety does not extend to the objects accessed through it.
 4. **Bottom layer.** Reflection depends on no engine concepts. Contact points with the (undesigned) engine architecture are only: who owns the registry, and when registration phases run.
 
@@ -23,7 +23,7 @@ Field walk (names, types, annotations), nested types and containers, constructio
 The annotated-field subset of serialization, plus: stable type/field identity across builds and binaries, change detection hooks, authority metadata.
 - Forces stable IDs into the core design.
 - Uses byte-level layout for delta encoding.
-- Entity references are handles — already stable wire IDs.
+- Entity references are handles, already stable wire IDs.
 
 ### 3. C# binding generation
 A build-time generator emits C# wrappers and native thunks from the reflected type surface (methods, parameters, return types, factories).
@@ -49,7 +49,7 @@ Types arrive and leave at runtime (DLL load/unload); each binary registers into 
 
 ### 8. Cross-runtime type model
 One `TypeInfo` contract over C++, C#, and visual scripting. Each runtime keeps its own reflection mechanism (`std::meta`, .NET metadata, script asset definitions) and projects into the registry through a **provider**.
-- `TypeInfo` must be constructible at runtime — script types are defined by data, not compiled code.
+- `TypeInfo` must be constructible at runtime, script types are defined by data, not compiled code.
 - Erased op-tables (construct/get/set/invoke) are per-type and provider-supplied (native thunks, managed runtime, interpreter).
 - `TypeInfo` carries a provenance facet (native/managed/script) through the facet mechanism ([ReflectionFacets.md](ReflectionFacets.md)); byte layout is optional (absent for script types).
 - Generated C# wrappers are derivative of native `TypeInfo` and never re-project; only attributed, authored C# types register.
@@ -68,7 +68,7 @@ One `TypeInfo` contract over C++, C#, and visual scripting. Each runtime keeps i
 - Components are concrete value types; dynamic-type lookup is confined to boundary data (`Poly<T>`), out of the simulation path.
 - The ECS component registry and the reflection `TypeRegistry` are one system (or two views of one identity).
 - World serialization/replication run per component type over contiguous storage, via one generated erased op-table per component type. Layout data enables C# direct access to component memory.
-- Reflection runs at boundaries (load, save, replicate, edit, bind) — never in the frame loop.
+- Reflection runs at boundaries (load, save, replicate, edit, bind), never in the frame loop.
 
 ## The Erased Op-Table
 
@@ -113,7 +113,7 @@ Overload disambiguation and cross-build function identity are deferred to the st
 |---|---|
 | Stable, name-based type & field identity | Replication, hot reload, polymorphic serialization, asset references, handle save/load remap |
 | Field enumeration: name, type, annotations | All |
-| Template instantiation introspection (containers + vocabulary types) — *satisfied by facets ([ReflectionFacets.md](ReflectionFacets.md))* | Serialization, replication, C# binding |
+| Template instantiation introspection (containers + vocabulary types), *satisfied by facets ([ReflectionFacets.md](ReflectionFacets.md))* | Serialization, replication, C# binding |
 | Byte-level layout (offset, size, alignment) | GPU interop, replication delta encoding, binary cooking, C# direct component access |
 | Function reflection + typed invocation | C# binding, factories |
 | Erased invocation + runtime registry | Editor, visual scripting, hot reload |
@@ -123,11 +123,11 @@ Overload disambiguation and cross-build function identity are deferred to the st
 
 ## Open Questions
 
-- **Stable ID scheme** — how type/field IDs are derived (qualified-name hash? annotation override for renames?), how renames migrate, and whether type/field/object/asset identity unify into one scheme. Highest priority: consumed by replication, hot reload, save/load, the C# boundary, and all three runtimes.
+- **Stable ID scheme**, how type/field IDs are derived (qualified-name hash? annotation override for renames?), how renames migrate, and whether type/field/object/asset identity unify into one scheme. Highest priority: consumed by replication, hot reload, save/load, the C# boundary, and all three runtimes.
   - *Settled within one build:* runtime `TypeInfo` instance identity is canonical per type. `TypeOfMeta` dealiases before caching, so every alias spelling (`std::uint16_t`, `std::underlying_type_t<E>`, `unsigned short`) resolves to one `TypeInfo` and pointer identity equals type identity, which is what annotation matching, serialization, and C# dedup compare on. Open here is only the *cross-build, name-based* ID.
-- **Text asset format** — YAML, TOML, or custom; deferred until the asset system (the backend is pluggable).
-- **Op-table consolidation** — when to unify the incrementally-built erased ops into a first-class per-type table (see [The Erased Op-Table](#the-erased-op-table)). Gated on the stable-id scheme, the ECS storage model, and the arrival of a second provider.
+- **Text asset format**, YAML, TOML, or custom; deferred until the asset system (the backend is pluggable).
+- **Op-table consolidation**, when to unify the incrementally-built erased ops into a first-class per-type table (see [The Erased Op-Table](#the-erased-op-table)). Gated on the stable-id scheme, the ECS storage model, and the arrival of a second provider.
 
 ## Next Step
 
-Design the base API: `TypeInfo`, `FieldInfo`, `FuncInfo`, `TypeRegistry` — shapes, ownership, the typed and erased surfaces, and how providers populate them.
+Design the base API: `TypeInfo`, `FieldInfo`, `FuncInfo`, `TypeRegistry`, shapes, ownership, the typed and erased surfaces, and how providers populate them.

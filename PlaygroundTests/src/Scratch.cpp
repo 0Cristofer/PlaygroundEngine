@@ -1,4 +1,4 @@
-// Development scratchpad — NOT a real test. A hidden doctest case for running engine
+// Development scratchpad, NOT a real test. A hidden doctest case for running engine
 // code by hand during development and watching log output, using the test harness as
 // a ready-made execution environment (it already links the engine and inits logging).
 //

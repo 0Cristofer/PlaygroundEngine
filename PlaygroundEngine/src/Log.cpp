@@ -145,7 +145,7 @@ namespace PgE
 	namespace
 	{
 		// Interns each call site's parsed name so the pointer handed to spdlog's
-		// non-owning source_loc lives for the program's duration — safe for any sink,
+		// non-owning source_loc lives for the program's duration, safe for any sink,
 		// including a future asynchronous one. Keyed on the function_name() pointer,
 		// a stable per-call-site static, so a given site is parsed only once.
 		const char* InternQualifiedName(const char* signature)
