@@ -2,6 +2,7 @@ export module PlaygroundEngine.Reflection;
 
 export import PlaygroundEngine.Reflection.Core;
 export import PlaygroundEngine.Reflection.Builtins;
+export import PlaygroundEngine.Reflection.Contracts;
 
 import std;
 
