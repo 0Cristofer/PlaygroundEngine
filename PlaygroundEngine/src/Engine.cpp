@@ -19,8 +19,7 @@ namespace PgE
 		auto window = Window::Create(WindowSpecification{});
 		if (!window)
 		{
-			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}",
-				static_cast<int>(window.error()));
+			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", static_cast<int>(window.error()));
 			return std::unexpected(BootError::Platform);
 		}
 

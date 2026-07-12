@@ -45,12 +45,9 @@ namespace PgE::Harness
 		}
 	}
 
-	// A reflected type's machine-facing shape as stable text, split into an identity section (names,
-	// kinds, field order, the surface) and a layout section (the ABI numbers). The split is deliberate:
-	// a compiler upgrade that only shifts padding touches the layout region alone, so a snapshot diff
-	// shows at a glance whether anything structural changed. Identifiers are preferred over display
-	// names because they are stable; fundamentals have no identifier and fall back to the display name,
-	// which is stable for them.
+	// A reflected type's machine-facing shape as stable text: an identity section (names, kinds, field
+	// order) and a layout section (the ABI numbers), kept separate so a padding-only change stays
+	// isolated. See docs/CorrectnessAndStandards.md. Identifiers are preferred over display names for stability.
 	export template <typename T>
 	std::string DescribeType()
 	{
@@ -63,13 +60,21 @@ namespace PgE::Harness
 
 		out += "identity\n";
 		for (const FieldInfo& field : type.GetFields())
+		{
 			std::format_to(sink, "  field {} : {}\n", field.GetIdentifier(), detail::Label(field.GetTypeInfo()));
+		}
 		for (const FunctionInfo& function : type.GetFunctions())
+		{
 			std::format_to(sink, "  function {}\n", function.GetIdentifier());
+		}
 		for (const FacetEntry& facet : type.GetFacets())
+		{
 			std::format_to(sink, "  facet {}\n", detail::Label(facet.Key.Get()));
+		}
 		for (const AnnotationInfo& annotation : type.GetAnnotations())
+		{
 			std::format_to(sink, "  annotation {}\n", detail::Label(annotation.Type.Get()));
+		}
 
 		const TypeTraits& traits = type.GetTraits();
 		out += "layout\n";
@@ -79,7 +84,9 @@ namespace PgE::Harness
 		std::format_to(sink, "  standard_layout {}\n", detail::Bool(traits.IsStandardLayout));
 		std::format_to(sink, "  unique_object_representations {}\n", detail::Bool(traits.HasUniqueObjectRepresentations));
 		for (const FieldInfo& field : type.GetFields())
+		{
 			std::format_to(sink, "  field {} @ {}\n", field.GetIdentifier(), field.GetByteOffset());
+		}
 
 		return out;
 	}

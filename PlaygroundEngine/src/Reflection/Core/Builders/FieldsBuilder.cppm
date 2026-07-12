@@ -27,7 +27,9 @@ namespace PgE::detail
 		using Field = std::remove_cvref_t<Declared>;
 
 		if (out.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
+		}
 
 		std::construct_at(static_cast<Field*>(out.Data), static_cast<const Owner*>(obj)->[:MetaField:]);
 		return {};
@@ -41,7 +43,9 @@ namespace PgE::detail
 		using Field = std::remove_cvref_t<Declared>;
 
 		if (in.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
+		}
 
 		Field* source = static_cast<Field*>(in.Data);
 
@@ -51,18 +55,26 @@ namespace PgE::detail
 		if constexpr (std::is_copy_assignable_v<Field> && std::is_move_assignable_v<Field>)
 		{
 			if (moveAllowed)
+			{
 				static_cast<Owner*>(obj)->[:MetaField:] = std::move(*source);
+			}
 			else
+			{
 				static_cast<Owner*>(obj)->[:MetaField:] = *source;
+			}
 		}
 		else if constexpr (std::is_move_assignable_v<Field>)
 		{
 			if (!moveAllowed)
+			{
 				return std::unexpected(FieldError{FieldError::NotWritable});
+			}
 			static_cast<Owner*>(obj)->[:MetaField:] = std::move(*source);
 		}
 		else
+		{
 			static_cast<Owner*>(obj)->[:MetaField:] = *source;
+		}
 
 		return {};
 	}
@@ -74,9 +86,13 @@ namespace PgE::detail
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
 		if constexpr (std::is_copy_constructible_v<Field>)
+		{
 			return &FieldGetThunk<MetaType, MetaField>;
+		}
 		else
+		{
 			return nullptr;
+		}
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>
@@ -86,12 +102,15 @@ namespace PgE::detail
 		// is only move-assignable gets a setter that requires the caller's move flag.
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
-		if constexpr (!std::is_const_v<std::remove_reference_t<Declared>>
-			&& !std::is_reference_v<Declared>
-			&& (std::is_copy_assignable_v<Field> || std::is_move_assignable_v<Field>))
+		if constexpr (!std::is_const_v<std::remove_reference_t<Declared>> && !std::is_reference_v<Declared> &&
+					  (std::is_copy_assignable_v<Field> || std::is_move_assignable_v<Field>))
+		{
 			return &FieldSetThunk<MetaType, MetaField>;
+		}
 		else
+		{
 			return nullptr;
+		}
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>
@@ -103,11 +122,9 @@ namespace PgE::detail
 		// argument and exposes the in-place const-ness via decltype (GCC -Wtemplate-body).
 		auto&& lvalue = static_cast<Owner*>(obj)->[:MetaField:];
 
-		return TypedRef{
-			.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
-			.Data = const_cast<void*>(static_cast<const void*>(std::addressof(lvalue))),
-			.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>
-		};
+		return TypedRef{.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
+						.Data = const_cast<void*>(static_cast<const void*>(std::addressof(lvalue))),
+						.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>};
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>
@@ -115,29 +132,29 @@ namespace PgE::detail
 	{
 		// A bitfield has no address, so it has no borrow (NotAddressable).
 		if constexpr (std::meta::is_bit_field(MetaField))
+		{
 			return nullptr;
+		}
 		else
+		{
 			return &FieldRefThunk<MetaType, MetaField>;
+		}
 	}
 
 	template <std::meta::info MetaType, const std::meta::info MetaField>
 	consteval FieldInfo MakeField()
 	{
 		const auto [bytes, bits] = std::meta::offset_of(MetaField);
-		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
-		                 IdentifierOf(MetaField), DisplayStringOf(MetaField),
-		                 bytes, bits,
-		                 MakeFieldGetter<MetaType, MetaField>(),
-		                 MakeFieldSetter<MetaType, MetaField>(),
-		                 MakeFieldReferencer<MetaType, MetaField>(),
-		                 MakeAnnotations<MetaField>());
+		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), IdentifierOf(MetaField),
+						 DisplayStringOf(MetaField), bytes, bits, MakeFieldGetter<MetaType, MetaField>(), MakeFieldSetter<MetaType, MetaField>(),
+						 MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
 	consteval auto MakeFieldArray(std::index_sequence<I...>)
 	{
-		[[maybe_unused]] constexpr auto members = std::define_static_array(
-			std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked()));
+		[[maybe_unused]] constexpr auto members =
+			std::define_static_array(std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked()));
 		return std::array<FieldInfo, sizeof...(I)>{MakeField<MetaType, members[I]>()...};
 	}
 
@@ -150,8 +167,8 @@ namespace PgE::detail
 		}
 		else if constexpr (IsClassOrUnion(MetaType))
 		{
-			constexpr auto fieldCount = std::define_static_array(
-				std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked())).size();
+			constexpr auto fieldCount =
+				std::define_static_array(std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked())).size();
 			return MakeFieldArray<MetaType>(std::make_index_sequence<fieldCount>{});
 		}
 		else

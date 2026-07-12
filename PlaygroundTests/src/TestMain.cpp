@@ -6,10 +6,10 @@
 
 int main(const int argc, char** argv)
 {
-    doctest::Context context;
-    context.applyCommandLine(argc, argv);
+	doctest::Context context;
+	context.applyCommandLine(argc, argv);
 
-    const int result = context.run();
+	const int result = context.run();
 
-    return result;
+	return result;
 }

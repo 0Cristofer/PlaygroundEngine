@@ -26,11 +26,11 @@ namespace PgE
 		// for humans, always present, never a key.
 
 	public:
-		constexpr DeclarationInfo(const std::string_view identifier, const std::string_view displayName,
-		                          const std::span<const AnnotationInfo> annotations) :
-			_identifier(identifier), _displayName(displayName), _annotations(annotations)
-		{
-		}
+		constexpr DeclarationInfo(const std::string_view identifier,
+								  const std::string_view displayName,
+								  const std::span<const AnnotationInfo> annotations)
+			: _identifier(identifier), _displayName(displayName), _annotations(annotations)
+		{}
 
 		std::string_view GetIdentifier() const { return _identifier; }
 
@@ -45,8 +45,12 @@ namespace PgE
 
 			std::vector<const AnnotationType*> annotations;
 			for (const auto& [Type, Value] : _annotations)
+			{
 				if (&Type.Get() == &TypeOf<AnnotationType>())
+				{
 					annotations.push_back(static_cast<const AnnotationType*>(Value));
+				}
+			}
 			return annotations;
 		}
 
@@ -54,8 +58,12 @@ namespace PgE
 		bool HasAnnotation() const
 		{
 			for (const auto& [Type, Value] : _annotations)
+			{
 				if (&Type.Get() == &TypeOf<std::remove_cvref_t<A>>())
+				{
 					return true;
+				}
+			}
 			return false;
 		}
 

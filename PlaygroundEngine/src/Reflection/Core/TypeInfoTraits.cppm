@@ -26,16 +26,19 @@ namespace PgE
 		static std::string Stringify(const T& obj)
 		{
 			if constexpr (std::formattable<T, char>)
+			{
 				return std::format("{}", obj);
+			}
 			else
+			{
 				return std::format("<{}>", detail::TypeName<T>());
+			}
 		}
 	};
 
 	export template <typename>
 	struct TypeInfoTraits : TypeInfoTraitsDefaults
-	{
-	};
+	{};
 
 	template <typename T>
 	struct TypeInfoTraits<T*> : TypeInfoTraitsDefaults
@@ -45,9 +48,13 @@ namespace PgE
 			// Only a pointer to an object can be cast to const void* for its address; a function pointer
 			// cannot, so it renders as a placeholder rather than its (not very useful) numeric value.
 			if constexpr (std::is_object_v<T>)
+			{
 				return std::format("{}", static_cast<const void*>(obj));
+			}
 			else
+			{
 				return obj ? "<function>" : "<null>";
+			}
 		}
 	};
 }

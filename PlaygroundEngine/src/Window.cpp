@@ -6,8 +6,7 @@ import std;
 
 namespace PgE
 {
-	static_assert(WindowBackendInterface<WindowBackend>,
-		"WindowBackend doesn't implement all of WindowBackendInterface");
+	static_assert(WindowBackendInterface<WindowBackend>, "WindowBackend doesn't implement all of WindowBackendInterface");
 
 	std::expected<std::unique_ptr<Window>, WindowError> Window::Create(const WindowSpecification& specification)
 	{
@@ -26,8 +25,7 @@ namespace PgE
 
 	Window::Window(std::unique_ptr<WindowBackend> backend, WindowSpecification specification)
 		: _backend(std::move(backend)), _specification(std::move(specification))
-	{
-	}
+	{}
 
 	Window::~Window() = default;
 

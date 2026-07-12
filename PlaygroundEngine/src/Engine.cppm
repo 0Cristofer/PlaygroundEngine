@@ -38,10 +38,7 @@ namespace PgE
 		explicit AppDescriptorBase(const CommandLine commandLine) : _commandLine(commandLine) {}
 		virtual ~AppDescriptorBase() = default;
 
-		[[nodiscard]] virtual AppCapabilities GetCapabilities() const
-		{
-			return AppCapabilities{};
-		}
+		[[nodiscard]] virtual AppCapabilities GetCapabilities() const { return AppCapabilities{}; }
 		[[nodiscard]] virtual std::unique_ptr<AppBase> GetApp() = 0;
 
 		[[nodiscard]] const CommandLine& GetCommandLine() const { return _commandLine; }

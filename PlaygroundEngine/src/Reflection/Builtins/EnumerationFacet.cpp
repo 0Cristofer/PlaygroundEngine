@@ -20,7 +20,9 @@ namespace PgE
 		for (const EnumeratorInfo& enumerator : _enumerators)
 		{
 			if (enumerator.GetIdentifier() == identifier)
+			{
 				return &enumerator;
+			}
 		}
 
 		return nullptr;
@@ -33,7 +35,9 @@ namespace PgE
 		for (const EnumeratorInfo& enumerator : _enumerators)
 		{
 			if (enumerator.GetValue() == value)
+			{
 				return &enumerator;
+			}
 		}
 
 		return nullptr;

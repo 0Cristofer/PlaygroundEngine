@@ -50,14 +50,12 @@ TEST_CASE("scratch" * doctest::skip())
 	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
 
 	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(),
-	        valueGet ? "" : PgE::ToString(valueGet.error().Reason));
+	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(), valueGet ? "" : PgE::ToString(valueGet.error().Reason));
 
 	Movable source;
 	source.Tag = 5;
 	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
-	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(),
-	        valueSet ? "" : PgE::ToString(valueSet.error().Reason));
+	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(), valueSet ? "" : PgE::ToString(valueSet.error().Reason));
 
 	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
 	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
@@ -80,8 +78,7 @@ TEST_CASE("scratch" * doctest::skip())
 	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
 	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
 
-	auto window = PgE::Window::Create(PgE::WindowSpecification{
-		.Title = "Playground Window", .Width = 960, .Height = 540});
+	auto window = PgE::Window::Create(PgE::WindowSpecification{.Title = "Playground Window", .Width = 960, .Height = 540});
 
 	if (!window)
 	{
@@ -89,8 +86,7 @@ TEST_CASE("scratch" * doctest::skip())
 		return;
 	}
 
-	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(),
-			(*window)->GetTitle());
+	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(), (*window)->GetTitle());
 
 	while (!(*window)->ShouldClose())
 	{

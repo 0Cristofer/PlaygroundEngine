@@ -103,9 +103,7 @@ namespace ReflectionTestTypes
 		int& Alias;
 		const int& ConstAlias;
 
-		Referencing() : Alias(Target), ConstAlias(Target)
-		{
-		}
+		Referencing() : Alias(Target), ConstAlias(Target) {}
 	};
 
 	// Move-only but move-assignable (like unique_ptr / Poly): settable through a move, not a copy.
@@ -159,9 +157,7 @@ namespace ReflectionTestTypes
 		bool Moved = false;
 		Tracked() = default;
 
-		Tracked(const Tracked& other) : Value(other.Value)
-		{
-		}
+		Tracked(const Tracked& other) : Value(other.Value) {}
 
 		Tracked(Tracked&& other) noexcept : Value(other.Value) { other.Moved = true; }
 
@@ -219,8 +215,14 @@ namespace ReflectionTestTypes
 		Ping Bounce() const;
 	};
 
-	inline Pong Ping::Bounce() const { return Pong{}; }
-	inline Ping Pong::Bounce() const { return Ping{}; }
+	inline Pong Ping::Bounce() const
+	{
+		return Pong{};
+	}
+	inline Ping Pong::Bounce() const
+	{
+		return Ping{};
+	}
 
 	// Private member functions are reflected and invocable, the way private fields already are.
 	struct WithPrivate
@@ -245,7 +247,11 @@ namespace ReflectionTestTypes
 
 	// An enum with the default (int) underlying type. Stringifies to its enumerator name, which also
 	// propagates through Palette's Primary field.
-	enum class Shade { Red, Green };
+	enum class Shade
+	{
+		Red,
+		Green
+	};
 
 	struct Palette
 	{
@@ -255,41 +261,51 @@ namespace ReflectionTestTypes
 
 	// A leaf with no std::format support, no trait, and no enumerators: reflectable, stringified by the
 	// type-name fallback.
-	struct Opaque {};
+	struct Opaque
+	{};
 
 	// Enum with an explicit unsigned underlying type and gappy, flag-shaped values. None = 0 exercises the
 	// zero-valued lookup; a bit-or'd combination (Read | Write) is a valid value no enumerator names.
-	enum class Permissions : std::uint16_t { None = 0, Read = 1, Write = 2, Execute = 4 };
+	enum class Permissions : std::uint16_t
+	{
+		None = 0,
+		Read = 1,
+		Write = 2,
+		Execute = 4
+	};
 
 	// Signed underlying type with a negative enumerator, to pin the two's-complement round-trip through the
 	// uint64 bit pattern.
-	enum class Temperature : std::int16_t { Freezing = -10, Boiling = 100 };
+	enum class Temperature : std::int16_t
+	{
+		Freezing = -10,
+		Boiling = 100
+	};
 
 	// Unscoped enum, to confirm the enumerator walk is not scoped-only.
-	enum Direction { North, South, East, West };
+	enum Direction
+	{
+		North,
+		South,
+		East,
+		West
+	};
 
 	struct Base
 	{
 		virtual ~Base() = default;
 		int V = 1;
 
-		virtual int GetV()
-		{
-			return V;
-		}
+		virtual int GetV() { return V; }
 	};
 
 	struct Child : Base
 	{
-		int GetV() override
-		{
-			return V + 1;
-		}
+		int GetV() override { return V + 1; }
 	};
 
 	struct ChildNoOverride : Base
-	{
-	};
+	{};
 
 	// Polymorphic and abstract: cannot be constructed, so its traits differ from a concrete class.
 	struct AbstractShape
@@ -317,30 +333,24 @@ namespace ReflectionTestTypes
 	{
 		const char* Text;
 
-		consteval Doc(const char* text) : Text(std::define_static_string(std::string_view{text}))
-		{
-		}
+		consteval Doc(const char* text) : Text(std::define_static_string(std::string_view{text})) {}
 	};
 
 	struct Serializable
-	{
-	};
+	{};
 
 	// One type carrying annotations on every declaration kind: the type itself, a field,
 	// a member function, and a parameter. Exercises the shared Annotated surface uniformly.
-	struct [[=Serializable{}]] Gadget
+	struct[[= Serializable{}]] Gadget
 	{
-		[[=Range{0.0, 100.0}]] [[=Doc{"hit points"}]]
-		int Health = 100;
+		[[= Range{0.0, 100.0}]][[= Doc{"hit points"}]] int Health = 100;
 
 		// The same annotation type repeated: legal, kept in declaration order, not deduplicated.
-		[[=Doc{"primary"}]] [[=Doc{"secondary"}]]
-		int Nickname = 0;
+		[[= Doc{"primary"}]][[= Doc{"secondary"}]] int Nickname = 0;
 
 		int Plain = 0;
 
-		[[=Doc{"apply damage, return remaining health"}]]
-		int Hurt([[=Range{0.0, 1000.0}]] int amount)
+		[[= Doc{"apply damage, return remaining health"}]] int Hurt([[= Range{0.0, 1000.0}]] int amount)
 		{
 			Health -= amount;
 			return Health;
@@ -377,59 +387,56 @@ namespace ReflectionTestTypes
 	// ReSharper restore CppEnumeratorNeverUsed
 }
 
-using ReflectionTestTypes::Person;
-using ReflectionTestTypes::Widget;
-using ReflectionTestTypes::Counter;
+using ReflectionTestTypes::AbstractShape;
 using ReflectionTestTypes::Accessor;
-using ReflectionTestTypes::MoveOnly;
-using ReflectionTestTypes::Sink;
-using ReflectionTestTypes::Packet;
-using ReflectionTestTypes::Secret;
-using ReflectionTestTypes::Fixed;
-using ReflectionTestTypes::Referencing;
-using ReflectionTestTypes::MoveOnlyValue;
-using ReflectionTestTypes::MoveOnlyHolder;
-using ReflectionTestTypes::Immovable;
-using ReflectionTestTypes::ImmovableHolder;
-using ReflectionTestTypes::Inner;
-using ReflectionTestTypes::Outer;
-using ReflectionTestTypes::Tracked;
-using ReflectionTestTypes::Consumer;
-using ReflectionTestTypes::CopyOnlyParam;
-using ReflectionTestTypes::CopyConsumer;
-using ReflectionTestTypes::Node;
-using ReflectionTestTypes::Ping;
-using ReflectionTestTypes::Pong;
-using ReflectionTestTypes::WithPrivate;
-using ReflectionTestTypes::RefQualified;
-using ReflectionTestTypes::Shade;
-using ReflectionTestTypes::Palette;
-using ReflectionTestTypes::Opaque;
-using ReflectionTestTypes::Permissions;
-using ReflectionTestTypes::Temperature;
-using ReflectionTestTypes::Direction;
 using ReflectionTestTypes::Base;
 using ReflectionTestTypes::Child;
 using ReflectionTestTypes::ChildNoOverride;
-using ReflectionTestTypes::AbstractShape;
-using ReflectionTestTypes::Scalar;
-using ReflectionTestTypes::Range;
+using ReflectionTestTypes::Consumer;
+using ReflectionTestTypes::CopyConsumer;
+using ReflectionTestTypes::CopyOnlyParam;
+using ReflectionTestTypes::Counter;
+using ReflectionTestTypes::Direction;
 using ReflectionTestTypes::Doc;
-using ReflectionTestTypes::Serializable;
+using ReflectionTestTypes::Fixed;
 using ReflectionTestTypes::Gadget;
+using ReflectionTestTypes::Immovable;
+using ReflectionTestTypes::ImmovableHolder;
+using ReflectionTestTypes::Inner;
 using ReflectionTestTypes::Inventory;
-using ReflectionTestTypes::LabelFacet;
 using ReflectionTestTypes::Labeled;
+using ReflectionTestTypes::LabelFacet;
+using ReflectionTestTypes::MoveOnly;
+using ReflectionTestTypes::MoveOnlyHolder;
+using ReflectionTestTypes::MoveOnlyValue;
+using ReflectionTestTypes::Node;
+using ReflectionTestTypes::Opaque;
+using ReflectionTestTypes::Outer;
+using ReflectionTestTypes::Packet;
+using ReflectionTestTypes::Palette;
+using ReflectionTestTypes::Permissions;
+using ReflectionTestTypes::Person;
+using ReflectionTestTypes::Ping;
+using ReflectionTestTypes::Pong;
+using ReflectionTestTypes::Range;
+using ReflectionTestTypes::Referencing;
+using ReflectionTestTypes::RefQualified;
+using ReflectionTestTypes::Scalar;
+using ReflectionTestTypes::Secret;
+using ReflectionTestTypes::Serializable;
+using ReflectionTestTypes::Shade;
+using ReflectionTestTypes::Sink;
+using ReflectionTestTypes::Temperature;
+using ReflectionTestTypes::Tracked;
+using ReflectionTestTypes::Widget;
+using ReflectionTestTypes::WithPrivate;
 
 // A user extends the facet system entirely from outside the library: specialize TypeInfoTraits for the
 // type and return the facet from MakeFacets. The reflection core assembles and keys it with no change.
 template <>
 struct PgE::TypeInfoTraits<Labeled> : PgE::TypeInfoTraitsDefaults
 {
-	static consteval auto MakeFacets()
-	{
-		return std::tuple{LabelFacet{.Text = "the-label"}};
-	}
+	static consteval auto MakeFacets() { return std::tuple{LabelFacet{.Text = "the-label"}}; }
 };
 
 TEST_CASE("reflected type name is correct")
@@ -504,10 +511,8 @@ TEST_CASE("invoke reports arity and type mismatches")
 
 	int height = 5;
 	std::string wrong = "x";
-	const PgE::TypedRef mistyped[] = {
-		{.Type = &PgE::TypeOf<std::string>(), .Data = &wrong, .IsConst = false},
-		{.Type = &PgE::TypeOf<int>(), .Data = &height, .IsConst = false}
-	};
+	const PgE::TypedRef mistyped[] = {{.Type = &PgE::TypeOf<std::string>(), .Data = &wrong, .IsConst = false},
+									  {.Type = &PgE::TypeOf<int>(), .Data = &height, .IsConst = false}};
 	const auto type = resize->Invoke(&widget, mistyped);
 	REQUIRE_FALSE(type.has_value());
 	CHECK(type.error().Reason == PgE::InvokeError::TypeMismatch);
@@ -534,15 +539,13 @@ TEST_CASE("reflected function returning a reference yields a live reference")
 {
 	Accessor accessor{};
 
-	const auto mutableRef = PgE::TypeOf<Accessor>().FindFunctionsByIdentifier("Mutable").front()->InvokeAs<int
-		&>(&accessor);
+	const auto mutableRef = PgE::TypeOf<Accessor>().FindFunctionsByIdentifier("Mutable").front()->InvokeAs<int&>(&accessor);
 	REQUIRE(mutableRef.has_value());
 	int& reference = mutableRef.value();
 	reference = 42;
 	CHECK(accessor.Value == 42);
 
-	const auto view = PgE::TypeOf<Accessor>().FindFunctionsByIdentifier("Readonly").front()->InvokeAs<const int
-		&>(&accessor);
+	const auto view = PgE::TypeOf<Accessor>().FindFunctionsByIdentifier("Readonly").front()->InvokeAs<const int&>(&accessor);
 	REQUIRE(view.has_value());
 	CHECK(view.value() == 42);
 }
@@ -689,16 +692,12 @@ TEST_CASE("erased field access moves values through a typed slot")
 	const PgE::TypeInfo& type = PgE::TypeOf<Person>();
 
 	int readBack = 0;
-	const auto got = type.GetFieldValue(&person, "Age", {
-		                                    .Type = &PgE::TypeOf<int>(), .Data = &readBack, .IsConst = false
-	                                    });
+	const auto got = type.GetFieldValue(&person, "Age", {.Type = &PgE::TypeOf<int>(), .Data = &readBack, .IsConst = false});
 	REQUIRE(got.has_value());
 	CHECK(readBack == 40);
 
 	int newAge = 41;
-	const auto set = type.SetFieldValue(&person, "Age", {
-		                                    .Type = &PgE::TypeOf<int>(), .Data = &newAge, .IsConst = true
-	                                    });
+	const auto set = type.SetFieldValue(&person, "Age", {.Type = &PgE::TypeOf<int>(), .Data = &newAge, .IsConst = true});
 	REQUIRE(set.has_value());
 	CHECK(person.Age == 41);
 }
@@ -1021,8 +1020,8 @@ TEST_CASE("enum name round-trips through the typed sugar")
 	CHECK(PgE::EnumFromName<Permissions>("Execute") == Permissions::Execute);
 
 	// A bit-or'd value no enumerator names has no exact name, but still renders numerically.
-	constexpr auto combined = static_cast<Permissions>(
-		static_cast<std::uint16_t>(Permissions::Read) | static_cast<std::uint16_t>(Permissions::Write));
+	constexpr auto combined =
+		static_cast<Permissions>(static_cast<std::uint16_t>(Permissions::Read) | static_cast<std::uint16_t>(Permissions::Write));
 	CHECK(PgE::EnumToName(combined) == std::nullopt);
 	CHECK(PgE::ToString(combined) == "3");
 
@@ -1191,8 +1190,7 @@ TEST_CASE("identifier and display name are exposed separately on every declarati
 	const std::span<const PgE::ParameterInfo> params = functions.front()->GetParams();
 	REQUIRE(params.size() == 1);
 	CHECK(params.front().GetIdentifier() == "amount");
-	CHECK(params.front().GetDisplayName()
-		== "<parameter amount of int ReflectionTestTypes::Gadget::Hurt(int)>");
+	CHECK(params.front().GetDisplayName() == "<parameter amount of int ReflectionTestTypes::Gadget::Hurt(int)>");
 }
 
 TEST_CASE("empty tag annotation is present but carries no data")
@@ -1461,8 +1459,7 @@ TEST_CASE("sequence facet rebuilds a vector via clear, reserve, and append")
 TEST_CASE("sequence facet appends a move-only element by move, not by copy")
 {
 	std::vector<MoveOnlyValue> items;
-	const PgE::SequenceFacet* facet =
-		PgE::TypeOf<std::vector<MoveOnlyValue>>().GetFacet<PgE::SequenceFacet>();
+	const PgE::SequenceFacet* facet = PgE::TypeOf<std::vector<MoveOnlyValue>>().GetFacet<PgE::SequenceFacet>();
 	REQUIRE(facet != nullptr);
 
 	MoveOnlyValue source;
@@ -1474,8 +1471,7 @@ TEST_CASE("sequence facet appends a move-only element by move, not by copy")
 	CHECK(copied.error().Reason == PgE::FacetError::NotWritable);
 
 	// A move from a mutable source succeeds.
-	const auto moved = facet->Append(
-		&items, {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source, .IsConst = false, .Movable = true});
+	const auto moved = facet->Append(&items, {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source, .IsConst = false, .Movable = true});
 	REQUIRE(moved.has_value());
 	REQUIRE(items.size() == 1);
 	CHECK(items[0].Tag == 5);
@@ -1557,8 +1553,7 @@ TEST_CASE("a const-element span reflects as a read-only sequence")
 TEST_CASE("nested sequences resolve their element facet lazily")
 {
 	std::vector<std::vector<int>> grid{{1, 2}, {3}};
-	const PgE::SequenceFacet* outer =
-		PgE::TypeOf<std::vector<std::vector<int>>>().GetFacet<PgE::SequenceFacet>();
+	const PgE::SequenceFacet* outer = PgE::TypeOf<std::vector<std::vector<int>>>().GetFacet<PgE::SequenceFacet>();
 	REQUIRE(outer != nullptr);
 
 	// The element type is itself a sequence, reached through the lazy TypeReference.

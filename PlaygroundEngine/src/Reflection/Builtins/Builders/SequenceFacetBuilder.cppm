@@ -94,7 +94,9 @@ namespace PgE
 		{
 			using Element = [:ElementMeta:];
 			if (in.Type != &TypeOfMeta<ElementMeta>())
+			{
 				return std::unexpected(FacetError{FacetError::TypeMismatch});
+			}
 
 			Container& container = *static_cast<Container*>(obj);
 			Element* source = static_cast<Element*>(in.Data);
@@ -105,14 +107,20 @@ namespace PgE
 			if constexpr (std::is_move_constructible_v<Element> && std::is_copy_constructible_v<Element>)
 			{
 				if (moveAllowed)
+				{
 					container.push_back(std::move(*source));
+				}
 				else
+				{
 					container.push_back(*source);
+				}
 			}
 			else if constexpr (std::is_move_constructible_v<Element>)
 			{
 				if (!moveAllowed)
+				{
 					return std::unexpected(FacetError{FacetError::NotWritable});
+				}
 				container.push_back(std::move(*source));
 			}
 			else if constexpr (std::is_copy_constructible_v<Element>)
@@ -214,14 +222,20 @@ namespace PgE
 			for (const Element& element : value)
 			{
 				if (index >= elementsToRender)
+				{
 					break;
+				}
 				if (index != 0)
+				{
 					out += ", ";
+				}
 				out += ToString(element);
 				++index;
 			}
 			if (isLongSequence)
+			{
 				out += ", ...";
+			}
 			return out + "]";
 		}
 	}
@@ -238,10 +252,7 @@ namespace PgE
 			return detail::StringifySequence<std::vector<Element, Alloc>, Element>(value);
 		}
 
-		static consteval auto MakeFacets()
-		{
-			return std::tuple{detail::MakeResizableSequenceFacet<std::vector<Element, Alloc>>()};
-		}
+		static consteval auto MakeFacets() { return std::tuple{detail::MakeResizableSequenceFacet<std::vector<Element, Alloc>>()}; }
 	};
 
 	template <typename Element, std::size_t Count>
@@ -254,33 +265,25 @@ namespace PgE
 			return detail::StringifySequence<std::array<Element, Count>, Element>(value);
 		}
 
-		static consteval auto MakeFacets()
-		{
-			return std::tuple{detail::MakeFixedSequenceFacet<std::array<Element, Count>>()};
-		}
+		static consteval auto MakeFacets() { return std::tuple{detail::MakeFixedSequenceFacet<std::array<Element, Count>>()}; }
 	};
 
 	template <typename Element, std::size_t Count>
 	struct TypeInfoTraits<Element[Count]> : TypeInfoTraitsDefaults
 	{
-		static std::string Stringify(const Element (&value)[Count])
-		{
-			return detail::StringifySequence<Element[Count], Element>(value);
-		}
+		static std::string Stringify(const Element (&value)[Count]) { return detail::StringifySequence<Element[Count], Element>(value); }
 
 		static consteval auto MakeFacets()
 		{
-			return std::tuple{
-				SequenceFacet{
-					detail::TypeReferenceTo<^^Element>(),
-					&detail::CArraySizeThunk<Count>,
-					&detail::CArrayElementRefThunk<^^Element>,
-					&detail::CArrayElementRefConstThunk<^^Element>,
-					nullptr,
-					nullptr,
-					nullptr,
-				}
-			};
+			return std::tuple{SequenceFacet{
+				detail::TypeReferenceTo<^^Element>(),
+				&detail::CArraySizeThunk<Count>,
+				&detail::CArrayElementRefThunk<^^Element>,
+				&detail::CArrayElementRefConstThunk<^^Element>,
+				nullptr,
+				nullptr,
+				nullptr,
+			}};
 		}
 	};
 
@@ -298,9 +301,6 @@ namespace PgE
 			return detail::StringifySequence<std::span<Element, Extent>, Element>(value);
 		}
 
-		static consteval auto MakeFacets()
-		{
-			return std::tuple{detail::MakeFixedSequenceFacet<std::span<Element, Extent>>()};
-		}
+		static consteval auto MakeFacets() { return std::tuple{detail::MakeFixedSequenceFacet<std::span<Element, Extent>>()}; }
 	};
 }

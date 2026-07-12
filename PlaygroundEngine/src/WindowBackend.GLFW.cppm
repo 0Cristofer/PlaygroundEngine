@@ -42,8 +42,7 @@ namespace PgE
 	class WindowBackend
 	{
 	public:
-		[[nodiscard]] static std::expected<std::unique_ptr<WindowBackend>, WindowError> Create(
-			const WindowSpecification& specification);
+		[[nodiscard]] static std::expected<std::unique_ptr<WindowBackend>, WindowError> Create(const WindowSpecification& specification);
 
 		~WindowBackend();
 
@@ -67,8 +66,7 @@ namespace PgE
 			return std::unexpected(WindowError::PlatformInitializationFailed);
 		}
 
-		GLFWwindow* handle = glfwCreateWindow(
-			specification.Width, specification.Height, specification.Title.c_str(), nullptr, nullptr);
+		GLFWwindow* handle = glfwCreateWindow(specification.Width, specification.Height, specification.Title.c_str(), nullptr, nullptr);
 
 		if (handle == nullptr)
 		{

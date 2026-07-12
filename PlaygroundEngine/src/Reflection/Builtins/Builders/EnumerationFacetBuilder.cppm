@@ -26,7 +26,7 @@ namespace PgE
 	}
 
 	template <typename T>
-		requires std::is_enum_v<T>
+	requires std::is_enum_v<T>
 	struct TypeInfoTraits<T> : TypeInfoTraitsDefaults
 	{
 		static std::string Stringify(const T value)
@@ -36,14 +36,13 @@ namespace PgE
 			const auto underlying = static_cast<std::underlying_type_t<T>>(value);
 
 			if (const EnumeratorInfo* enumerator = facet.FindByValue(static_cast<std::uint64_t>(underlying)))
+			{
 				return std::string(enumerator->GetIdentifier());
+			}
 
 			return ToString(underlying);
 		}
 
-		static consteval auto MakeFacets()
-		{
-			return std::tuple{detail::MakeEnumerationFacet<T>()};
-		}
+		static consteval auto MakeFacets() { return std::tuple{detail::MakeEnumerationFacet<T>()}; }
 	};
 }

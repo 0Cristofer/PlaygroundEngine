@@ -42,7 +42,9 @@ namespace PgE::detail
 	{
 		std::vector<std::meta::info> annotations;
 		for (const std::meta::info annotation : std::meta::annotations_of(entity))
+		{
 			annotations.push_back(annotation);
+		}
 		return annotations;
 	}
 

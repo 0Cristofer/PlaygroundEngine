@@ -32,9 +32,13 @@ namespace
 			{
 				value = value * 31u + static_cast<std::uint32_t>(Height);
 				if ((value & 1u) != 0u)
+				{
 					value ^= value >> 3;
+				}
 				else
+				{
 					value += static_cast<std::uint32_t>(Width);
+				}
 			}
 			return static_cast<int>(value);
 		}
@@ -48,7 +52,9 @@ namespace
 		// Unsigned arithmetic so the LCG wraparound is well defined rather than signed-overflow UB.
 		std::uint32_t value = static_cast<std::uint32_t>(seed);
 		for (int step = 0; step < 64; ++step)
+		{
 			value = value * 1103515245u + 12345u;
+		}
 
 		return static_cast<int>(value);
 	}
@@ -56,13 +62,17 @@ namespace
 	std::size_t ParseArgument(const int argc, char** argv, const int index, const std::size_t fallback)
 	{
 		if (index >= argc)
+		{
 			return fallback;
+		}
 
 		const std::string_view text = argv[index];
 		std::size_t value = fallback;
 		const auto [pointer, error] = std::from_chars(text.data(), text.data() + text.size(), value);
 		if (error != std::errc{} || pointer != text.data() + text.size())
+		{
 			return fallback;
+		}
 
 		return value;
 	}
@@ -93,8 +103,7 @@ int main(int argc, char** argv)
 	long long accumulator = 0;
 
 	int areaDirectDimension = startingDimension;
-	const Result areaDirect = Run("Area: direct native call", iterations, [&]
-	{
+	const Result areaDirect = Run("Area: direct native call", iterations, [&] {
 		++areaDirectDimension;
 		DoNotOptimize(areaDirectDimension);
 		widget.Width = areaDirectDimension;
@@ -103,8 +112,7 @@ int main(int argc, char** argv)
 	});
 
 	int areaReflectedDimension = startingDimension;
-	const Result areaReflected = Run("Area: reflected InvokeAs (cached lookup)", iterations, [&]
-	{
+	const Result areaReflected = Run("Area: reflected InvokeAs (cached lookup)", iterations, [&] {
 		++areaReflectedDimension;
 		DoNotOptimize(areaReflectedDimension);
 		widget.Width = areaReflectedDimension;
@@ -113,8 +121,7 @@ int main(int argc, char** argv)
 	});
 
 	int resizeDirectDimension = startingDimension;
-	const Result resizeDirect = Run("Resize: direct native call", iterations, [&]
-	{
+	const Result resizeDirect = Run("Resize: direct native call", iterations, [&] {
 		++resizeDirectDimension;
 		DoNotOptimize(resizeDirectDimension);
 		widget.Resize(resizeDirectDimension, resizeDirectDimension + 1);
@@ -122,8 +129,7 @@ int main(int argc, char** argv)
 	});
 
 	int resizeReflectedDimension = startingDimension;
-	const Result resizeReflected = Run("Resize: reflected InvokeAs (cached lookup)", iterations, [&]
-	{
+	const Result resizeReflected = Run("Resize: reflected InvokeAs (cached lookup)", iterations, [&] {
 		++resizeReflectedDimension;
 		DoNotOptimize(resizeReflectedDimension);
 		auto result = resize->InvokeAs(&widget, resizeReflectedDimension, resizeReflectedDimension + 1);
@@ -132,8 +138,7 @@ int main(int argc, char** argv)
 	});
 
 	int mixDirectDimension = startingDimension;
-	const Result mixDirect = Run("Mix (heavy callee): direct native call", iterations, [&]
-	{
+	const Result mixDirect = Run("Mix (heavy callee): direct native call", iterations, [&] {
 		++mixDirectDimension;
 		DoNotOptimize(mixDirectDimension);
 		accumulator += widget.Mix(mixDirectDimension);
@@ -141,8 +146,7 @@ int main(int argc, char** argv)
 	});
 
 	int mixReflectedDimension = startingDimension;
-	const Result mixReflected = Run("Mix (heavy callee): reflected InvokeAs (cached lookup)", iterations, [&]
-	{
+	const Result mixReflected = Run("Mix (heavy callee): reflected InvokeAs (cached lookup)", iterations, [&] {
 		++mixReflectedDimension;
 		DoNotOptimize(mixReflectedDimension);
 		accumulator += mix->InvokeAs<int>(&widget, mixReflectedDimension).value();
@@ -156,8 +160,7 @@ int main(int argc, char** argv)
 	const TypeInfo* const intTag = &TypeOf<int>();
 
 	int areaErasedDimension = startingDimension;
-	const Result areaErased = Run("Area: erased Invoke (runtime-assembled args)", iterations, [&]
-	{
+	const Result areaErased = Run("Area: erased Invoke (runtime-assembled args)", iterations, [&] {
 		++areaErasedDimension;
 		DoNotOptimize(areaErasedDimension);
 		widget.Width = areaErasedDimension;
@@ -170,25 +173,21 @@ int main(int argc, char** argv)
 	});
 
 	int resizeErasedDimension = startingDimension;
-	const Result resizeErased = Run("Resize: erased Invoke (runtime-assembled args)", iterations, [&]
-	{
+	const Result resizeErased = Run("Resize: erased Invoke (runtime-assembled args)", iterations, [&] {
 		++resizeErasedDimension;
 		DoNotOptimize(resizeErasedDimension);
 
 		int width = resizeErasedDimension;
 		int height = resizeErasedDimension + 1;
-		std::array<TypedRef, 2> args{
-			TypedRef{.Type = intTag, .Data = &width, .IsConst = false},
-			TypedRef{.Type = intTag, .Data = &height, .IsConst = false}
-		};
+		std::array<TypedRef, 2> args{TypedRef{.Type = intTag, .Data = &width, .IsConst = false},
+									 TypedRef{.Type = intTag, .Data = &height, .IsConst = false}};
 		auto result = resize->Invoke(&widget, args);
 		DoNotOptimize(result);
 		DoNotOptimize(widget);
 	});
 
 	int mixErasedDimension = startingDimension;
-	const Result mixErased = Run("Mix (heavy callee): erased Invoke (runtime-assembled args)", iterations, [&]
-	{
+	const Result mixErased = Run("Mix (heavy callee): erased Invoke (runtime-assembled args)", iterations, [&] {
 		++mixErasedDimension;
 		DoNotOptimize(mixErasedDimension);
 
@@ -202,8 +201,7 @@ int main(int argc, char** argv)
 	});
 
 	int workDirectDimension = startingDimension;
-	const Result workThenDirect = Run("Work + call: work + direct native call", iterations, [&]
-	{
+	const Result workThenDirect = Run("Work + call: work + direct native call", iterations, [&] {
 		++workDirectDimension;
 		DoNotOptimize(workDirectDimension);
 		int worked = SimulateWork(workDirectDimension);
@@ -214,8 +212,7 @@ int main(int argc, char** argv)
 	});
 
 	int workReflectedDimension = startingDimension;
-	const Result workThenReflected = Run("Work + call: work + reflected InvokeAs", iterations, [&]
-	{
+	const Result workThenReflected = Run("Work + call: work + reflected InvokeAs", iterations, [&] {
 		++workReflectedDimension;
 		DoNotOptimize(workReflectedDimension);
 		int worked = SimulateWork(workReflectedDimension);
@@ -261,13 +258,10 @@ int main(int argc, char** argv)
 	std::println("");
 	std::println("Work + call: reflected dispatch as a share of total iteration cost:");
 	ReportRelative(workThenDirect, workThenReflected);
-	const double dispatchDelta =
-		workThenReflected.NanosecondsPerOperation - workThenDirect.NanosecondsPerOperation;
-	const double dispatchShare = workThenReflected.NanosecondsPerOperation == 0.0
-		                             ? 0.0
-		                             : 100.0 * dispatchDelta / workThenReflected.NanosecondsPerOperation;
-	std::println("Reflected dispatch delta: {:.2f} ns/op ({:.1f}% of the work+reflected iteration)",
-	             dispatchDelta, dispatchShare);
+	const double dispatchDelta = workThenReflected.NanosecondsPerOperation - workThenDirect.NanosecondsPerOperation;
+	const double dispatchShare =
+		workThenReflected.NanosecondsPerOperation == 0.0 ? 0.0 : 100.0 * dispatchDelta / workThenReflected.NanosecondsPerOperation;
+	std::println("Reflected dispatch delta: {:.2f} ns/op ({:.1f}% of the work+reflected iteration)", dispatchDelta, dispatchShare);
 
 	return 0;
 }

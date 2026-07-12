@@ -5,8 +5,7 @@ import std;
 
 int main(const int argc, char** argv)
 {
-	const std::unique_ptr<PgE::AppDescriptorBase> appDescriptor =
-		PgE::GetAppDescriptor(PgE::CommandLine{.Argc = argc, .Argv = argv});
+	const std::unique_ptr<PgE::AppDescriptorBase> appDescriptor = PgE::GetAppDescriptor(PgE::CommandLine{.Argc = argc, .Argv = argv});
 
 	PgE::Engine engine(*appDescriptor);
 

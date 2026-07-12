@@ -31,8 +31,7 @@ namespace PgE
 		}
 
 		std::size_t expected = 0;
-		for (const std::meta::info member :
-		     std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()))
+		for (const std::meta::info member : std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()))
 		{
 			const auto [bytes, bits] = std::meta::offset_of(member);
 			if (bits != 0)

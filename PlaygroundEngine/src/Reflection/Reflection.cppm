@@ -20,7 +20,7 @@ namespace PgE
 	// typed-to-erased step the erased FindByValue cannot do for us, since it has no static type to work from.
 
 	export template <typename Enum>
-		requires std::is_enum_v<Enum>
+	requires std::is_enum_v<Enum>
 	std::optional<std::string_view> EnumToName(const Enum value)
 	{
 		const TypeInfo& type = TypeOf<Enum>();
@@ -34,7 +34,7 @@ namespace PgE
 	}
 
 	export template <typename Enum>
-		requires std::is_enum_v<Enum>
+	requires std::is_enum_v<Enum>
 	std::optional<Enum> EnumFromName(const std::string_view identifier)
 	{
 		const TypeInfo& type = TypeOf<Enum>();

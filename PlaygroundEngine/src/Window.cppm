@@ -7,19 +7,17 @@ import std;
 namespace PgE
 {
 	template <typename Backend>
-	concept WindowBackendInterface =
-		requires(Backend backend, const Backend constBackend, const WindowSpecification& specification) {
-			{ Backend::Create(specification) } -> std::same_as<std::expected<std::unique_ptr<Backend>, WindowError>>;
-			{ backend.PollEvents() } -> std::same_as<void>;
-			{ constBackend.SwapBuffers() } -> std::same_as<void>;
-			{ constBackend.ShouldClose() } -> std::same_as<bool>;
-		};
+	concept WindowBackendInterface = requires(Backend backend, const Backend constBackend, const WindowSpecification& specification) {
+		{ Backend::Create(specification) } -> std::same_as<std::expected<std::unique_ptr<Backend>, WindowError>>;
+		{ backend.PollEvents() } -> std::same_as<void>;
+		{ constBackend.SwapBuffers() } -> std::same_as<void>;
+		{ constBackend.ShouldClose() } -> std::same_as<bool>;
+	};
 
 	export class Window
 	{
 	public:
-		[[nodiscard]] static std::expected<std::unique_ptr<Window>, WindowError> Create(
-			const WindowSpecification& specification);
+		[[nodiscard]] static std::expected<std::unique_ptr<Window>, WindowError> Create(const WindowSpecification& specification);
 
 		~Window();
 

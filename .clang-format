@@ -1,0 +1,36 @@
+# PlaygroundEngine formatting. clang-format owns layout, braces, whitespace, and line length; the
+# textual lint (scripts/lint.sh) owns what clang-format cannot (em-dash ban, comment length).
+# Point ReSharper at this file so the IDE and the pipeline agree.
+Language: Cpp
+Standard: Latest
+BasedOnStyle: Microsoft
+ColumnLimit: 150
+UseTab: Always
+TabWidth: 4
+IndentWidth: 4
+PointerAlignment: Left
+AccessModifierOffset: -4
+NamespaceIndentation: All
+FixNamespaceComments: false
+IndentRequiresClause: false
+BreakTemplateDeclarations: Yes
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortCaseLabelsOnASingleLine: true
+BinPackParameters: false
+InsertBraces: true
+ReflowComments: false
+SortIncludes: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false

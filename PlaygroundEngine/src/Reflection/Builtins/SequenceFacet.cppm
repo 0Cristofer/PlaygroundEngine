@@ -33,13 +33,16 @@ namespace PgE
 		using ReserveThunk = void (*)(void*, std::size_t);
 		using AppendThunk = std::expected<void, FacetError> (*)(void*, const TypedRef&);
 
-		constexpr SequenceFacet(const TypeReference element, const SizeThunk size,
-		                        const ElementRefThunk elementRef, const ConstElementRefThunk constElementRef,
-		                        const ClearThunk clear, const ReserveThunk reserve, const AppendThunk append) :
-			_element(element), _size(size), _elementRef(elementRef), _constElementRef(constElementRef),
-			_clear(clear), _reserve(reserve), _append(append)
-		{
-		}
+		constexpr SequenceFacet(const TypeReference element,
+								const SizeThunk size,
+								const ElementRefThunk elementRef,
+								const ConstElementRefThunk constElementRef,
+								const ClearThunk clear,
+								const ReserveThunk reserve,
+								const AppendThunk append)
+			: _element(element), _size(size), _elementRef(elementRef), _constElementRef(constElementRef), _clear(clear), _reserve(reserve),
+			  _append(append)
+		{}
 
 		const TypeInfo& ElementType() const { return _element.Get(); }
 

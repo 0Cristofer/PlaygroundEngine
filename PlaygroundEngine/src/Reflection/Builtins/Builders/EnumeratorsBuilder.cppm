@@ -23,8 +23,8 @@ namespace PgE::detail
 		using Underlying = std::underlying_type_t<Enum>;
 
 		static_assert(sizeof(Underlying) <= sizeof(std::uint64_t),
-		              "Enumerator value does not fit in uint64_t: enum underlying type exceeds 64 bits "
-		              "(a GCC extended-integer base). Such an enum cannot cross the C# boundary either.");
+					  "Enumerator value does not fit in uint64_t: enum underlying type exceeds 64 bits "
+					  "(a GCC extended-integer base). Such an enum cannot cross the C# boundary either.");
 
 		static constexpr std::uint64_t Value = static_cast<std::uint64_t>(static_cast<Underlying>([:Enumerator:]));
 	};
@@ -32,9 +32,8 @@ namespace PgE::detail
 	template <std::meta::info Enumerator>
 	consteval EnumeratorInfo MakeEnumerator()
 	{
-		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator),
-		                      EnumeratorValueOf<Enumerator>::Value,
-		                      MakeAnnotations<Enumerator>());
+		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator), EnumeratorValueOf<Enumerator>::Value,
+							  MakeAnnotations<Enumerator>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

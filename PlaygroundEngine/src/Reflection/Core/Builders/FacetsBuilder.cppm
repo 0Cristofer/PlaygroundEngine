@@ -27,9 +27,13 @@ namespace PgE::detail
 		// A facet declares whether it supersedes the structural view; one that adds information alongside the
 		// fields (a future provenance facet) simply omits the member and reads as false.
 		if constexpr (requires { Facet::Supersedes; })
+		{
 			return Facet::Supersedes;
+		}
 		else
+		{
 			return false;
+		}
 	}
 
 	template <typename... Facets>
@@ -46,9 +50,13 @@ namespace PgE::detail
 		// facet, and recursion into T, nothing else. No facet kind is named here.
 		using T = [:MetaType:];
 		if constexpr (requires { TypeInfoTraits<T>::MakeFacets(); })
+		{
 			return AnyFacetSupersedes(TypeInfoTraits<T>::MakeFacets());
+		}
 		else
+		{
 			return false;
+		}
 	}
 
 	template <std::meta::info MetaType, std::size_t Index>
