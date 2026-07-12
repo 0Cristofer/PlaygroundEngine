@@ -11,13 +11,9 @@ import :Facets;
 
 import std;
 
-// Assembles the type-erased facet table MakeType stores on a TypeInfo, without naming a single facet kind:
-// a TypeInfoTraits<T> specialization returns its facets from one MakeFacets() hook (a std::tuple, so a type
-// may carry several heterogeneous facets), and this partition keys each entry by the facet's own type and
-// reads its Supersedes flag generically off that type. The built-in string/sequence/enumeration facets and
-// any user-defined one flow through this same assembly unchanged; adding a facet is a new TypeInfoTraits
-// specialization (and, if it stops the structural walk, a Supersedes = true member on the facet), never an
-// edit here. The specializations are found at MakeType's instantiation site, so this file imports none.
+// Assembles the type-erased facet table generically, naming no facet kind: it keys each entry by the
+// facet's own type and reads its Supersedes flag off that type. Adding a facet is a new TypeInfoTraits
+// specialization, never an edit here. See docs/ReflectionInternals.md (Facets).
 
 namespace PgE::detail
 {

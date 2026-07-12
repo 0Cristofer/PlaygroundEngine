@@ -133,11 +133,9 @@ namespace PgE::detail
 		// constructor still binds by copy.
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
 
-		// Call through &[:MetaFunction:] rather than a direct member splice. GCC applies member access
-		// control to a spliced call expression (obj->[:M:](...)) even when M came from access_context::
-		// unchecked(), but not to forming a pointer from the reflection nor to calling through it. Routing
-		// the call through the pointer is what lets reflection invoke private member functions, the way C#
-		// reflection can, and keeps the private-member metadata symmetric with fields.
+		// Call through &[:MetaFunction:], not a direct member splice: it lets reflection invoke private member
+		// functions (GCC applies access control to a spliced call but not to a call through a pointer).
+		// See docs/ReflectionInternals.md (function invocation through a pointer).
 		constexpr auto pointer = &[:MetaFunction:];
 		if constexpr (std::meta::is_static_member(MetaFunction))
 		{
@@ -233,11 +231,9 @@ namespace PgE::detail
 	template <typename T, std::meta::info MetaFunction, std::size_t... I>
 	consteval bool IsInvocableImpl(std::index_sequence<I...>)
 	{
-		// Mirror DoCall exactly: same &[:MetaFunction:] pointer call, same ArgumentBinding::Bind for each
-		// argument (so a copy-only by-value parameter is tested by copy, not by a would-be-deleted move). A
-		// member function our thunk cannot call on the erased lvalue object (an rvalue-ref-qualified overload,
-		// say) reflects as metadata with no invoker, the way a bitfield reflects with no borrow, rather than
-		// failing the whole type's build.
+		// Mirror DoCall exactly (same pointer call, same ArgumentBinding::Bind per argument). A function the
+		// thunk cannot call on the erased lvalue (an rvalue-ref-qualified overload) reflects as metadata with
+		// no invoker, the way a bitfield reflects with no borrow, rather than failing the whole type's build.
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
 		if constexpr (std::meta::is_static_member(MetaFunction))
 		{

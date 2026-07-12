@@ -1,29 +1,8 @@
 #pragma once
 
-// =============================================================================
-// Inheritance, Field Type Names, std::type_index, and Enum Reflection
-//
-// Covers the remaining reflection features needed for a full runtime system:
-//
-//   Inheritance      — nonstatic_data_members_of only returns DIRECT members.
-//                      bases_of + recursion is required to reach inherited fields.
-//
-//   Field type names — display_string_of gives a human-readable name for any type,
-//                      including templates like std::string. identifier_of fails on
-//                      template specialisations, so display_string_of is preferred.
-//
-//   std::type_index  — typeid(typename [:splice:]) recovers a std::type_info from a
-//                      reflection. The 'typename' keyword is required to tell the
-//                      compiler the splice produces a type, not a value expression.
-//                      This is the key for a runtime registry's Get<T>() lookup.
-//
-//   Enum reflection  — enumerators_of lists enum values by name. The splicer
-//                      [:enumerator:] is consteval-only in GCC, so values must be
-//                      bound to a constexpr local before use in runtime code.
-//
-// Note: DemoTypeExploration uses PlayerState from annotation_registry.h.
-//       Include annotation_registry.h before this file.
-// =============================================================================
+// Inheritance, field type names, std::type_index, and enum reflection: bases_of + recursion for inherited
+// fields, display_string_of for template type names, typeid(typename [:splice:]) for a type_index, and
+// enumerators_of for enums. See docs/ReflectionInternals.md (Validated std::meta patterns).
 
 struct Entity
 {
@@ -32,7 +11,7 @@ struct Entity
 };
 
 // Actor inherits Entity. Used to show that nonstatic_data_members_of returns
-// only the direct members (name, speed) — not the inherited ones (id, active).
+// only the direct members (name, speed), not the inherited ones (id, active).
 struct Actor : Entity
 {
 	std::string name  = "Actor";
@@ -105,7 +84,7 @@ void DemoTypeExploration()
 	template for (constexpr auto enumerator : std::define_static_array(std::meta::enumerators_of(^^Team)))
 	{
 		// EnumValue<enumerator>() is consteval, so its result must be captured in a
-		// constexpr local — this puts the call in a constant-evaluated context,
+		// constexpr local, this puts the call in a constant-evaluated context,
 		// satisfying GCC's restriction on consteval-only expressions.
 		constexpr auto value = static_cast<int>(EnumValue<enumerator>());
 

@@ -8,10 +8,9 @@ import :TypeInfo;
 
 import std;
 
-// Fills TypeTraits from the type system: category, byte layout, and the trait predicates that
-// downstream systems (serialization, C# marshaling, GPU interop, replication) branch on. Each fact
-// is a whole-type scalar read straight off the std::meta::info, with no recursion into members.
-// Non-std::meta providers (runtime-constructed types, generated code) populate the same struct.
+// Fills TypeTraits from the type system: category, byte layout, and the trait predicates downstream
+// systems (serialization, C# marshaling, GPU interop, replication) branch on. Each fact is a whole-type
+// scalar read off the std::meta::info; non-std::meta providers populate the same struct.
 
 namespace PgE::detail
 {

@@ -10,11 +10,8 @@ namespace PgE
 {
 	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj)
 	{
-		// A type with a stringify thunk renders through it: a formattable leaf, the type-name placeholder, or a
-		// facet that installed its own rendering (a quoted string, a "[...]" sequence, an enumerator name). The
-		// renderer names no facet; each facet's rendering lives in the thunk its TypeInfoTraits set, and a
-		// sequence thunk recurses back into ObjectToString for its elements. A type with no thunk is a struct,
-		// rendered by walking its fields.
+		// A type with a stringify thunk renders through it; a type without one is a struct, rendered by walking
+		// its fields. See docs/ReflectionInternals.md (Rendering).
 		if (typeInfo.CanStringify())
 		{
 			return typeInfo.Stringify(obj);

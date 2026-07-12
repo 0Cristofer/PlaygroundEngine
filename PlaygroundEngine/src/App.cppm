@@ -6,9 +6,8 @@ namespace PgE
 {
 	export class EngineContext
 	{
-		// The app's handle to the engine after boot: register phase callbacks,
-		// subscribe to published signals/queues, and reach curated per-system
-		// extension APIs. Vends engine capabilities, never engine lifecycle
+		// The app's handle to the engine after boot: register phase callbacks, subscribe to published
+		// signals/queues, reach curated per-system extension APIs. Vends capabilities, never lifecycle
 		// (Boot/Run/Shutdown stay on Engine). Empty until the first system exists.
 	};
 

@@ -12,14 +12,9 @@ namespace PgE
 {
 	export class SequenceFacet
 	{
-		// An ordered, random-access run of elements. Element access is expected O(1) (the std deny-list keeps
-		// non-random-access containers out of reflected data); mutation goes through the thunks. A fixed-size
-		// sequence (std::array, T[N], a span) has no clear/reserve/append and reports so through the CanX
-		// queries, mutating only through the element refs. A read-only view (std::span<const T>) goes one step
-		// further: its elements are not writable in place, so the mutable element ref is absent too and
-		// CanMutateElements() is false; the const element ref is always present. Its elements are the whole
-		// value, so this supersedes the raw field view (see Supersedes); the thunks are captured at
-		// reflection-build-time where the concrete type is known.
+		// An ordered, random-access run of elements; capacity mutation and element mutation each go through
+		// thunks gated by CanX queries, so fixed-size and read-only views report their limits. It supersedes
+		// the structural field view. See docs/ReflectionInternals.md (Facets).
 
 	public:
 		// Read generically by the builder: a facet declaring Supersedes = true empties the structural

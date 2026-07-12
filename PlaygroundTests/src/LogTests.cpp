@@ -3,10 +3,9 @@
 import std;
 import PlaygroundEngine.Log;
 
-// Characterizes the parser that turns source_location::function_name() into the
-// qualified name shown in every log line. Inputs are literal GCC-16 signature
-// strings: the format is compiler-specific, so these also act as a tripwire for
-// toolchain churn that would silently corrupt logged names.
+// Characterizes the parser that turns source_location::function_name() into the qualified name shown in
+// every log line. Inputs are literal GCC-16 signature strings (compiler-specific), so these also act as
+// a tripwire for toolchain churn that would silently corrupt logged names.
 TEST_CASE("ExtractQualifiedName reduces a signature to its qualified name")
 {
 	using PgE::detail::ExtractQualifiedName;

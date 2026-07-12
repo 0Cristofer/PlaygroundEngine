@@ -17,14 +17,9 @@ import :Facets;
 
 import std;
 
-// The home for building a type's runtime TypeInfo: it orchestrates the per-kind builders (fields,
-// functions, annotations, and later bases, size, enumerators) into one TypeInfo. New kinds of type
-// information are added here, delegating collection-heavy work to their own :*Builder partition.
-//
-// It also holds the sole definition of the TypeOfMeta recursion knot (declared in :MetaCommon).
-// Instantiating it here pulls in the sub-builders, which recurse back into TypeOfMeta for member and
-// signature types; the definition being visible only in this partition is what keeps the sub-builders
-// dependent on the declaration alone, so the partition import graph stays acyclic.
+// Builds a type's runtime TypeInfo by orchestrating the per-kind builders, and holds the sole definition
+// of the TypeOfMeta recursion knot (declared in :MetaCommon). See docs/ReflectionInternals.md (the
+// recursion knot, the builder pipeline).
 
 namespace PgE::detail
 {
@@ -60,10 +55,8 @@ namespace PgE::detail
 	template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta()
 	{
-		// Key the cached TypeInfo on the canonical type, not the spelling: every alias of a type
-		// (std::uint16_t, std::underlying_type_t<E>, unsigned short) must resolve to one instance, so the
-		// pointer identity that annotation matching, serialization, and C# dedup rely on holds regardless
-		// of how a type was named at the query site.
+		// Key the cached TypeInfo on the canonical (dealiased) type, so every alias resolves to one instance
+		// and pointer identity holds. See docs/ReflectionInternals.md (canonical caching and dealiasing).
 		if constexpr (std::meta::dealias(MetaType) != MetaType)
 		{
 			return TypeOfMeta<std::meta::dealias(MetaType)>();

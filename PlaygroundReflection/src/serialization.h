@@ -1,22 +1,8 @@
 #pragma once
 
-// =============================================================================
-// JSON Deserialization via Reflection
-//
-// Demonstrates the most direct serialization use-case: given a flat JSON string,
-// populate any struct's fields by matching JSON keys to member names at compile
-// time and converting the raw string values to the correct C++ types at runtime.
-//
-// This is the core value proposition of reflection for serialization:
-// FromJson<T> works for any struct with no per-type boilerplate.
-//
-// Concepts demonstrated:
-//   using FieldType = [:std::meta::type_of(member):]
-//                          — splice the field's reflected type into a real C++ type alias
-//   if constexpr (std::is_same_v<FieldType, int>)
-//                          — compile-time branch per field type (no splicer in template args)
-//   obj.[:member:] = value — splicer used for writing to a field, not just reading
-// =============================================================================
+// JSON deserialization via reflection: FromJson<T> matches JSON keys to member names at compile time and
+// converts to the field types at runtime, for any struct with no per-type boilerplate.
+// See docs/ReflectionInternals.md (Validated std::meta patterns).
 
 // --- Demo struct ---
 
@@ -28,13 +14,8 @@ struct GameEntity
 	bool        active = false;
 };
 
-// =============================================================================
-// Minimal flat-JSON parser
-//
-// Handles only top-level key/value pairs — no nesting, no arrays.
-// Returns a map of raw string values keyed by field name.
-// String values have their quotes stripped; booleans and numbers are kept as-is.
-// =============================================================================
+// Minimal flat-JSON parser: only top-level key/value pairs (no nesting, no arrays). Returns a map of raw
+// string values keyed by field name; string quotes are stripped, booleans and numbers kept as-is.
 std::map<std::string, std::string> ParseFlatJson(std::string_view json)
 {
 	std::map<std::string, std::string> fields;
@@ -89,19 +70,9 @@ std::map<std::string, std::string> ParseFlatJson(std::string_view json)
 	return fields;
 }
 
-// =============================================================================
-// FromJson<T>
-//
-// Deserializes a flat JSON string into an instance of T.
-//
-// For each data field of T (enumerated at compile time via reflection):
-//   1. Look up the field's name in the parsed JSON map.
-//   2. Deduce the field's C++ type via type_of + splice into a using-alias.
-//   3. Convert the raw string to that type and assign it through a splicer.
-//
-// Fields absent from the JSON are left at their default-initialised values.
-// Field types not handled by the if-constexpr chain are silently skipped.
-// =============================================================================
+// FromJson<T> deserializes a flat JSON string into a T: for each data field (enumerated at compile time),
+// look up its name in the parsed map, deduce its type via type_of spliced into a using-alias, and convert
+// the raw string and assign through a splicer.
 template <typename T>
 T FromJson(std::string_view json)
 {
@@ -120,7 +91,7 @@ T FromJson(std::string_view json)
 
 		const std::string& rawValue = it->second;
 
-		// Compile-time branch per field type — exactly one branch is instantiated.
+		// Compile-time branch per field type, exactly one branch is instantiated.
 		// obj.[:member:] = … writes to the field via a member-access splicer.
 		if constexpr (std::is_same_v<FieldType, int>)
 			obj.[:member:] = std::stoi(rawValue);
@@ -139,7 +110,7 @@ void DemoSerialization()
 {
 	std::cout << "\n=== JSON Deserialization ===\n";
 
-	// Hardcoded JSON — in a real engine this would come from a file or network packet.
+	// Hardcoded JSON, in a real engine this would come from a file or network packet.
 	constexpr std::string_view json = R"({
     "name"  : "Player One",
     "health": 85,

@@ -29,10 +29,9 @@ namespace PgE
 			return logger;
 		}
 
-		// Ambient L0 facility (see ApplicationArchitecture.md): the logger is created on
-		// first use with a default stdout sink, so it is valid before Boot and after
-		// Shutdown, with no Engine. Configure() only swaps sinks and levels on this same
-		// instance. Function-local static init is thread-safe.
+		// Ambient L0 facility (see ApplicationArchitecture.md): the logger is created on first use with a
+		// default stdout sink, so it is valid before Boot and after Shutdown, with no Engine. Configure() only
+		// swaps sinks and levels on this same instance; function-local static init is thread-safe.
 		std::shared_ptr<spdlog::logger>& DefaultLogger()
 		{
 			static std::shared_ptr<spdlog::logger> logger = MakeDefaultLogger();
@@ -144,10 +143,9 @@ namespace PgE
 
 	namespace
 	{
-		// Interns each call site's parsed name so the pointer handed to spdlog's
-		// non-owning source_loc lives for the program's duration, safe for any sink,
-		// including a future asynchronous one. Keyed on the function_name() pointer,
-		// a stable per-call-site static, so a given site is parsed only once.
+		// Interns each call site's parsed name so the pointer handed to spdlog's non-owning source_loc lives
+		// for the program's duration, safe for any sink. Keyed on the function_name() pointer, a stable
+		// per-call-site static, so a given site is parsed only once.
 		const char* InternQualifiedName(const char* signature)
 		{
 			static std::mutex poolMutex;

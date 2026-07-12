@@ -1,22 +1,8 @@
 #pragma once
 
-// =============================================================================
-// Annotation Filtering + Type-Specific Function Registry
-//
-// Shows how to attach compile-time tags to fields and query them at reflection
-// time, then builds a simple name→function-pointer map for a concrete type.
-// This is the "simple" approach with a fixed signature; see generic_registry.h
-// for the general case that works across any type and any signature.
-//
-// Concepts demonstrated:
-//   [[=Tag{}]]                       : attaches an empty tag as a compile-time annotation
-//   [[=Range{0, 100}]]               : attaches a VALUE-carrying annotation
-//   std::meta::annotations_of_with_type(member, ^^Tag)
-//                                    : retrieves annotations of a specific type on a member
-//   std::meta::extract<Tag>(anno)    : reads the stored value back out of an annotation
-//   +[](…){ … }                      : converts a captureless lambda to a plain function pointer
-//   self.[:member:]()                : splicer used to call a reflected member function
-// =============================================================================
+// Annotation filtering and a type-specific function registry: attach [[=Tag{}]] to fields, query them
+// at reflection time, and build a name-to-function-pointer map for a concrete type.
+// See docs/ReflectionInternals.md (Validated std::meta patterns).
 
 // Empty tag struct. Attaching it as [[=Replicated{}]] on a field marks it
 // for network replication. Any empty struct can serve as an annotation tag.
@@ -59,32 +45,13 @@ std::unordered_map<std::string_view, PlayerStateThunk> BuildPlayerStateRegistry(
 	return registry;
 }
 
-// =============================================================================
-// Value-carrying annotations
-//
-// An annotation is not limited to a presence flag: the attached object can hold
-// data, read back at compile time with std::meta::extract<T>. This is the
-// substrate for editor property metadata (use case 5): sliders, tooltips,
-// grouping, declared inline on the field instead of in a side table.
-//
-// Two constraints the toolchain enforces here:
-//   1. The annotation type must be STRUCTURAL (a valid non-type template
-//      argument): public members, no private state. std::string_view fails
-//      (its pointer/length members are private), and a raw const char* to a
-//      string literal fails too: a string literal has no guaranteed unique
-//      address, so it is not a valid constant and extract<T> rejects it. The
-//      fix is std::define_static_string, which promotes the literal to a
-//      uniqued static array and hands back a stably-addressed pointer.
-//   2. An annotation cannot be spliced ([:anno:] is rejected). extract<T> is
-//      the only way to recover the value.
-// =============================================================================
+// Value-carrying annotations: the attached object holds data read back with std::meta::extract<T> (the
+// substrate for editor property metadata). The annotation type must be structural, and an annotation
+// cannot be spliced. See docs/ReflectionInternals.md (Annotations).
 
-// A string annotation value. define_static_string does the work: it interns the
-// literal into a static array, so the stored pointer is a self-contained
-// constant with static lifetime. That means no fixed capacity, no copy, and the
-// View() stays valid even after the extracted constant goes out of scope. The
-// const char* parameter keeps nested init (Category{"Combat"}) a single
-// user-defined conversion.
+// A string annotation value: define_static_string interns the literal into a static array, so the stored
+// pointer is a self-contained constant with static lifetime (no fixed capacity, no copy, View() stays
+// valid). The const char* parameter keeps nested init a single user-defined conversion.
 struct AnnotationString
 {
 	const char* text;

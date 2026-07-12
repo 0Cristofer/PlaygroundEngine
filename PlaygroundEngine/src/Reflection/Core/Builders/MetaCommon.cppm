@@ -11,17 +11,13 @@ import :TypeReference;
 
 import std;
 
-// Shared foundation for the reflection builders. Holds the recursion knot: TypeOfMeta is only
-// declared here, so the field/function builders can reference &TypeOfMeta<memberType>() without
-// instantiating it. The single definition lives in the :TypeBuilder assembler partition, which is the
-// only unit that imports the sub-builders. That keeps the partition import graph acyclic.
+// Shared foundation for the reflection builders, and the declaration of the TypeOfMeta recursion knot.
+// See docs/ReflectionInternals.md (the recursion knot, the facet-authoring toolkit).
 
 namespace PgE::detail
 {
-	// TypeOfMeta, TypeReferenceTo, IdentifierOf and DisplayStringOf are the facet-authoring toolkit: exported
-	// because a facet binding lives in its own module (Builtins, or a user's) and reaches back for them across
-	// the module boundary, where only exported names are visible. StringifyValue and IsClassOrUnion stay
-	// module-internal (only the core builders use them).
+	// TypeOfMeta, TypeReferenceTo, IdentifierOf, DisplayStringOf are the exported facet-authoring toolkit;
+	// StringifyValue and IsClassOrUnion stay module-internal. See docs/ReflectionInternals.md (Facets).
 
 	export template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta();
@@ -29,16 +25,8 @@ namespace PgE::detail
 	export template <std::meta::info MetaType>
 	consteval TypeReference TypeReferenceTo()
 	{
-		// Every cross-type reference stored in the metadata (a field's type, a parameter or return type, an
-		// annotation's type, an enum's underlying type) is bound the same way: to the address of TypeOfMeta,
-		// not a call. Deferring the call to first runtime read is what lets a type name itself or another
-		// type still under construction. See TypeReference.
-		//
-		// Bind to the canonical (dealiased) type so we never instantiate TypeOfMeta on an alias spelling.
-		// TypeOfMeta already dealiases internally, so the alias instantiation would only tail-call this one;
-		// skipping it also dodges a GCC-16 reflection mangling collision where the alias's argument is
-		// dropped from the symbol, making distinct alias instantiations (e.g. underlying_type_t of two enums)
-		// resolve to one duplicately-defined symbol.
+		// Bind to the address of TypeOfMeta on the dealiased type, not a call. See docs/ReflectionInternals.md
+		// (TypeReference lazy cross-references, and the GCC 16 mangling-collision workaround the dealias dodges).
 		return TypeReference{.Resolve = &TypeOfMeta<std::meta::dealias(MetaType)>};
 	}
 

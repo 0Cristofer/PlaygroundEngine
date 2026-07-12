@@ -1,11 +1,6 @@
-// Development scratchpad, NOT a real test. A hidden doctest case for running engine
-// code by hand during development and watching log output, using the test harness as
-// a ready-made execution environment (it already links the engine and inits logging).
-//
-// Skipped by default so normal and CI runs ignore it. Run it on demand via the shared
-// "Scratchpad test" IDE run configuration (.run/), which builds, runs, and can debug it;
-// or directly:
-//   ./build/linux/PlaygroundTests/Debug/PlaygroundTests --test-case=scratch --no-skip
+// Development scratchpad, NOT a real test: a hidden, skipped doctest case for running engine code by hand
+// and watching log output (the harness links the engine and inits logging). Run via the "Scratchpad test"
+// IDE config, or: ./build/linux/PlaygroundTests/Debug/PlaygroundTests --test-case=scratch --no-skip
 #include <doctest/doctest.h>
 
 #include "PlaygroundEngine/Log.h"

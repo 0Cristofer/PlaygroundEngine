@@ -1,39 +1,14 @@
 #pragma once
 
-// =============================================================================
-// Construction via Annotated Static Factory
-//
-// Problem: constructor splicing is not supported in GCC 16 (or P2996 generally
-// — constructors cannot appear in a splice expression). Parameter annotations
-// ARE supported on both constructors and regular functions.
-//
-// Solution: a [[=Factory{}]]-annotated static function whose parameters are
-// tagged [[=Injected{}]] or [[=Serialized{}]]. ConstructFromJson<T> finds this
-// function at compile time and generates the call automatically — no separate
-// code generation tool, std::meta IS the code generation.
-//
-// Concepts demonstrated:
-//   consteval function + regular for loop  — compile-time search over members
-//   FindFactory<T>() as a template arg     — passing a consteval result directly
-//                                            into a template parameter (std::meta::info
-//                                            is a structural type, so this is legal)
-//   InvokeStatic<Fn>                       — static-function variant of InvokeImpl
-//                                            (no object pointer, direct [:Fn:] call)
-//   InvokeStaticTyped<Fn>                  — splice in RETURN-TYPE position:
-//                                            [:return_type_of(Fn):] as the function's
-//                                            own return type, no std::any round trip
-//   mixed injected/serialized dispatch     — runtime counter tracks which injected
-//                                            arg to pull next as template for unrolls
-// =============================================================================
+// Construction via an annotated static factory: the pattern the engine uses instead of constructor
+// reflection (constructor splicing is unsupported in GCC 16 / P2996). A [[=Factory{}]] static function
+// with [[=Injected{}]]/[[=Serialized{}]] parameters. See docs/ReflectionInternals.md (Validated patterns).
 
 struct Factory    {};   // marks the static function to use for construction
 struct Injected   {};   // parameter is a runtime dependency, passed by the caller
 struct Serialized {};   // parameter comes from serialized data (JSON, save file, …)
 
-// -----------------------------------------------------------------------------
-// Demo type — no default constructor.
-// Weapon::Create is the single, meaningful construction point.
-// -----------------------------------------------------------------------------
+// Demo type with no default constructor; Weapon::Create is the single, meaningful construction point.
 struct Weapon
 {
 	// [[=Factory{}]] tells the reflection system this is the construction entry point.
@@ -55,14 +30,9 @@ private:
 		: id(id), name(std::move(name)), damage(damage) {}
 };
 
-// -----------------------------------------------------------------------------
-// Step 1: FindFactory<T>()
-//
-// Searches T's members at compile time for the [[=Factory{}]]-annotated function.
-// A consteval function can use a plain for loop — template for is only needed
-// when you want to expand each iteration as a separate template instantiation.
-// Returns std::meta::info — a structural scalar type, usable as a template arg.
-// -----------------------------------------------------------------------------
+// Step 1: FindFactory<T>() searches T's members at compile time for the [[=Factory{}]]-annotated function.
+// A consteval function can use a plain for loop; it returns std::meta::info, a structural type usable as a
+// template arg. See docs/ReflectionInternals.md.
 template <typename T>
 consteval std::meta::info FindFactory()
 {
@@ -71,17 +41,13 @@ consteval std::meta::info FindFactory()
 			if (!std::meta::annotations_of_with_type(member, ^^Factory).empty())
 				return member;
 
-	// No factory found — downstream template instantiation will produce a clearer error.
+	// No factory found, downstream template instantiation will produce a clearer error.
 	return {};
 }
 
-// -----------------------------------------------------------------------------
-// Step 2: InvokeStatic<Fn> — static-function variant of InvokeImpl
-//
-// For a static member function, [:Fn:] splices directly to a callable
-// (equivalent to Weapon::Create) so no object pointer is needed.
-// The InvokeImpl/Invoke split for the same consteval-only reason as before.
-// -----------------------------------------------------------------------------
+// Step 2: InvokeStatic<Fn>, the static-function variant. For a static member function, [:Fn:] splices
+// directly to a callable, so no object pointer is needed. The InvokeImpl/Invoke split is consteval-only,
+// as before.
 template <std::meta::info Fn, std::size_t... I>
 std::any InvokeStaticImpl(Args args, std::index_sequence<I...>)
 {
@@ -106,23 +72,9 @@ std::any InvokeStatic(Args args)
 	return InvokeStaticImpl<Fn>(args, std::make_index_sequence<paramCount>{});
 }
 
-// -----------------------------------------------------------------------------
-// Step 2b: InvokeStaticTyped<Fn> — strongly-typed return value
-//
-// Tests a splice context not covered elsewhere: the function's RETURN TYPE is
-// spliced directly from the reflection. Fn is a template parameter (a constant),
-// so [:return_type_of(Fn):] is usable in the signature itself.
-//
-// Compared to InvokeStatic:
-//   - the result comes back as its real type — no std::any round trip
-//     (which copies the object into the any, likely heap-allocating)
-//   - no is_void branch needed: `return f(...)` where f returns void is legal
-//
-// The erased InvokeStatic above is still the right shape for registries, where
-// every entry must share one signature to live in the same map. The typed
-// variant is for callers that know Fn at compile time — construction here,
-// generated binding thunks later.
-// -----------------------------------------------------------------------------
+// Step 2b: InvokeStaticTyped<Fn> splices the reflected return type into the invoker's own signature
+// ([:return_type_of(Fn):]), so the result comes back as its real type with no std::any round trip. The
+// erased InvokeStatic stays the right shape for registries. See docs/ReflectionInternals.md.
 template <std::meta::info Fn, std::size_t... I>
 [:std::meta::return_type_of(Fn):] InvokeStaticTypedImpl(Args args, std::index_sequence<I...>)
 {
@@ -137,25 +89,14 @@ template <std::meta::info Fn>
 	return InvokeStaticTypedImpl<Fn>(args, std::make_index_sequence<paramCount>{});
 }
 
-// -----------------------------------------------------------------------------
-// Step 3: ConstructImpl<T, Fn>
-//
-// This is the generated code — what a separate code generator would emit.
-// With std::meta it is written once generically and instantiated per type.
-//
-// Walks Fn's parameter list in declaration order. For each parameter:
-//   Injected   → pulls the next value from injectedArgs (caller-provided)
-//   Serialized → looks up by parameter name in parsedJson, converts by type
-//
-// Assembles a std::vector<std::any> in the correct order, then forwards to
-// InvokeStaticTyped which unpacks and calls the factory with real types —
-// the result comes back as T directly, no any_cast on the return value.
-// -----------------------------------------------------------------------------
+// Step 3: ConstructImpl<T, Fn> is the generated code, written once generically. It walks Fn's parameters
+// (Injected pulls the next caller value, Serialized looks up by name and converts by type) and forwards
+// to InvokeStaticTyped. See docs/ReflectionInternals.md.
 template <typename T, std::meta::info Fn>
 T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injectedArgs)
 {
 	std::vector<std::any> allArgs;
-	int injectedIdx = 0;   // runtime counter — incremented in Injected branches as
+	int injectedIdx = 0;   // runtime counter, incremented in Injected branches as
 						   // template for unrolls, preserving declaration order
 
 	template for (constexpr auto param :
@@ -187,12 +128,8 @@ T ConstructImpl(const std::map<std::string, std::string>& parsedJson, Args injec
 	return InvokeStaticTyped<Fn>(allArgs);
 }
 
-// -----------------------------------------------------------------------------
-// Public API
-//
-// FindFactory<T>() is called at compile time and its result is passed directly
-// as a non-type template argument to ConstructImpl — no runtime lookup.
-// -----------------------------------------------------------------------------
+// Public API: FindFactory<T>() runs at compile time and its result is passed directly as a non-type
+// template argument to ConstructImpl, so there is no runtime lookup.
 template <typename T>
 T ConstructFromJson(std::string_view json, Args injectedArgs = {})
 {
@@ -207,8 +144,8 @@ void DemoConstruction()
 {
 	std::cout << "\n=== Construction via Annotated Factory ===\n";
 
-	// 'id' is Injected — provided by the caller (assigned by the entity system).
-	// 'name' and 'damage' are Serialized — come from the JSON.
+	// 'id' is Injected, provided by the caller (assigned by the entity system).
+	// 'name' and 'damage' are Serialized, come from the JSON.
 	// The constructor is private; Create() is the only entry point.
 	constexpr std::string_view json = R"({
         "name"  : "Excalibur",
@@ -224,7 +161,7 @@ void DemoConstruction()
 
 	// Direct strongly-typed call: all three args provided manually, in
 	// declaration order. The return type is spliced from the reflection,
-	// so the result is a Weapon — no any_cast needed.
+	// so the result is a Weapon, no any_cast needed.
 	std::vector<std::any> daggerArgs = {2002, std::string{"Dagger"}, 7.5f};
 	Weapon dagger = InvokeStaticTyped<FindFactory<Weapon>()>(daggerArgs);
 

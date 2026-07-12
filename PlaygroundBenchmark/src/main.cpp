@@ -5,11 +5,9 @@ import PlaygroundBenchmark.Harness;
 
 namespace
 {
-	// Same shape as the reflection tests' Widget: a const, no-argument accessor and a
-	// two-argument mutator, so both the return-boxing path and the argument-marshalling path
-	// of the erased invoker are exercised. Mix is a deliberately heavier callee (a loop with
-	// branching and nontrivial arithmetic) used to see how the dispatch overhead compares once
-	// the reflected function itself does real work.
+	// Same shape as the reflection tests' Widget (a const accessor and a two-argument mutator), so both
+	// the return-boxing and argument-marshalling paths of the erased invoker are exercised. Mix is a
+	// deliberately heavier callee, to see how the dispatch overhead compares once the callee does real work.
 	struct Widget
 	{
 		int Width = 0;
@@ -95,10 +93,9 @@ int main(int argc, char** argv)
 	const FunctionInfo* resize = TypeOf<Widget>().FindFunctionsByIdentifier("Resize").front();
 	const FunctionInfo* mix = TypeOf<Widget>().FindFunctionsByIdentifier("Mix").front();
 
-	// Every loop body advances a `dimension` that is barriered so the optimizer must treat it as
-	// freshly changed each iteration, feeds it into the call, and accumulates the result. The
-	// direct and reflected loops share identical surrounding work, so the timing difference is
-	// the call mechanism itself and neither loop can be hoisted or folded to a constant.
+	// Every loop body advances a barriered `dimension` (so the optimizer treats it as freshly changed),
+	// feeds it into the call, and accumulates the result. The direct and reflected loops share identical
+	// surrounding work, so the timing difference is the call mechanism itself, and neither can be folded.
 
 	long long accumulator = 0;
 
@@ -153,10 +150,9 @@ int main(int argc, char** argv)
 		DoNotOptimize(accumulator);
 	});
 
-	// The lower-level erased path a visual-scripting VM would actually take: arguments and the
-	// return slot are assembled into TypedRefs at runtime from generic slots, so the type tags and
-	// marshalling are real work rather than the compile-time-folded tags InvokeAs<T> produces. The
-	// int type tag is fetched once, as a VM would cache it per value type.
+	// The lower-level erased path a visual-scripting VM would take: arguments and the return slot are
+	// assembled into TypedRefs at runtime from generic slots, so the type tags and marshalling are real
+	// work, not the compile-time-folded tags InvokeAs<T> produces. The int tag is fetched once, as a VM would.
 	const TypeInfo* const intTag = &TypeOf<int>();
 
 	int areaErasedDimension = startingDimension;

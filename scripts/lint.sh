@@ -57,7 +57,8 @@ for file in "${files[@]}"; do
 					if (text ~ /\*\//) { emit(); run = 0; inblock = 0 }
 					next
 				}
-				if (text ~ /^\/\//) { if (run == 0) { start = FNR } run++; next }
+				# Tool directives (ReSharper, NOLINT, clang-format) are not prose; they break the run.
+				if (text ~ /^\/\// && text !~ /^\/\/ *(ReSharper|NOLINT|clang-format)/) { if (run == 0) { start = FNR } run++; next }
 				emit(); run = 0
 				if (text ~ /^\/\*/ && text !~ /\*\//) { inblock = 1; start = FNR; run = 1 }
 			}

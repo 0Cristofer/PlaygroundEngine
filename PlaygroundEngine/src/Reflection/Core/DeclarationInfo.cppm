@@ -19,11 +19,9 @@ namespace PgE
 
 	export class DeclarationInfo
 	{
-		// The metadata every reflected declaration kind (type, field, function, parameter)
-		// shares: its names and its annotations. The identifier is what the author wrote in
-		// code and is the query key; it is empty for unnamed entities (fundamental types,
-		// unnamed parameters). The display name is implementation-defined diagnostic text
-		// for humans, always present, never a key.
+		// The metadata every reflected declaration (type, field, function, parameter) shares: its names and
+		// annotations. The identifier is what the author wrote and is the query key, empty for unnamed
+		// entities; the display name is implementation-defined diagnostic text, always present, never a key.
 
 	public:
 		constexpr DeclarationInfo(const std::string_view identifier,
