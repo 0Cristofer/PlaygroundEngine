@@ -40,15 +40,6 @@ namespace
 		Yellow = 3,
 		Blue = 4
 	};
-
-	class A
-	{
-	public:
-		A F()
-		{
-			return A();
-		}
-	};
 }
 
 // ReSharper restore CppEnumeratorNeverUsed
@@ -60,13 +51,13 @@ TEST_CASE("scratch" * doctest::skip())
 
 	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
 	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(),
-	        valueGet ? -1 : static_cast<int>(valueGet.error().Reason));
+	        valueGet ? "" : PgE::ToString(valueGet.error().Reason));
 
 	Movable source;
 	source.Tag = 5;
 	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
 	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(),
-	        valueSet ? -1 : static_cast<int>(valueSet.error().Reason));
+	        valueSet ? "" : PgE::ToString(valueSet.error().Reason));
 
 	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
 	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
@@ -78,10 +69,14 @@ TEST_CASE("scratch" * doctest::skip())
 		PGE_LOG(Info, "borrow move-assigned; Item.Tag={}", holder.Item.Tag);
 	}
 
-	for (const auto& typeOfColors = PgE::TypeOf<Colors>(); auto enumeratorInfo : typeOfColors.GetEnumeration()->GetEnumerators())
+	const auto& typeOfColors = PgE::TypeOf<Colors>();
+	constexpr auto color = Colors::Blue;
+	PGE_LOG(Info, "color: {}", PgE::ToString(color));
+	for (auto enumeratorInfo : typeOfColors.GetFacet<PgE::EnumerationFacet>()->GetEnumerators())
 	{
 		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
 	}
+
 	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
 	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
 

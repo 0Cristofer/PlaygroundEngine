@@ -2,11 +2,10 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:FunctionsBuilder;
-
-import PlaygroundEngine.Reflection.TypeInfoTraits;
+export module PlaygroundEngine.Reflection.Core:FunctionsBuilder;
 
 import :MetaCommon;
+import :FacetsBuilder;
 import :AnnotationsBuilder;
 import :TypeInfo;
 import :FunctionInfo;
@@ -275,8 +274,7 @@ namespace PgE::detail
 	template <std::meta::info MetaType>
 	consteval auto MakeFunctionsFromType()
 	{
-		using T = [:MetaType:];
-		if constexpr (TypeInfoTraits<T>::IsLeaf)
+		if constexpr (ProvidesSupersedingFacet<MetaType>())
 		{
 			return std::array<FunctionInfo, 0>{};
 		}

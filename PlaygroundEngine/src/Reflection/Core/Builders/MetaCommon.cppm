@@ -2,9 +2,9 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:MetaCommon;
+export module PlaygroundEngine.Reflection.Core:MetaCommon;
 
-import PlaygroundEngine.Reflection.TypeInfoTraits;
+import :TypeInfoTraits;
 
 import :TypeInfo;
 import :TypeReference;
@@ -18,10 +18,15 @@ import std;
 
 namespace PgE::detail
 {
-	template <std::meta::info MetaType>
+	// TypeOfMeta, TypeReferenceTo, IdentifierOf and DisplayStringOf are the facet-authoring toolkit: exported
+	// because a facet binding lives in its own module (Builtins, or a user's) and reaches back for them across
+	// the module boundary, where only exported names are visible. StringifyValue and IsClassOrUnion stay
+	// module-internal (only the core builders use them).
+
+	export template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta();
 
-	template <std::meta::info MetaType>
+	export template <std::meta::info MetaType>
 	consteval TypeReference TypeReferenceTo()
 	{
 		// Every cross-type reference stored in the metadata (a field's type, a parameter or return type, an
@@ -43,12 +48,12 @@ namespace PgE::detail
 		return TypeInfoTraits<T>::Stringify(*static_cast<const T*>(obj));
 	}
 
-	consteval std::string_view IdentifierOf(const std::meta::info entity)
+	export consteval std::string_view IdentifierOf(const std::meta::info entity)
 	{
 		return std::meta::has_identifier(entity) ? std::meta::identifier_of(entity) : std::string_view{};
 	}
 
-	consteval std::string_view DisplayStringOf(const std::meta::info entity)
+	export consteval std::string_view DisplayStringOf(const std::meta::info entity)
 	{
 		return std::meta::display_string_of(entity);
 	}

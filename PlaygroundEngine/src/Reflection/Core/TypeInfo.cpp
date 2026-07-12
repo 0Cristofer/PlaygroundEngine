@@ -1,81 +1,14 @@
-module PlaygroundEngine.Reflection;
+module PlaygroundEngine.Reflection.Core;
 
 import :FieldInfo;
 import :FunctionInfo;
 import :TypedRef;
+import :Facets;
 
 import std;
 
 namespace PgE
 {
-	namespace
-	{
-		std::string FieldToString(const FieldInfo& field, const void* obj)
-		{
-			if (const auto ref = field.GetRef(obj))
-				return field.GetTypeInfo().ObjectToString(ref->Data);
-
-			alignas(std::uintmax_t) std::byte slot[sizeof(std::uintmax_t)];
-			if (field.GetValue(obj, TypedRef{.Type = &field.GetTypeInfo(), .Data = slot, .IsConst = false}))
-				return field.GetTypeInfo().ObjectToString(slot);
-
-			return "<unreadable>";
-		}
-	}
-
-	std::string TypeInfo::ObjectToString(const void* obj) const
-	{
-		if (_stringifyThunk)
-			return _stringifyThunk(obj);
-
-		std::string out = "{";
-		bool firstField = true;
-		for (const FieldInfo& field : _fields)
-		{
-			if (!firstField)
-				out += ", ";
-			firstField = false;
-			out += field.GetIdentifier();
-			out += ": ";
-			out += FieldToString(field, obj);
-		}
-		return out + "}";
-	}
-
-	std::string TypeInfo::FunctionsToString() const
-	{
-		std::string out;
-		bool firstFunc = true;
-		for (const FunctionInfo& function : _functions)
-		{
-			if (!firstFunc)
-				out += '\n';
-			firstFunc = false;
-			out += function.GetReturnType().GetDisplayName();
-			out += " ";
-			out += function.GetIdentifier();
-			out += "(";
-
-			bool firstParam = true;
-			for (const ParameterInfo& param : function.GetParams())
-			{
-				if (!firstParam)
-					out += ", ";
-				firstParam = false;
-
-				out += param.GetTypeInfo().GetDisplayName();
-				if (!param.GetIdentifier().empty())
-				{
-					out += " ";
-					out += param.GetIdentifier();
-				}
-			}
-
-			out += ")";
-		}
-		return out;
-	}
-
 	std::span<const FunctionInfo> TypeInfo::GetFunctions() const
 	{
 		return _functions;
@@ -109,22 +42,24 @@ namespace PgE
 	}
 
 
-	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier,
-	                                                        const TypedRef& out) const
+	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier, const TypedRef& out) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
+		{
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
+		}
 
 		return field->GetValue(obj, out);
 	}
 
-	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view identifier,
-	                                                        const TypedRef& in) const
+	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view identifier, const TypedRef& in) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
+		{
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
+		}
 
 		return field->SetValue(obj, in);
 	}
@@ -133,7 +68,9 @@ namespace PgE
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
+		{
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
+		}
 
 		return field->GetRef(obj);
 	}
@@ -142,7 +79,9 @@ namespace PgE
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
+		{
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
+		}
 
 		return field->GetRef(obj);
 	}

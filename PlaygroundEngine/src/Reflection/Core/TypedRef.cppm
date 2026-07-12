@@ -1,4 +1,4 @@
-export module PlaygroundEngine.Reflection:TypedRef;
+export module PlaygroundEngine.Reflection.Core:TypedRef;
 
 namespace PgE
 {

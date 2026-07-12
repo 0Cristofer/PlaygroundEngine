@@ -1,4 +1,4 @@
-export module PlaygroundEngine.Reflection:FieldInfo;
+export module PlaygroundEngine.Reflection.Core:FieldInfo;
 
 import :TypedRef;
 import :TypeReference;

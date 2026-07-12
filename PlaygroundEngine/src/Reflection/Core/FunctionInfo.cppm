@@ -1,4 +1,4 @@
-export module PlaygroundEngine.Reflection:FunctionInfo;
+export module PlaygroundEngine.Reflection.Core:FunctionInfo;
 
 import :TypedRef;
 import :TypeReference;

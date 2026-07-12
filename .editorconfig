@@ -28,7 +28,7 @@ tab_width = 4
 
 # --- C++ sources, module interfaces, headers ---
 [*.{cpp,cppm,h,hpp}]
-max_line_length = 120
+max_line_length = 150
 
 # Brace layout: Allman everywhere
 cpp_namespace_declaration_braces = next_line

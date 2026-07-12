@@ -2,7 +2,7 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:TraitsBuilder;
+export module PlaygroundEngine.Reflection.Core:TraitsBuilder;
 
 import :TypeInfo;
 

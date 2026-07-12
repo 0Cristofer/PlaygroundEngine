@@ -2,7 +2,7 @@ module;
 
 #include <meta>
 
-export module PlaygroundEngine.Reflection:AnnotationsBuilder;
+export module PlaygroundEngine.Reflection.Core:AnnotationsBuilder;
 
 import :MetaCommon;
 import :DeclarationInfo;
@@ -53,7 +53,7 @@ namespace PgE::detail
 		return std::array<AnnotationInfo, sizeof...(I)>{MakeAnnotation<annotations[I]>()...};
 	}
 
-	template <std::meta::info Entity>
+	export template <std::meta::info Entity>
 	constexpr std::span<const AnnotationInfo> MakeAnnotations()
 	{
 		constexpr auto annotationCount = GetAnnotationList(Entity).size();

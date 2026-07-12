@@ -100,11 +100,11 @@ target_sources(PlaygroundEngine
         src/App.cpp
         src/main.cpp
 		src/Window.cpp
-        src/Reflection/TypeInfo.cpp
-        src/Reflection/TypeRegistry.cpp
-        src/Reflection/FieldInfo.cpp
-        src/Reflection/FunctionInfo.cpp
-        src/Reflection/EnumerationInfo.cpp
+        src/Reflection/Core/TypeInfo.cpp
+        src/Reflection/Core/FieldInfo.cpp
+        src/Reflection/Core/FunctionInfo.cpp
+        src/Reflection/Core/Core.cpp
+        src/Reflection/Builtins/EnumerationFacet.cpp
 
 
         PUBLIC
@@ -122,23 +122,31 @@ target_sources(PlaygroundEngine
 		src/Component/Components.cppm
 		src/Component/ComponentBase.cppm
 		src/Component/TransformComponent.cppm
-        src/Reflection/TypeInfo.cppm
+        src/Reflection/Core/Builders/MetaCommon.cppm
+        src/Reflection/Core/Builders/AnnotationsBuilder.cppm
+        src/Reflection/Core/Builders/FieldsBuilder.cppm
+        src/Reflection/Core/Builders/FunctionsBuilder.cppm
+        src/Reflection/Core/Builders/TraitsBuilder.cppm
+        src/Reflection/Core/Builders/TypeBuilder.cppm
+        src/Reflection/Core/Builders/FacetsBuilder.cppm
+        src/Reflection/Core/Facets.cppm
+        src/Reflection/Builtins/Builders/EnumerationFacetBuilder.cppm
+        src/Reflection/Builtins/Builders/EnumeratorsBuilder.cppm
+        src/Reflection/Builtins/Builders/SequenceFacetBuilder.cppm
+        src/Reflection/Builtins/Builders/StringFacetBuilder.cppm
+        src/Reflection/Builtins/EnumerationFacet.cppm
+        src/Reflection/Builtins/StringFacet.cppm
+        src/Reflection/Builtins/SequenceFacet.cppm
+        src/Reflection/Builtins/Builtins.cppm
+        src/Reflection/Core/FieldInfo.cppm
+        src/Reflection/Core/FunctionInfo.cppm
         src/Reflection/Reflection.cppm
-        src/Reflection/Builder/MetaCommon.cppm
-        src/Reflection/Builder/AnnotationsBuilder.cppm
-        src/Reflection/Builder/FieldsBuilder.cppm
-        src/Reflection/Builder/FunctionsBuilder.cppm
-        src/Reflection/Builder/TraitsBuilder.cppm
-        src/Reflection/Builder/EnumeratorsBuilder.cppm
-        src/Reflection/Builder/TypeBuilder.cppm
-        src/Reflection/TypeRegistry.cppm
-        src/Reflection/FieldInfo.cppm
-        src/Reflection/FunctionInfo.cppm
-        src/Reflection/TypedRef.cppm
-        src/Reflection/TypeReference.cppm
-        src/Reflection/DeclarationInfo.cppm
-        src/Reflection/TypeInfoTraits.cppm
-        src/Reflection/EnumerationInfo.cppm
+        src/Reflection/Core/TypedRef.cppm
+        src/Reflection/Core/TypeInfo.cppm
+        src/Reflection/Core/TypeReference.cppm
+        src/Reflection/Core/DeclarationInfo.cppm
+        src/Reflection/Core/TypeInfoTraits.cppm
+        src/Reflection/Core/Core.cppm
 
         PUBLIC
         FILE_SET HEADERS
