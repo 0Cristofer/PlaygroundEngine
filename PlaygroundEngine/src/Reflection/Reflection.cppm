@@ -1,41 +1,18 @@
 export module PlaygroundEngine.Reflection;
 
-export import :TypeInfo;
-export import :FieldInfo;
-export import :FunctionInfo;
-export import :TypedRef;
-export import :TypeReference;
-export import :DeclarationInfo;
-export import :EnumerationFacet;
-export import :Facets;
-export import :StringFacet;
-export import :SequenceFacet;
-export import :TypeBuilder;
+export import PlaygroundEngine.Reflection.Core;
+export import PlaygroundEngine.Reflection.Builtins;
 
 import std;
 
+// The umbrella: the whole package a consumer imports. It re-exports the core and the built-in facets so that
+// every first-party binding is reachable at the point a type is reflected (a facet not imported would fall
+// back to structural reflection). Rendering (ObjectToString/ToString) now lives in the core, since it names
+// no facet; what remains here is the facet-consuming sugar that does (EnumToName/EnumFromName read the
+// enumeration facet), which cannot live in the core.
+
 namespace PgE
 {
-	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj);
-
-	export template <typename T>
-	constexpr const TypeInfo& TypeOf()
-	{
-		return detail::TypeOfMeta<^^T>();
-	}
-
-	export template <typename T>
-	constexpr const TypeInfo& TypeOf(const T&)
-	{
-		return TypeOf<T>();
-	}
-
-	export template <typename T>
-	std::string ToString(const T& value)
-	{
-		return ObjectToString(TypeOf(value), &value);
-	}
-
 	// Typed sugar over the enumeration facet, for callers who know the enum type. EnumToName has no answer
 	// for a value no enumerator names (a flag combination, or a static_cast in-range value); ToString is
 	// the never-fails rendering that falls back to the number. The single enum-to-uint64 cast is the one

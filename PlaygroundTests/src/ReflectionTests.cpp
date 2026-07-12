@@ -3,7 +3,6 @@
 
 import std;
 import PlaygroundEngine.Reflection;
-import PlaygroundEngine.Reflection.TypeInfoTraits;
 
 // A named namespace (not anonymous) so reflected member display strings are deterministic across runs.
 namespace ReflectionTestTypes

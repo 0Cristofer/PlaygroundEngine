@@ -70,8 +70,8 @@ TEST_CASE("scratch" * doctest::skip())
 	}
 
 	const auto& typeOfColors = PgE::TypeOf<Colors>();
-	auto color = Colors::Blue;
-	PGE_LOG(Info, "typeOfColors: {}", PgE::ToString(color));
+	constexpr auto color = Colors::Blue;
+	PGE_LOG(Info, "color: {}", PgE::ToString(color));
 	for (auto enumeratorInfo : typeOfColors.GetFacet<PgE::EnumerationFacet>()->GetEnumerators())
 	{
 		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
