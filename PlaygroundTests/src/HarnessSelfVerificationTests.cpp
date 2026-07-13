@@ -107,3 +107,17 @@ TEST_CASE("DescribeType body changes when a field is added")
 
 	CHECK(DescribedBody(base) != DescribedBody(extended));
 }
+
+// Display-string quarantine. The qualified display name is implementation-defined and churns across
+// every golden on a toolchain upgrade, so the describer must diff on the stable identifier. Enforced
+// here rather than left to the golden, which could be blessed to whichever spelling regressed in.
+TEST_CASE("DescribeType diffs on the stable identifier, not the implementation-defined display name")
+{
+	const TypeInfo& type = TypeOf<Packed>();
+	REQUIRE(type.GetIdentifier() != type.GetDisplayName());
+
+	const std::string described = Snapshot::DescribeType<Packed>();
+
+	CHECK(described.starts_with("type " + std::string{type.GetIdentifier()} + "\n"));
+	CHECK(described.find(type.GetDisplayName()) == std::string::npos);
+}
