@@ -368,9 +368,13 @@ interception; a mass-churn re-bless on a toolchain upgrade is exactly when a rea
 the count is not a nicety but the enforcement of conscious acceptance the whole snapshot mechanism
 rests on.
 
-None of these hooks or the merge gate are wired yet: `verify.sh` exists and is run by hand today. The
-git hooks, the Claude Code hooks, and the `main`-integration gate are P1 wiring on top of the
-stages that already run.
+The git hooks are wired [built]: tracked under `scripts/hooks/` and activated by
+`scripts/setup-hooks.sh` (which points `core.hooksPath` there, so they are version-controlled rather
+than untracked in `.git/hooks`). `pre-commit` lints the changed files on a branch commit and runs the
+full `verify.sh` when the commit is a `--no-ff` merge into `main` (the hard gate); `pre-push` mirrors
+that gate for when a remote exists. The Claude Code hooks (`PostToolUse` lint on edit, `Stop` build
+plus tests) are wired in `.claude/settings.json` as advisory reports. A `main` merge must be `--no-ff`
+so the gate fires: a fast-forward creates no commit and would slip past `pre-commit`.
 
 This is what dissolves the collision with `.claude/agents/autonomous-worker.md`: sketch-with-TODO
 commits and mid-feature red stops live on the branch, which is allowed to be red; only integration

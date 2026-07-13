@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Tracked git hook: the full pipeline must be green before main reaches a remote. There is no remote
+# today, so this is dormant until one exists; it mirrors the local main-integration gate in pre-commit
+# so pushing main can never bypass it. See docs/CorrectnessAndStandards.md Section 7.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+
+while read -r _localRef _localSha remoteRef _remoteSha; do
+	if [ "$remoteRef" = "refs/heads/main" ]; then
+		printf 'pre-push: pushing main, running the full verify pipeline (hard gate)\n'
+		exec "$root/scripts/verify.sh"
+	fi
+done
+
+exit 0

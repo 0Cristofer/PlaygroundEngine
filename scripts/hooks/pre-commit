@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Tracked git hook (activated by scripts/setup-hooks.sh setting core.hooksPath).
+# Branch commits are advisory-fast: lint only the changed files, so a red or WIP branch is still
+# committable but hygiene violations are caught. Merging into main is the one hard gate: it runs the
+# full verify pipeline and blocks the merge on any failure. See docs/CorrectnessAndStandards.md Section 7.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+mergeHead="$(git rev-parse --git-path MERGE_HEAD)"
+
+# A --no-ff merge into main creates a commit, so this hook fires exactly on the integration we gate.
+if [ -f "$mergeHead" ] && [ "$branch" = "main" ]; then
+	printf 'pre-commit: integrating into main, running the full verify pipeline (hard gate)\n'
+	exec "$root/scripts/verify.sh"
+fi
+
+mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- '*.cpp' '*.cppm' '*.h' '*.hpp' '*.md')
+if [ "${#files[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+exec "$root/scripts/lint.sh" "${files[@]}"

@@ -91,6 +91,8 @@ Background for the decisions in `docs/`, useful when evaluating proposals or ext
 - **Commit messages are a single line.** No body, no bullet list, no trailing metadata. State what the commit does in one imperative line.
 - **Never mention Claude, Claude Code, or any AI assistant** in commit messages, and add no `Co-Authored-By` trailer for one. Commits read as the author's own work.
 - Commit or push only when asked; when starting new work off `main`, branch first.
+- **Integrate into `main` with `--no-ff`.** The `pre-commit` hook runs the full `verify.sh` gate only on a merge commit, so a fast-forward merge would bypass it. `main` stays green.
+- Run `scripts/setup-hooks.sh` once per clone to activate the tracked git hooks (`core.hooksPath`).
 
 ## Toolchain constraints
 
