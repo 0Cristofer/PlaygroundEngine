@@ -157,4 +157,5 @@ target_sources(PlaygroundEngine
         FILES
         include/PlaygroundEngine/Log.h
         include/PlaygroundEngine/EntryPoint.h
+        include/PlaygroundEngine/Verify.h
 )
