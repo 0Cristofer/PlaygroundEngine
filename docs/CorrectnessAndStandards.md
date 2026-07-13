@@ -465,3 +465,52 @@ effects of the work.
   exception settings.
 - **Goldens are single-toolchain artifacts.** They are meaningful only pinned to the project's GCC 16
   build; a cross-toolchain diff is not a regression, and nothing should treat it as one.
+
+## 11. Prior art and industry grounding
+
+None of this is invented. Each mechanism here is an instance of an established discipline, and this
+section names the precedent so a reader can check the reasoning rather than take it on the document's
+word, which is the same standard the document holds code to. There is no single "correctness harness"
+in industry; correctness is a layered composition of specialized tools, and the sections above pick
+one instance of each layer suited to this toolchain.
+
+| Mechanism here | Discipline | Representative prior art |
+|---|---|---|
+| Snapshots, `DescribeType` ([Section 3](#3-verification-toolkit)) | Characterization / approval testing | Feathers' characterization tests; ApprovalTests; Jest snapshots (also the rubber-stamp cautionary tale); the Rust compiler's `.stderr` UI tests with `--bless`; `insta`'s interactive `cargo insta review` |
+| Coverage manifest ([Section 3](#3-verification-toolkit)) | Enumerated-surface gates (default-deny) | Roslyn `PublicAPI.Shipped.txt`; Go's checked-in `api/*.txt`; `cargo-public-api` |
+| Type-layout / ABI pinning ([Section 2](#2-taxonomy-of-machine-facing-outputs)) | ABI diffing | libabigail (`abidiff`); `swift-api-digester` |
+| Static contracts, `consteval` predicates ([Section 3](#3-verification-toolkit)) | Rule-based invariants (not snapshots) | `cargo-semver-checks` |
+| Harness self-verification ([Section 3](#3-verification-toolkit)) | Mutation testing | PITest; Stryker; `cargo-mutants`; Petrović and Ivanković's diff-based approach at Google [4] |
+| Runtime contracts, handler, zones ([Section 4](#4-runtime-contracts-and-the-assertion-facility)) | Design by Contract | Eiffel (Meyer); Ada 2012 / SPARK; Unreal `check`/`verify`/`ensure`; Chromium / abseil `DCHECK`/`CHECK` |
+| `PGE_VERIFY` (always-on) ([Section 4](#4-runtime-contracts-and-the-assertion-facility)) | Always-on assertion | Unreal `verify`; abseil `CHECK` |
+| The assertion practice itself ([Section 4](#4-runtime-contracts-and-the-assertion-facility)) | Empirical assertion-density evidence | Kudrjavets, Nagappan, Ball, higher assertion density correlates with lower fault density [1] |
+| Property-based testing ([Section 3](#3-verification-toolkit)) | QuickCheck lineage | QuickCheck; Hypothesis; `proptest`; RapidCheck |
+| Fuzzing ([Section 3](#3-verification-toolkit), P2/P3) | Coverage-guided / structure-aware fuzzing | libFuzzer; AFL++; OSS-Fuzz; libprotobuf-mutator |
+| Determinism replay, per-tick hash ([Section 2](#2-taxonomy-of-machine-facing-outputs), P3) | Lockstep desync detection | Bettner and Terrano, deterministic sim makes a recorded game an exact repro [3]; GGPO rollback; Factorio desync reports |
+| Memory / copy-move probes ([Section 3](#3-verification-toolkit), P2) | Instrumented test types, no-alloc scopes | Chromium `AssertNoAllocationScope`; Hinnant-style counting test types |
+| Merge gate, `main` always green ([Section 7](#7-enforcement-fabric-a-local-pipeline-that-mirrors-cloud)) | The "not rocket science" rule | Ben Elliston's rule, applied by Hoare's `bors` for Rust [2]; modern merge queues |
+| Local equals cloud ([Section 7](#7-enforcement-fabric-a-local-pipeline-that-mirrors-cloud)) | Hermetic builds | Bazel; Nix |
+
+Two patterns across the strongest examples shaped the amendments in this document. First, the mature
+tools are **default-deny enumerated gates with reviewed acceptance** (Roslyn `PublicAPI`, Go's `api/`,
+`insta`'s per-snapshot review), which is why opt-in pinning was upgraded to the coverage manifest and
+blessing was made a counted, surfaced gate category rather than a silent env var. Industry learned the
+opt-in-snapshot lesson (rubber-stamped updates, snapshot rot) the hard way. Second, **property-based
+testing and fuzzing assert what must be *true* over unchosen inputs**, the complement to a snapshot
+that only records what happened; they are the layer closest to this document's own premise, so
+property testing was promoted to a pillar and fuzzing scheduled where untrusted bytes make it
+mandatory (serialization, networking). The one place this engine is deliberately stricter than a
+cited precedent is the guard-versus-assert split: Unreal's `ensure` folds check-and-continue into one
+construct, and [Section 4](#4-runtime-contracts-and-the-assertion-facility) rejects exactly that.
+
+References:
+
+1. G. Kudrjavets, N. Nagappan, T. Ball. "Assessing the Relationship between Software Assertions and
+   Faults: An Empirical Investigation." ISSRE 2006 (Microsoft Research TR-2006-54).
+   <https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2006-54.pdf>
+2. Rust's `bors` applying Ben Elliston's "not rocket science" rule (automatically maintain a
+   repository that always passes its tests, avoiding merge skew). Graydon Hoare, circa 2013.
+3. P. Bettner, M. Terrano. "1500 Archers on a 28.8: Network Programming in Age of Empires and
+   Beyond." GDC 2001. <https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond>
+4. G. Petrović, M. Ivanković. "State of Mutation Testing at Google." ICSE-SEIP 2018.
+   <https://research.google/pubs/state-of-mutation-testing-at-google/>
