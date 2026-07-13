@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The verification pipeline: ordered, fail-fast stages that mirror what a future cloud CI runs.
 # Run every stage, or one by name: scripts/verify.sh
-# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix].
+# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix|sanitizers].
 # A cloud CI job is a thin wrapper that calls these same stages, so local and cloud stay identical.
 set -uo pipefail
 
@@ -102,7 +102,34 @@ stage_matrix() {
 	cmake --build --preset linux-dev && cmake --build --preset linux-release
 }
 
-order=(configure build format cmakeformat lint shellcheck test matrix)
+# ASan roughly doubles per-TU memory, so a full-core build of the modular import-std TUs can exhaust
+# memory. Cap by available memory (~2 GB per TU) and never exceed the core count.
+sanitizer_jobs() {
+	local cores available_kb by_memory
+	cores="$(nproc 2>/dev/null || echo 1)"
+	available_kb="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0)"
+	by_memory=$((available_kb / 1024 / 1024 / 2))
+	if [ "$by_memory" -lt 1 ]; then
+		by_memory=1
+	fi
+	if [ "$by_memory" -lt "$cores" ]; then
+		printf '%s' "$by_memory"
+	else
+		printf '%s' "$cores"
+	fi
+}
+
+# ASan + UBSan on the whole program. Instrumenting the std module and deps too keeps libstdc++
+# containers instrumented, so ASan raises no container-overflow false positives on the module runtime.
+# Runtime codegen instrumentation, so unlike a static analyzer it is not blinded by module imports. A
+# sanitizer error aborts the offending test and fails the stage. Parallelism is memory-capped. See
+# docs/CorrectnessAndStandards.md Section 7.
+stage_sanitizers() {
+	cmake --preset linux-asan && cmake --build --preset linux-asan -j "$(sanitizer_jobs)" &&
+		(cd build/linux-asan && ctest -C Debug --output-on-failure)
+}
+
+order=(configure build format cmakeformat lint shellcheck test matrix sanitizers)
 
 run_stage() {
 	local name="$1"

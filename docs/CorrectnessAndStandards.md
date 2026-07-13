@@ -388,7 +388,7 @@ blocker, and the stage is deferred until the toolchain fixes the `import` intera
 the same throwaway probe. The path-sensitive-bug layer is instead carried by the runtime sanitizers
 (ASan/UBSan, [Section 3](#3-verification-toolkit)), which run the real code and are module-agnostic.
 
-**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix`. Configure always
+**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix → sanitizers`. Configure always
 runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
 incremental `--build`). The **format check** (`clang-format --dry-run -Werror`), **shellcheck**, and
 **build matrix** stages are now wired [built]; the tool-bearing ones detect their tool across
@@ -402,19 +402,25 @@ and they keep intentional hand-alignment as throwaway exploration). The build ma
 RelWithDebInfo and Release configs (Debug is already built and feeds the tests) and runs last as the
 heaviest stage. Static contracts are `static_assert`s, so they are enforced *within* the build stage
 rather than as a separate step, and the snapshot checks currently run *within* the test stage (they are
-doctest cases). The gcov, contract-mode-matrix, sanitizer, and benchmark stages are
-not built (they need presets and spikes still in P1); `gcc -fanalyzer` is not a stage at all, ruled
-out above by the module blocker. The current pipeline runs green: build clean,
-format clean, lint clean, shellcheck clean, 84/84 tests, matrix (Debug/RelWithDebInfo/Release) clean.
+doctest cases). The **sanitizers** stage is now wired [built]: ASan + UBSan on the whole program via
+the `linux-asan` preset, running the suite; its parallelism is memory-capped because ASan roughly
+doubles per-TU memory. The gcov, contract-mode-matrix, and benchmark stages are not built (they need
+presets and spikes still in P1); `gcc -fanalyzer` is not a stage at all, ruled out above by the module
+blocker. The current pipeline runs green: build clean, format clean, lint clean, shellcheck clean,
+84/84 tests, matrix (Debug/RelWithDebInfo/Release) clean, and 84/84 again under ASan+UBSan with zero
+sanitizer diagnostics.
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`
 reproduces the source-built GCC 16 so the local runner and the eventual cloud runner are identical.
-The point is to build the tooling now and defer only the cloud cost. New CMake presets `linux-asan`
-and `linux-tsan` provide the sanitizer configurations, but running the full modular build (`import
-std`, global `-freflection`) under ASan/TSan is unproven on this bespoke setup, so, like the
-clang-format spike, sanitizers get a validation step (confirm they configure, link, and do not
-false-positive on the module runtime) before entering the hard pipeline. The benchmarks/budgets stage
+The point is to build the tooling now and defer only the cloud cost. The `linux-asan` preset carries
+ASan + UBSan and the spike is **done [built]**: the full modular build (`import std`, global
+`-freflection`) configures, links, and runs the whole suite under both sanitizers with **zero false
+positives on the module runtime**, and an injected heap-buffer-overflow is caught and fails the stage.
+Instrumenting the std module and deps too (global, not first-party-scoped) is deliberate: it keeps
+libstdc++ containers instrumented so ASan raises no container-overflow false positive. Unlike a static
+analyzer, sanitizers are codegen instrumentation and so are not blinded by module imports. TSan waits
+for real concurrency (the ECS/networking); its `linux-tsan` preset is deferred with it. The benchmarks/budgets stage
 is **advisory**: perf under WSL and containers is flaky, so it measures and reports, and gates only on
 large regressions with wide tolerance, if at all.
 
@@ -524,8 +530,11 @@ effects of the work.
   with no interim macro. The per-zone semantic split rides `$<CONFIG>` [built]: dev configs enforce,
   Release ignores, so the build matrix already validates the enforce and ignore modes; still open are
   the telemetry `observe` config and the `-fno-exceptions` runtime, each needing its own preset. The
-  property-based-testing loop primitive (hand-written generators to start). The sanitizer spike then
-  presets, with the fuzzing-instrumentation spike piggybacked. The namespace-enumeration spike gating
+  property-based-testing loop primitive (hand-written generators to start). The ASan+UBSan sanitizer
+  spike, preset (`linux-asan`), and `sanitizers` verify stage are [built] (whole-program, zero false
+  positives on the module runtime, injected-bug discrimination confirmed); the fuzzing-instrumentation
+  spike and the `linux-tsan` preset stay deferred (TSan waits on real concurrency). The
+  namespace-enumeration spike gating
   the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
   pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
   `shellcheck` on `scripts/*.sh` [built], the Debug/RelWithDebInfo/Release build matrix [built], and the
