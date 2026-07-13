@@ -53,6 +53,7 @@ target_sources(PlaygroundTests
 		src/LogTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp
+		src/HarnessSelfVerificationTests.cpp
 		src/ContractsTests.cpp
 		src/Scratch.cpp
 
