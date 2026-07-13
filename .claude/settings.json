@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-/home/oswald/repo/PlaygroundEngine}/scripts/claude-lint-hook.sh\"",
+            "command": "\"$CLAUDE_PROJECT_DIR/scripts/claude-lint-hook.sh\"",
             "statusMessage": "linting edited file"
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-/home/oswald/repo/PlaygroundEngine}/scripts/claude-verify-hook.sh\"",
+            "command": "\"$CLAUDE_PROJECT_DIR/scripts/claude-verify-hook.sh\"",
             "statusMessage": "verify (build + tests)"
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-/home/oswald/repo/PlaygroundEngine}/scripts/claude-verify-hook.sh\""
+            "command": "\"$CLAUDE_PROJECT_DIR/scripts/claude-verify-hook.sh\""
           }
         ]
       }
