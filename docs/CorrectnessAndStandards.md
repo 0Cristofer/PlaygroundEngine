@@ -186,8 +186,13 @@ still validated with a throwaway compile before it is relied on, per the working
   states what it guards or how a caller avoids it (a [CLAUDE.md](../CLAUDE.md) code-style rule), so the
   reasoning the old `assert` string held is not lost.
 - **Semantics by zone.** Enforce in `PGE_DEV`, observe in a telemetry build, ignore in shipping,
-  selected with `-fcontract-evaluation-semantic=`. Because contracts terminate without unwinding,
-  they hold under `-fno-exceptions`, which the runtime zone requires.
+  selected with `-fcontract-evaluation-semantic=`. The semantic rides the build config rather than a
+  standalone knob (it is a whole-program property, uniform across every TU including the `import std`
+  target, so it cannot be a per-target option): the root `CMakeLists.txt` sets `enforce` for the dev
+  configs (Debug, RelWithDebInfo) and `ignore` for Release (shipping) via `$<CONFIG>` [built]. Because
+  contracts terminate without unwinding, they hold under `-fno-exceptions`, which the runtime zone
+  requires; the telemetry `observe` config and the `-fno-exceptions` runtime get their own presets
+  (still open).
 - **The value over `assert` lives in the violation handler.** The contracts proposal defines a
   **standard, replaceable contract-violation handler**; the engine supplies one that routes to
   `PGE_LOG` / spdlog with the assertion kind, source location, and predicate text, and applies the
@@ -498,15 +503,17 @@ effects of the work.
   throwing seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
   is the always-on residue, and `<cassert>` is retired at the migrated sites (`Engine::StartRun` now a
   `pre`, the reflection facet op-tables now `pre`). Adopted `contract_assert`/`pre`/`post` directly
-  with no interim macro. Still open in P1: the per-zone semantic split (observe/ignore) once shipping
-  and telemetry presets exist. The property-based-testing loop primitive (hand-written
-  generators to start). The sanitizer spike then presets, with the fuzzing-instrumentation spike
-  piggybacked. The namespace-enumeration spike gating the coverage manifest, then the manifest as a
-  default-on report. The doc-coverage report. New local pipeline stages, all toolchain-only: the
-  `clang-format --dry-run -Werror` drift check [built], `shellcheck` on `scripts/*.sh` [built], and the
-  Debug/RelWithDebInfo/Release build matrix [built]; still open are the `gcc -fanalyzer`
-  static-analysis stage, `gcov` coverage (advisory), and the contract-mode matrix
-  (enforce/observe/ignore/`-fno-exceptions`). The enforcement fabric on
+  with no interim macro. The per-zone semantic split rides `$<CONFIG>` [built]: dev configs enforce,
+  Release ignores, so the build matrix already validates the enforce and ignore modes; still open are
+  the telemetry `observe` config and the `-fno-exceptions` runtime, each needing its own preset. The
+  property-based-testing loop primitive (hand-written generators to start). The sanitizer spike then
+  presets, with the fuzzing-instrumentation spike piggybacked. The namespace-enumeration spike gating
+  the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
+  pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
+  `shellcheck` on `scripts/*.sh` [built], and the Debug/RelWithDebInfo/Release build matrix [built];
+  still open are the `gcc -fanalyzer` static-analysis stage, `gcov` coverage (advisory), a CMake
+  formatter stage (`gersemi`), and the remaining contract-mode-matrix legs (`observe` /
+  `-fno-exceptions`) once their presets exist. The enforcement fabric on
   top of `verify.sh` is wired [built]: the tracked git hooks (branch lint plus the `--no-ff`
   `main`-merge full-pipeline gate and its re-blessed-goldens category) and the advisory Claude Code
   hooks (`PostToolUse` lint, `Stop`/`SubagentStop` verify).

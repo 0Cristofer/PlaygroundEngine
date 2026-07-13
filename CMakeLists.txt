@@ -115,10 +115,13 @@ add_compile_options(
 
 		# C++26 contracts. Kept global for the same reason as -freflection: the internal `import std`
 		# module target reads these options, and a semantic mismatch between the std BMI and consumers
-		# must be avoided. The evaluation semantic is a global program property; enforce for now (all
-		# targets build exceptions-on), split by build zone when the shipping/telemetry presets arrive.
+		# must be avoided, so the semantic stays uniform across every TU within a config. It rides the
+		# build zone rather than a standalone knob: the dev configs (Debug, RelWithDebInfo) enforce,
+		# shipping (Release) ignores. Telemetry (observe) and the -fno-exceptions runtime get their own
+		# presets later (see docs/CorrectnessAndStandards.md Section 4).
 		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-fcontracts>
-		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-fcontract-evaluation-semantic=enforce>
+		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>,$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>>:-fcontract-evaluation-semantic=enforce>
+		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release>>:-fcontract-evaluation-semantic=ignore>
 )
 
 enable_testing()
