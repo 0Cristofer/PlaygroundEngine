@@ -86,6 +86,12 @@ Background for the decisions in `docs/`, useful when evaluating proposals or ext
 - **Pure DI at the root, no container:** an engine is a small, tightly ordered graph where order is the contract; containers move dependency errors from compile time to startup and hide construction order (Seemann's Pure DI threshold, Nystrom on locators). Explicit wiring is also the fork seam: every system has one birthplace, so swapping one is a root-only diff. Godot's `Main::setup` is the precedent; UE's `FEngineLoop` shows globals save no lines, they only hide the graph.
 - **Out-of-process play, in-process editing:** the editor's truth is authoring data (its world is a derived preview), so a child-process crash loses nothing, and spawning the real game target kills the PIE-vs-standalone divergence bug class (Godot precedent). Full out-of-process *editing* was rejected: the edit loop needs same-frame feedback, and Wayland forbids foreign-window embedding. Live edit rides the replication substrate (reflection op-tables, handles as wire ids, `InputCommand` PODs), so the remote inspector doubles as the integration test of serialization, replication, and the C# binding contract.
 
+## Version control
+
+- **Commit messages are a single line.** No body, no bullet list, no trailing metadata. State what the commit does in one imperative line.
+- **Never mention Claude, Claude Code, or any AI assistant** in commit messages, and add no `Co-Authored-By` trailer for one. Commits read as the author's own work.
+- Commit or push only when asked; when starting new work off `main`, branch first.
+
 ## Toolchain constraints
 
 - **GCC 16+ is required and the only supported compiler.** It must be a source build located at `~/gcc-16` (the `linux` preset hardcodes `~/gcc-16/bin/{gcc,g++}`).
