@@ -10,7 +10,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$root"
+cd "$root" || exit 1
 
 if [ "$#" -gt 0 ]; then
 	files=("$@")
