@@ -107,7 +107,7 @@ the harness exercises them. It holds:
   discipline is extended so display strings stay out of the diffed text wherever an identifier
   suffices, quarantining the toolchain-dependent churn that would otherwise mask a real structural
   diff across many goldens at once on a compiler upgrade.
-- **Harness self-verification.** The describer sources every layout number from the reflection system
+- **Harness self-verification [built].** The describer sources every layout number from the reflection system
   (`traits.Size`, `field.GetByteOffset()`), which is the riskiest code in the tree, so a wrong trait
   would be faithfully pinned and blessed into a golden. Two cheap tests anchor the harness to the
   language independently of the reflection path: a **ground-truth cross-check** asserting the
@@ -360,7 +360,7 @@ A single canonical pipeline, `scripts/verify.sh`, with ordered, independently in
 
 ```
 configure → build (warnings as errors; Debug / RelWithDebInfo / Release) → format check (clang-format)
-          → textual lint → shellcheck → static contracts (compile) → static analysis (gcc -fanalyzer)
+          → textual lint → shellcheck → static contracts (compile)
           → unit + characterization tests → snapshots → property tests → coverage (gcov, advisory)
           → sanitizers (asan / ubsan) → contract-mode matrix (enforce / observe / ignore / -fno-exceptions)
           → fuzz targets (short) → benchmarks / budgets (advisory)
@@ -369,14 +369,37 @@ configure → build (warnings as errors; Debug / RelWithDebInfo / Release) → f
 Every stage above runs on this one machine; that is the point of local-equals-cloud. Beyond the P0
 four, the added stages are all local and toolchain-only: a **format check** (`clang-format
 --dry-run -Werror`, lexer-based, catches drift since the one-time reflow), **shellcheck** on
-`scripts/*.sh`, **`gcc -fanalyzer`** as the deep static analyzer (clang-tidy is out per
-[Section 6](#6-standardization-style-comments-documentation), so GCC's own path-sensitive analyzer
-fills that hole), a **Debug/RelWithDebInfo/Release build matrix** (config-dependent breakage, and the
+`scripts/*.sh`, a **Debug/RelWithDebInfo/Release build matrix** (config-dependent breakage, and the
 paths where contracts compile out), **gcov coverage** (advisory), and the **contract-mode matrix**
 that discharges the build-mode risk in [Section 10](#10-open-questions-and-risks). TSan is deferred
 until real concurrency exists (the ECS/networking), where it earns its keep.
 
-**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix`. Configure always
+**Deep static analysis has no viable tool on this toolchain (validated, negative result).** The plan
+was `gcc -fanalyzer` as the path-sensitive analyzer filling the hole clang-tidy cannot (Section 6). A
+spike on GCC 16.1.1 killed it: `-fanalyzer` silently emits **no diagnostics** for any translation
+unit that `import`s a named module, `import std` included. Confirmed both in the real engine build
+(an injected null-dereference, `new`-leak, and `malloc`-leak in an engine module unit all passed
+`-fanalyzer -Werror`) and standalone (the identical defects are caught with the `import` removed, and
+importing even a trivial user module suppresses them). Every first-party TU imports `std`, so the
+analyzer sees none of our code; wiring the stage would be a slow, memory-hungry build (the analyzer
+also explodes over `std::meta` instantiation) that catches nothing. So both deep-static-analysis
+options are currently unavailable, clang-tidy by a parse blocker and `-fanalyzer` by this module
+blocker. For now the path-sensitive-bug layer is carried by the runtime sanitizers (ASan/UBSan,
+[Section 3](#3-verification-toolkit)), which run the real code and are module-agnostic.
+
+**`-fanalyzer` stays a wanted revisit item, not a closed one**, because static and dynamic analysis
+are complementary rather than redundant. Sanitizers only see paths a test executes; with line coverage
+at ~21%, most code, including the cold `std::expected` error branches, is never reached at runtime. A
+static analyzer explores those paths symbolically with no triggering input, at compile time, which is
+exactly the blind spot sanitizers structurally cannot cover (its cost is false positives, which
+sanitizers avoid). Its value here is highest while coverage is low and shrinks but never vanishes as
+the suite grows. **Revisit trigger:** re-run the throwaway probe (an `import std` TU with an injected
+null-deref under `-fanalyzer -Werror`) on each GCC upgrade; when a module-importing TU produces the
+diagnostic, wire the stage (scoped off the reflection-dense TUs, which also explode the analyzer). The
+GCC analyzer's module support is experimental, so this is a "watch upstream," not a "never." The same
+re-check applies to clang-tidy if mainline clang gains P2996 and GCC-compatible modules (Section 6).
+
+**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix → sanitizers → coverage`. Configure always
 runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
 incremental `--build`). The **format check** (`clang-format --dry-run -Werror`), **shellcheck**, and
 **build matrix** stages are now wired [built]; the tool-bearing ones detect their tool across
@@ -390,18 +413,30 @@ and they keep intentional hand-alignment as throwaway exploration). The build ma
 RelWithDebInfo and Release configs (Debug is already built and feeds the tests) and runs last as the
 heaviest stage. Static contracts are `static_assert`s, so they are enforced *within* the build stage
 rather than as a separate step, and the snapshot checks currently run *within* the test stage (they are
-doctest cases). The `gcc -fanalyzer`, gcov, contract-mode-matrix, sanitizer, and benchmark stages are
-not built (they need presets and spikes still in P1). The current pipeline runs green: build clean,
-format clean, lint clean, shellcheck clean, 84/84 tests, matrix (Debug/RelWithDebInfo/Release) clean.
+doctest cases). The **sanitizers** stage is now wired [built]: ASan + UBSan on the whole program via
+the `linux-asan` preset, running the suite; its parallelism is memory-capped because ASan roughly
+doubles per-TU memory. The **coverage** stage is now wired [built] and **advisory**: the `linux-coverage`
+preset instruments with `--coverage`, the suite runs to emit the counters, and `gcovr` reports a
+summary filtered to first-party source (using the toolchain's own `gcov`; a mismatched system `gcov`
+cannot read GCC 16 data). It measures and prints, it does not gate on a threshold. The
+contract-mode-matrix and benchmark stages are not built (they need presets and spikes still in P1);
+`gcc -fanalyzer` is not a stage at all, ruled out above by the module blocker. The current pipeline
+runs green: build clean, format clean, lint clean, shellcheck clean, 84/84 tests, matrix
+(Debug/RelWithDebInfo/Release) clean, 84/84 again under ASan+UBSan with zero sanitizer diagnostics, and
+a coverage report (currently line 21% of first-party source, honestly low: the reflection-focused suite
+does not exercise the windowing or GameObject-skeleton code).
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`
 reproduces the source-built GCC 16 so the local runner and the eventual cloud runner are identical.
-The point is to build the tooling now and defer only the cloud cost. New CMake presets `linux-asan`
-and `linux-tsan` provide the sanitizer configurations, but running the full modular build (`import
-std`, global `-freflection`) under ASan/TSan is unproven on this bespoke setup, so, like the
-clang-format spike, sanitizers get a validation step (confirm they configure, link, and do not
-false-positive on the module runtime) before entering the hard pipeline. The benchmarks/budgets stage
+The point is to build the tooling now and defer only the cloud cost. The `linux-asan` preset carries
+ASan + UBSan and the spike is **done [built]**: the full modular build (`import std`, global
+`-freflection`) configures, links, and runs the whole suite under both sanitizers with **zero false
+positives on the module runtime**, and an injected heap-buffer-overflow is caught and fails the stage.
+Instrumenting the std module and deps too (global, not first-party-scoped) is deliberate: it keeps
+libstdc++ containers instrumented so ASan raises no container-overflow false positive. Unlike a static
+analyzer, sanitizers are codegen instrumentation and so are not blinded by module imports. TSan waits
+for real concurrency (the ECS/networking); its `linux-tsan` preset is deferred with it. The benchmarks/budgets stage
 is **advisory**: perf under WSL and containers is flaky, so it measures and reports, and gates only on
 large regressions with wide tolerance, if at all.
 
@@ -497,10 +532,11 @@ effects of the work.
   comment cap); and the `verify.sh` pipeline (configure/build/lint/test). Deferred out of P0: the
   memory probes (no consumer yet), the `IsHandleLike` / `AllFieldsReflected` predicates (boundary
   designs still open), and the hooks (P1 wiring).
-- **P1.** *Harness self-verification first:* the reflection ground-truth cross-check (reflected
-  numbers equal `sizeof`/`alignof`/`offsetof`/`is_trivially_copyable_v`) and the snapshot
-  discrimination test, plus display-string quarantine in `DescribeType`, all buildable now with no
-  dependency. Runtime contracts [built]: `-fcontracts` with the enforce semantic is global (validated
+- **P1.** *Harness self-verification* [built]: the reflection ground-truth cross-check (reflected
+  numbers equal `sizeof`/`alignof`/`offsetof`/`is_trivially_copyable_v`), the snapshot discrimination
+  test (a reorder or added field changes the `DescribeType` body), and the display-string quarantine
+  (the describer diffs on the stable identifier, not the implementation-defined display name) all
+  shipped in `PlaygroundTests/src/HarnessSelfVerificationTests.cpp`. Runtime contracts [built]: `-fcontracts` with the enforce semantic is global (validated
   against the modular `import std` build), the engine's `LogContractViolation` policy routes through
   spdlog and the engine installs the runtime handler at its own entry point (`main.cpp`, co-linked
   into any engine-driven executable, so the game stays unaware of it), the test build installs a
@@ -510,14 +546,19 @@ effects of the work.
   with no interim macro. The per-zone semantic split rides `$<CONFIG>` [built]: dev configs enforce,
   Release ignores, so the build matrix already validates the enforce and ignore modes; still open are
   the telemetry `observe` config and the `-fno-exceptions` runtime, each needing its own preset. The
-  property-based-testing loop primitive (hand-written generators to start). The sanitizer spike then
-  presets, with the fuzzing-instrumentation spike piggybacked. The namespace-enumeration spike gating
+  property-based-testing loop primitive (hand-written generators to start). The ASan+UBSan sanitizer
+  spike, preset (`linux-asan`), and `sanitizers` verify stage are [built] (whole-program, zero false
+  positives on the module runtime, injected-bug discrimination confirmed); the fuzzing-instrumentation
+  spike and the `linux-tsan` preset stay deferred (TSan waits on real concurrency). The
+  namespace-enumeration spike gating
   the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
   pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
   `shellcheck` on `scripts/*.sh` [built], the Debug/RelWithDebInfo/Release build matrix [built], and the
-  `gersemi` CMake-format check [built]; still open are the `gcc -fanalyzer` static-analysis stage,
-  `gcov` coverage (advisory), and the remaining contract-mode-matrix legs (`observe` /
-  `-fno-exceptions`) once their presets exist. The enforcement fabric on
+  `gersemi` CMake-format check [built], and the `gcov` coverage stage [built, advisory] (`linux-coverage`
+  preset, `gcovr`-summarized, filtered to first-party source); still open are the remaining
+  contract-mode-matrix legs (`observe` / `-fno-exceptions`) once their presets exist. The
+  `gcc -fanalyzer` static-analysis stage was spiked and dropped: its analyzer emits nothing for a TU
+  that imports a module (Section 7), so it is blind to our code. The enforcement fabric on
   top of `verify.sh` is wired [built]: the tracked git hooks (branch lint plus the `--no-ff`
   `main`-merge full-pipeline gate and its re-blessed-goldens category) and the advisory Claude Code
   hooks (`PostToolUse` lint, `Stop`/`SubagentStop` verify).
@@ -547,6 +588,13 @@ effects of the work.
   is proven. Default-deny gating on a churning reflected surface is deliberately avoided: it would
   train authors to reflex-bless, recreating the blessing risk above; the manifest forces a *visible*
   decision instead, and hard gating waits for per-module stability.
+- **No deep static analysis is available (a wanted revisit, not a closed door).** Both candidates are
+  blocked on this toolchain: clang-tidy cannot parse these units (Section 6), and `gcc -fanalyzer`
+  emits nothing for a TU that imports a module, so it never sees our code (Section 7). The
+  path-sensitive-bug layer rests on the runtime sanitizers *for now*, but static analysis stays worth
+  restoring because it covers the unexecuted paths sanitizers structurally cannot (most of the code
+  while coverage is low). Re-run each tool's throwaway probe on every GCC/clang upgrade; wire the stage
+  the moment a module-importing TU produces a diagnostic. This is a "watch upstream," not a "never."
 - **Textual lint is heuristic.** Without a clang AST, naming and abbreviation checks are approximate;
   the IDE and review remain the backstop until mainline clang can parse these units.
 - **CI container maintenance.** Reproducing a source-built GCC 16 in an image is real upkeep, weighed

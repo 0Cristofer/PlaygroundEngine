@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The verification pipeline: ordered, fail-fast stages that mirror what a future cloud CI runs.
 # Run every stage, or one by name: scripts/verify.sh
-# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix].
+# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix|sanitizers|coverage].
 # A cloud CI job is a thin wrapper that calls these same stages, so local and cloud stay identical.
 set -uo pipefail
 
@@ -43,6 +43,19 @@ find_gersemi() {
 	fi
 	if [ -x "$HOME/.local/bin/gersemi" ]; then
 		printf '%s' "$HOME/.local/bin/gersemi"
+		return 0
+	fi
+	return 1
+}
+
+# gcovr fronts gcov for a filtered summary (installed under ~/.local/bin here, on PATH in a container).
+find_gcovr() {
+	if command -v gcovr >/dev/null 2>&1; then
+		printf 'gcovr'
+		return 0
+	fi
+	if [ -x "$HOME/.local/bin/gcovr" ]; then
+		printf '%s' "$HOME/.local/bin/gcovr"
 		return 0
 	fi
 	return 1
@@ -102,7 +115,51 @@ stage_matrix() {
 	cmake --build --preset linux-dev && cmake --build --preset linux-release
 }
 
-order=(configure build format cmakeformat lint shellcheck test matrix)
+# ASan roughly doubles per-TU memory, so a full-core build of the modular import-std TUs can exhaust
+# memory. Cap by available memory (~2 GB per TU) and never exceed the core count.
+sanitizer_jobs() {
+	local cores available_kb by_memory
+	cores="$(nproc 2>/dev/null || echo 1)"
+	available_kb="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0)"
+	by_memory=$((available_kb / 1024 / 1024 / 2))
+	if [ "$by_memory" -lt 1 ]; then
+		by_memory=1
+	fi
+	if [ "$by_memory" -lt "$cores" ]; then
+		printf '%s' "$by_memory"
+	else
+		printf '%s' "$cores"
+	fi
+}
+
+# ASan + UBSan on the whole program. Instrumenting the std module and deps too keeps libstdc++
+# containers instrumented, so ASan raises no container-overflow false positives on the module runtime.
+# Runtime codegen instrumentation, so unlike a static analyzer it is not blinded by module imports. A
+# sanitizer error aborts the offending test and fails the stage. Parallelism is memory-capped. See
+# docs/CorrectnessAndStandards.md Section 7.
+stage_sanitizers() {
+	cmake --preset linux-asan && cmake --build --preset linux-asan -j "$(sanitizer_jobs)" &&
+		(cd build/linux-asan && ctest -C Debug --output-on-failure)
+}
+
+# gcov line/branch coverage, advisory: builds the instrumented linux-coverage tree, runs the suite to
+# emit the .gcda counters, and reports via gcovr filtered to first-party source. Uses the toolchain's
+# own gcov (a mismatched system gcov cannot read GCC 16 coverage data). Advisory: it measures and
+# prints, it does not gate on a coverage threshold, so only a broken build or a failing test fails it.
+stage_coverage() {
+	local gcovr
+	if ! gcovr="$(find_gcovr)"; then
+		printf 'verify: gcovr not found (pipx install gcovr, or drop it in ~/.local/bin)\n'
+		return 1
+	fi
+	cmake --preset linux-coverage && cmake --build --preset linux-coverage &&
+		(cd build/linux-coverage && ctest -C Debug --output-on-failure) &&
+		"$gcovr" --root "$root" --gcov-executable "$HOME/gcc-16/bin/gcov" \
+			--filter 'PlaygroundEngine/src/' --filter 'PlaygroundGame/src/' \
+			--print-summary "$root/build/linux-coverage"
+}
+
+order=(configure build format cmakeformat lint shellcheck test matrix sanitizers coverage)
 
 run_stage() {
 	local name="$1"
