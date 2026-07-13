@@ -59,6 +59,17 @@ output, generalized here to the whole reflected shape.
 The determinism row depends on the ECS and the `InputCommand` PODs, neither of which exists yet, so
 it is deferred to a later phase.
 
+The verification pillars are four, not three. A snapshot records what the code *did* (a
+characterization tripwire); a static or runtime contract asserts a truth the compiler or a single
+execution can check; and **property-based testing** asserts a truth that must hold for *all* inputs,
+not the one an author happened to pick. That last is the closest match to this document's own
+premise, "reason about what the code actually does, not an assumed shape," because a golden pins
+whatever behavior occurred while a property pins the invariant the behavior must satisfy. The two are
+complementary: a snapshot answers "did the observable output change?", a property answers "is this
+still true for inputs nobody chose?". Property testing enters with its first real invariant
+(serialization round-trip); the shared enabler is a reflection-driven instance generator (see
+[Section 3](#3-verification-toolkit)).
+
 ## 3. Verification toolkit
 
 The verification harness, the shared test-support library already anticipated in
@@ -91,7 +102,41 @@ the harness exercises them. It holds:
   renders the type kind through the reflection system's own `ToString(TypeKind)` rather than a
   hand-maintained switch, so a new kind cannot drift out of sync with the describer. These live in
   module `PlaygroundTests.SnapshotHarness`, namespace `PgE::Snapshot` (the domain name, matching
-  `PgE::Benchmark`, not a generic `Harness`).
+  `PgE::Benchmark`, not a generic `Harness`). The identity section prefers the author-written
+  identifier over the implementation-defined display name (`SnapshotHarness.cppm` `Label`); that
+  discipline is extended so display strings stay out of the diffed text wherever an identifier
+  suffices, quarantining the toolchain-dependent churn that would otherwise mask a real structural
+  diff across many goldens at once on a compiler upgrade.
+- **Harness self-verification.** The describer sources every layout number from the reflection system
+  (`traits.Size`, `field.GetByteOffset()`), which is the riskiest code in the tree, so a wrong trait
+  would be faithfully pinned and blessed into a golden. Two cheap tests anchor the harness to the
+  language independently of the reflection path: a **ground-truth cross-check** asserting the
+  reflected size, alignment, offsets, and trivial-copyability equal the language's own `sizeof`,
+  `alignof`, `offsetof`, and `std::is_trivially_copyable_v` for known standard-layout types; and a
+  **discrimination test** proving `DescribeType` text actually changes when a field is reordered or
+  added, so the snapshot is shown to catch what it exists to catch, not assumed to. A full mutation
+  engine (per-type fault injection) is deferred; its structure-aware form falls out of the reflected
+  instance generator later (below) at near-zero marginal cost.
+- **Coverage manifest.** Per-type pinning is opt-in, so a *new* reflected type is never forced into
+  the mechanism and the coverage of the pinning is itself unpinned. The fix reuses the machinery
+  already built: a single aggregate characterization golden that lists every reflected type and
+  whether its shape is pinned. Adding a type diffs the manifest, which must be consciously blessed,
+  that is the forcing function, at the cost of one more golden rather than a bespoke coverage gate.
+  There is no runtime type registry (`TypeOf<T>()` is a lazy per-type meta-instantiation; a keyed
+  registry is future work noted in `TypeInfo.cpp`), so the enumeration source is compile-time
+  namespace reflection (`members_of(^^PgE)` and nested namespaces), whose cross-module reachability is
+  exactly the fragile GCC-16 area and **must be spiked before the instrument is designed**. Default-on
+  as a *report* first; the escalation to a per-module hard gate reuses the doc-coverage stability
+  escalation in [Section 6](#6-standardization-style-comments-documentation), gating only a module
+  marked stable.
+- **Property-based testing.** A seeded loop over generated inputs asserting an invariant, with the
+  seed reported on failure and a shrink seam for minimizing a counterexample. The shared enabler for
+  this, structure-aware fuzzing, and the eventual structure-aware mutation test is one primitive: a
+  reflection-driven instance generator `Arbitrary<T>` that walks reflected fields and recurses. It is
+  built once, with serialization round-trip (`deserialize . serialize == identity`) as its first real
+  consumer, because that is where properties become the acceptance criterion and where untrusted bytes
+  make fuzzing mandatory. Hand-written generators bootstrap the loop before the reflected generator
+  lands.
 - **Static-contract helpers [built, partial].** `consteval` predicates over reflected types with
   `static_assert` wrappers so a violated machine contract is a compile error at the point of
   definition. P0 shipped `IsTriviallyReplicable`, `HasNoPadding` (reflection-walked, summing
@@ -123,6 +168,18 @@ untestable because it kills the test runner. Validated on GCC 16.1.1 with `-fcon
 `post`, and `contract_assert` parse and enforce, and a violation prints function, location, and
 predicate then terminates via `abort` without unwinding.
 
+**Adopt contracts directly; no interim assertion macro.** An engine-specific `PGE_ASSERT` shim over
+`contract_assert` was considered and rejected. It would be exactly the kind of parallel construct
+carried alongside the real mechanism that this project's no-legacy principle forbids, and hedging on
+contracts specifically, while the project already rides `import std`, global `-freflection`, and
+`std::meta`, is an inconsistent risk posture: the edge is accepted everywhere else. The tooling risk
+is real and accepted; if GCC's contract semantics or handler signature shift, the fix lands at the
+contract site, not behind a shim. What is *not* deferred is the **violation handler**: it is engine
+policy regardless of how the trap lowers, it is the sole source of the value contracts add over
+`assert`, and it is built first, with `contract_assert`/`pre`/`post` adopted directly on top. The
+throwing test-seam handler (below) is needed identically either way. Each non-trivial contract use is
+still validated with a throwaway compile before it is relied on, per the working method.
+
 - **`contract_assert`** replaces in-body `assert`; **`pre`/`post`** replace the assert-at-entry and
   assert-at-exit idiom and become part of the declaration, visible to callers.
 - **Semantics by zone.** Enforce in `PGE_DEV`, observe in a telemetry build, ignore in shipping,
@@ -149,17 +206,22 @@ predicate then terminates via `abort` without unwinding.
   shipping *except this one*; an always-on check is the only way to keep a specific condition live in
   a build that otherwise ignores contracts. It logs and aborts on failure. It is an assertion, not a
   guard, because it has no meaningful recovery branch: a false result means a bug, and the program
-  stops. There is no parallel macro assertion system; the language provides contracts, and the engine
-  adds the handler plus this thin residue, honoring the [CLAUDE.md](../CLAUDE.md) rule to use the
-  language mechanism rather than an engine-specific one.
-- **Guard versus assert.** Contracts are non-branching by construction: there is no boolean to test,
-  so the `if (ensure(...))` pattern is not expressible. That is deliberate. A guard is a real `if`
-  with a real `else`; an assertion never branches.
+  stops. `PGE_VERIFY` is the only assertion macro; there is no other parallel mechanism. The language
+  provides contracts, the engine adds the handler plus this thin residue, honoring the
+  [CLAUDE.md](../CLAUDE.md) rule to use the language mechanism rather than an engine-specific one.
+- **Guard versus assert, and no `ensure`.** Contracts are non-branching by construction: there is no
+  boolean to test, so the Unreal-style `if (ensure(...))` pattern (check, report, then continue on the
+  bad value) is not expressible, and no such branching macro is added. That is deliberate and it is
+  the whole point of the split. A condition with a real recovery path is a **guard**: a real `if`
+  returning a `std::expected` error, ordinary control flow, not an assertion. A condition with no
+  recovery is an **assertion** that aborts. There is no third category, so there is no place for a
+  reporting-but-continuing `ensure`; the report-and-continue behavior that Unreal folds into `ensure`
+  is instead the contract `observe` semantic at the telemetry build, chosen globally, needing no macro.
 - **Where contracts go first.** The `TypedRef` op-table boundary
-  (`PlaygroundEngine/src/Reflection/TypedRef.cppm`, `FieldInfo.cppm`), where a wrong `Type` or `Data`
-  assumption is silent undefined behavior today, and `Engine::Run` boot ordering. The durable
+  (`PlaygroundEngine/src/Reflection/Core/TypedRef.cppm`, `Core/FieldInfo.cppm`), where a wrong `Type`
+  or `Data` assumption is silent undefined behavior today, and `Engine::Run` boot ordering. The durable
   `assert` sites migrate to contracts: `Engine.cpp:64` and the reflection facet op-table invariants
-  (`StringFacet.cppm:34`, `SequenceFacet.cppm:48/56/62`). Leave `GameObject.cppm`'s asserts alone:
+  (`Builtins/StringFacet.cppm:32`, `Builtins/SequenceFacet.cppm:49/57/63`). Leave `GameObject.cppm`'s asserts alone:
   that model is a placeholder slated for deletion ([CoreConventions.md](CoreConventions.md), Object
   Model), so migrating them is churn on code that is going away.
 - **Where they must not go.** The `std::expected` / validation surface (`FieldInfo`'s `FieldError`).
@@ -248,6 +310,18 @@ intended effects are discoverable next to the tests that hold them.
 
 ## 7. Enforcement fabric: a local pipeline that mirrors cloud
 
+**Enforced, not expected.** A procedure that depends on an author *choosing* to follow it is not
+enforced, it is hoped for, and an agent will follow what a gate mechanically requires while skipping
+what a document merely asks. So the governing rule of this section is: anything that *can* be
+mechanically enforced *must* be, and the residue that genuinely cannot be is minimized and made
+visible rather than left to discipline. This is why opt-in pinning is upgraded to a forced diff (the
+coverage manifest in [Section 3](#3-verification-toolkit)), why re-blessing is surfaced as a counted
+gate category (below) rather than trusted, and why the feature-completion contract
+([Section 8](#8-feature-completion-contract)) is a machine-checked list, not a checklist an author
+self-certifies. Where a rule cannot yet be mechanized (naming without an AST clang, doc coverage on a
+churning surface), it is a *report*, explicitly labeled as not-yet-enforced, so the gap is known and
+tracked toward enforcement, never quietly accepted as done.
+
 A single canonical pipeline, `scripts/verify.sh`, with ordered, independently invokable stages
 (pass a stage name to run one, or nothing to run all). The full designed sequence:
 
@@ -286,6 +360,14 @@ free workspace:
 | git `pre-commit` / feature-branch push | fast lint + affected tests, reported | advisory |
 | **merge into `main`** | **full pipeline** (build, lint, static contracts, tests, snapshots, sanitizers) | **hard-block** |
 
+The merge gate reports **re-blessed goldens as a distinct, counted category** (a diff over
+`PlaygroundTests/snapshots/`), so "this merge re-blesses N goldens" is a surfaced line item rather
+than a silent `PGE_BLESS`. Blessing is the harness's only integrity backstop, and it is unguarded
+precisely on the autonomous-worker path, where no human is in the loop and the merge gate is the sole
+interception; a mass-churn re-bless on a toolchain upgrade is exactly when a real regression hides, so
+the count is not a nicety but the enforcement of conscious acceptance the whole snapshot mechanism
+rests on.
+
 None of these hooks or the merge gate are wired yet: `verify.sh` exists and is run by hand today. The
 git hooks, the Claude Code hooks, and the `main`-integration gate are P1 wiring on top of the
 stages that already run.
@@ -308,14 +390,21 @@ The workflow integration, extending step 5 (Finalize) of the working method in
 
 1. A named test pins the user-facing output.
 2. Snapshots and assertions pin every applicable machine-facing output from
-   [Section 2](#2-taxonomy-of-machine-facing-outputs).
+   [Section 2](#2-taxonomy-of-machine-facing-outputs); a new reflected type appears in the coverage
+   manifest, pinned or consciously exempted.
 3. Static contracts are declared for the type's machine properties.
 4. Runtime contracts guard the invariants that exist.
-5. Style and documentation lint pass.
-6. The verify pipeline is green.
+5. Properties are stated for the invariants that must hold over all inputs (round-trip, and any other
+   universally-quantified truth), not only the hand-picked cases.
+6. Style and documentation lint pass.
+7. The verify pipeline is green.
 
-This may later be surfaced as a `/verify-feature` skill. It is the step that makes an author, human
-or agent, declare and pin the effects of the work.
+Consistent with [Section 7](#7-enforcement-fabric-a-local-pipeline-that-mirrors-cloud), this is a
+machine-checked contract, not a self-certified checklist: each item above is enforced by the pipeline
+where it can be (the manifest diff, the static and runtime contracts, lint, the green gate), so an
+author, human or agent, cannot mark a feature done while an enforceable item is unmet. This may later
+be surfaced as a `/verify-feature` skill. It is the step that makes an author declare and pin the
+effects of the work.
 
 ## 9. Phased roadmap
 
@@ -327,16 +416,25 @@ or agent, declare and pin the effects of the work.
   comment cap); and the `verify.sh` pipeline (configure/build/lint/test). Deferred out of P0: the
   memory probes (no consumer yet), the `IsHandleLike` / `AllFieldsReflected` predicates (boundary
   designs still open), and the hooks (P1 wiring).
-- **P1.** Runtime contracts (a `linux-dev` plus `-fcontracts` preset, the violation handler, the
-  throwing test-seam handler, the `PGE_VERIFY` residue), retiring `<cassert>` and migrating the
-  durable `assert` sites (`Engine.cpp:64`, the reflection facets), the sanitizer spike then presets,
-  the doc-coverage report, and wiring the enforcement fabric on top of `verify.sh` (the git and
-  Claude Code hooks, and the `main`-integration gate).
-- **P2.** The memory probes (`TrackingResource`, `NoAllocScope`, `Tracked<T>`) arriving with their
-  first consumer, serialization snapshots and round-trip property tests (with serialization), and the
-  content validation layer (with annotations and the editor).
-- **P3.** The determinism replay harness (with the ECS and `InputCommand`), the containerized
-  local-equals-cloud CI, and the GitHub Actions wrapper.
+- **P1.** *Harness self-verification first:* the reflection ground-truth cross-check (reflected
+  numbers equal `sizeof`/`alignof`/`offsetof`/`is_trivially_copyable_v`) and the snapshot
+  discrimination test, plus display-string quarantine in `DescribeType`, all buildable now with no
+  dependency. Then runtime contracts (a `linux-dev` plus `-fcontracts` preset, the violation handler,
+  the throwing test-seam handler, the `PGE_VERIFY` residue, adopting `contract_assert`/`pre`/`post`
+  directly with no interim macro), retiring `<cassert>` and migrating the durable `assert` sites
+  (`Engine.cpp:64`, the reflection facets). The property-based-testing loop primitive (hand-written
+  generators to start). The sanitizer spike then presets, with the fuzzing-instrumentation spike
+  piggybacked. The namespace-enumeration spike gating the coverage manifest, then the manifest as a
+  default-on report. The doc-coverage report. Wiring the enforcement fabric on top of `verify.sh` (the
+  git and Claude Code hooks, the `main`-integration gate, and the re-blessed-goldens gate category).
+- **P2.** The reflected-instance generator `Arbitrary<T>` (the shared keystone for properties,
+  fuzzing, and structure-aware mutation), arriving with serialization as its first consumer. The
+  memory probes (`TrackingResource`, `NoAllocScope`, `Tracked<T>`). Serialization byte snapshots and
+  round-trip property tests, the deserializer fuzz target, and the optional structure-aware mutation
+  pass (all on the generator). The content validation layer (with annotations and the editor).
+- **P3.** The determinism replay harness (with the ECS and `InputCommand`), the network-packet fuzz
+  target (reusing the generator), the containerized local-equals-cloud CI, and the GitHub Actions
+  wrapper. The coverage manifest's per-module hard gate lands here as modules are marked stable.
 
 ## 10. Open questions and risks
 
@@ -344,7 +442,17 @@ or agent, declare and pin the effects of the work.
   (branches may be red), so the residual risk is a red `main` blocking clean merges; the invariant is
   that a red `main` is an incident to fix immediately, not a state to bypass.
 - **Snapshot churn.** Golden files require re-blessing discipline; a large or surprising snapshot diff
-  in review is a signal, not a chore to wave through.
+  in review is a signal, not a chore to wave through. The counted re-bless gate category
+  ([Section 7](#7-enforcement-fabric-a-local-pipeline-that-mirrors-cloud)) and display-string
+  quarantine ([Section 3](#3-verification-toolkit)) are the structural backstops that keep this from
+  resting on discipline alone.
+- **Coverage-manifest feasibility.** The manifest depends on compile-time namespace enumeration
+  (`members_of(^^PgE)` across modules); there is no runtime type registry to iterate. Cross-module
+  reachability of type declarations is a fragile GCC-16 area, so the enumeration is spiked in
+  `PlaygroundReflection/` before the instrument is designed, and the manifest is a report until that
+  is proven. Default-deny gating on a churning reflected surface is deliberately avoided: it would
+  train authors to reflex-bless, recreating the blessing risk above; the manifest forces a *visible*
+  decision instead, and hard gating waits for per-module stability.
 - **Textual lint is heuristic.** Without a clang AST, naming and abbreviation checks are approximate;
   the IDE and review remain the backstop until mainline clang can parse these units.
 - **CI container maintenance.** Reproducing a source-built GCC 16 in an image is real upkeep, weighed
