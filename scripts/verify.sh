@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The verification pipeline: ordered, fail-fast stages that mirror what a future cloud CI runs.
-# Run every stage, or one by name: scripts/verify.sh [configure|build|format|lint|shellcheck|test].
+# Run every stage, or one by name: scripts/verify.sh
+# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix].
 # A cloud CI job is a thin wrapper that calls these same stages, so local and cloud stay identical.
 set -uo pipefail
 
@@ -34,6 +35,19 @@ find_shellcheck() {
 	return 1
 }
 
+# gersemi is the CMake formatter (installed under ~/.local/bin here, on PATH in a container).
+find_gersemi() {
+	if command -v gersemi >/dev/null 2>&1; then
+		printf 'gersemi'
+		return 0
+	fi
+	if [ -x "$HOME/.local/bin/gersemi" ]; then
+		printf '%s' "$HOME/.local/bin/gersemi"
+		return 0
+	fi
+	return 1
+}
+
 # Configure is always run before build: a CMakeLists source addition is otherwise silently skipped
 # until the next reconfigure.
 stage_configure() { cmake --preset linux; }
@@ -56,6 +70,18 @@ stage_format() {
 	git ls-files '*.cpp' '*.cppm' '*.h' '*.hpp' ':(exclude)PlaygroundReflection/src/*.h' | xargs "$formatter" --dry-run --Werror
 }
 
+# CMake formatter drift check (gersemi, config in .gersemirc), mirroring the clang-format stage for
+# C++. --check exits non-zero if a file would be reformatted; the unknown-command warning it prints for
+# doctest's helper macro is informational and does not fail the stage.
+stage_cmakeformat() {
+	local formatter
+	if ! formatter="$(find_gersemi)"; then
+		printf 'verify: gersemi not found (pip install gersemi, or drop it in ~/.local/bin)\n'
+		return 1
+	fi
+	git ls-files '*CMakeLists.txt' '*.cmake' | xargs "$formatter" --check
+}
+
 stage_lint() { "$root/scripts/lint.sh"; }
 
 stage_shellcheck() {
@@ -76,7 +102,7 @@ stage_matrix() {
 	cmake --build --preset linux-dev && cmake --build --preset linux-release
 }
 
-order=(configure build format lint shellcheck test matrix)
+order=(configure build format cmakeformat lint shellcheck test matrix)
 
 run_stage() {
 	local name="$1"

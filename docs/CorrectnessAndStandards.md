@@ -313,8 +313,12 @@ final-newline hygiene, since those rules are not C++-specific and CMake was prev
 blind spot; the comment cap stays C++ only (it scans `//` and `/* */`, not CMake `#`). Run-of-directive
 comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are exempt from the comment cap. The
 rules that need an AST clang cannot build here (naming, abbreviation) are left to the IDE, not
-approximated, to avoid false positives. A CMake *formatter* (`gersemi` / `cmake-format --check`,
-mirroring the clang-format stage) is a candidate follow-up, deferred like the sanitizer spike.
+approximated, to avoid false positives. A CMake *formatter* is now adopted [built]: **gersemi**
+(`.gersemirc`: tabs and 150 columns to match `.editorconfig` / `.clang-format`) drove a one-time
+reflow of every `CMakeLists.txt`, and the `cmakeformat` verify stage runs `gersemi --check`, mirroring
+the clang-format stage for C++. Its opinionated `if(...)` (no space) becomes the CMake baseline, the
+same kind of uniformity call as the clang-format choices above; the unknown-command warning for
+doctest's `doctest_discover_tests` helper is informational and does not fail the stage.
 
 ### Comment length [built]
 
@@ -372,7 +376,7 @@ paths where contracts compile out), **gcov coverage** (advisory), and the **cont
 that discharges the build-mode risk in [Section 10](#10-open-questions-and-risks). TSan is deferred
 until real concurrency exists (the ECS/networking), where it earns its keep.
 
-**Built so far:** `configure → build → format → lint → shellcheck → test → matrix`. Configure always
+**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix`. Configure always
 runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
 incremental `--build`). The **format check** (`clang-format --dry-run -Werror`), **shellcheck**, and
 **build matrix** stages are now wired [built]; the tool-bearing ones detect their tool across
@@ -510,9 +514,9 @@ effects of the work.
   presets, with the fuzzing-instrumentation spike piggybacked. The namespace-enumeration spike gating
   the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
   pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
-  `shellcheck` on `scripts/*.sh` [built], and the Debug/RelWithDebInfo/Release build matrix [built];
-  still open are the `gcc -fanalyzer` static-analysis stage, `gcov` coverage (advisory), a CMake
-  formatter stage (`gersemi`), and the remaining contract-mode-matrix legs (`observe` /
+  `shellcheck` on `scripts/*.sh` [built], the Debug/RelWithDebInfo/Release build matrix [built], and the
+  `gersemi` CMake-format check [built]; still open are the `gcc -fanalyzer` static-analysis stage,
+  `gcov` coverage (advisory), and the remaining contract-mode-matrix legs (`observe` /
   `-fno-exceptions`) once their presets exist. The enforcement fabric on
   top of `verify.sh` is wired [built]: the tracked git hooks (branch lint plus the `--no-ff`
   `main`-merge full-pipeline gate and its re-blessed-goldens category) and the advisory Claude Code

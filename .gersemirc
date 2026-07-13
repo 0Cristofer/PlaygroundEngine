@@ -1,0 +1,5 @@
+# gersemi owns CMake formatting, mirroring what clang-format does for C++. Tabs and the 150-column
+# budget match .editorconfig and .clang-format so the two formatters agree on indentation and width.
+indent: tabs
+line_length: 150
+list_expansion: favour-expansion
