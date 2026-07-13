@@ -92,6 +92,13 @@ endif ()
 add_compile_options(
 		$<$<CXX_COMPILER_ID:MSVC>:/utf-8>
 		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-freflection>
+
+		# C++26 contracts. Kept global for the same reason as -freflection: the internal `import std`
+		# module target reads these options, and a semantic mismatch between the std BMI and consumers
+		# must be avoided. The evaluation semantic is a global program property; enforce for now (all
+		# targets build exceptions-on), split by build zone when the shipping/telemetry presets arrive.
+		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-fcontracts>
+		$<$<AND:$<CXX_COMPILER_ID:GNU>,$<COMPILE_LANGUAGE:CXX>>:-fcontract-evaluation-semantic=enforce>
 )
 
 enable_testing()
