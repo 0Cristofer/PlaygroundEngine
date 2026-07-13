@@ -1,4 +1,6 @@
 build/
+# CTest scratch, written to the cwd if ctest is run outside build/
+/Testing/
 bin/
 x64/
 obj/
