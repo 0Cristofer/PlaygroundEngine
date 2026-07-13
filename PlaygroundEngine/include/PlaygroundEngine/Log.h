@@ -8,7 +8,8 @@
 #define PGE_LOG_LOCATION std::source_location::current()
 #else
 #define PGE_LOG_LOCATION                                                                                                                             \
-	std::source_location {}
+	std::source_location                                                                                                                             \
+	{}
 #endif
 
 // `level` is a bare LogLevel enumerator; the if constexpr strips disabled levels at

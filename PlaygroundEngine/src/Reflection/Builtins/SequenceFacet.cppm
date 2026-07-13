@@ -39,7 +39,10 @@ namespace PgE
 			  _append(append)
 		{}
 
-		const TypeInfo& ElementType() const { return _element.Get(); }
+		const TypeInfo& ElementType() const
+		{
+			return _element.Get();
+		}
 
 		std::size_t Size(const void* obj) const
 		{
@@ -61,10 +64,22 @@ namespace PgE
 			return _constElementRef(obj, index);
 		}
 
-		bool CanMutateElements() const { return _elementRef != nullptr; }
-		bool CanClear() const { return _clear != nullptr; }
-		bool CanReserve() const { return _reserve != nullptr; }
-		bool CanAppend() const { return _append != nullptr; }
+		bool CanMutateElements() const
+		{
+			return _elementRef != nullptr;
+		}
+		bool CanClear() const
+		{
+			return _clear != nullptr;
+		}
+		bool CanReserve() const
+		{
+			return _reserve != nullptr;
+		}
+		bool CanAppend() const
+		{
+			return _append != nullptr;
+		}
 
 		std::expected<void, FacetError> Clear(void* obj) const
 		{

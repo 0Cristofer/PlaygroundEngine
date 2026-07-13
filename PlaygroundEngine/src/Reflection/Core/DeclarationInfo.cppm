@@ -30,11 +30,20 @@ namespace PgE
 			: _identifier(identifier), _displayName(displayName), _annotations(annotations)
 		{}
 
-		std::string_view GetIdentifier() const { return _identifier; }
+		std::string_view GetIdentifier() const
+		{
+			return _identifier;
+		}
 
-		std::string_view GetDisplayName() const { return _displayName; }
+		std::string_view GetDisplayName() const
+		{
+			return _displayName;
+		}
 
-		std::span<const AnnotationInfo> GetAnnotations() const { return _annotations; }
+		std::span<const AnnotationInfo> GetAnnotations() const
+		{
+			return _annotations;
+		}
 
 		template <typename A>
 		std::vector<const std::remove_cvref_t<A>*> GetAnnotations() const

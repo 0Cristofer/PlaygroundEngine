@@ -66,7 +66,10 @@ namespace PgE::detail
 			(std::is_lvalue_reference_v<Parameter> && !std::is_const_v<Value>) || std::is_rvalue_reference_v<Parameter> ||
 			(!std::is_reference_v<Parameter> && std::is_move_constructible_v<Value> && !std::is_copy_constructible_v<Value>);
 
-		static const TypeInfo* ExpectedTag() { return &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>(); }
+		static const TypeInfo* ExpectedTag()
+		{
+			return &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>();
+		}
 
 		static decltype(auto) Bind(const TypedRef& arg)
 		{

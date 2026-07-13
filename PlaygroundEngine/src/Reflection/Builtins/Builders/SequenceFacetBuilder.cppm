@@ -250,7 +250,10 @@ namespace PgE
 			return detail::StringifySequence<std::vector<Element, Alloc>, Element>(value);
 		}
 
-		static consteval auto MakeFacets() { return std::tuple{detail::MakeResizableSequenceFacet<std::vector<Element, Alloc>>()}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{detail::MakeResizableSequenceFacet<std::vector<Element, Alloc>>()};
+		}
 	};
 
 	template <typename Element, std::size_t Count>
@@ -263,13 +266,19 @@ namespace PgE
 			return detail::StringifySequence<std::array<Element, Count>, Element>(value);
 		}
 
-		static consteval auto MakeFacets() { return std::tuple{detail::MakeFixedSequenceFacet<std::array<Element, Count>>()}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{detail::MakeFixedSequenceFacet<std::array<Element, Count>>()};
+		}
 	};
 
 	template <typename Element, std::size_t Count>
 	struct TypeInfoTraits<Element[Count]> : TypeInfoTraitsDefaults
 	{
-		static std::string Stringify(const Element (&value)[Count]) { return detail::StringifySequence<Element[Count], Element>(value); }
+		static std::string Stringify(const Element (&value)[Count])
+		{
+			return detail::StringifySequence<Element[Count], Element>(value);
+		}
 
 		static consteval auto MakeFacets()
 		{
@@ -297,6 +306,9 @@ namespace PgE
 			return detail::StringifySequence<std::span<Element, Extent>, Element>(value);
 		}
 
-		static consteval auto MakeFacets() { return std::tuple{detail::MakeFixedSequenceFacet<std::span<Element, Extent>>()}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{detail::MakeFixedSequenceFacet<std::span<Element, Extent>>()};
+		}
 	};
 }

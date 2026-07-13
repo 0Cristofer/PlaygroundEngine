@@ -29,9 +29,18 @@ namespace PgE
 
 		[[nodiscard]] bool ShouldClose() const;
 
-		[[nodiscard]] int GetWidth() const { return _specification.Width; }
-		[[nodiscard]] int GetHeight() const { return _specification.Height; }
-		[[nodiscard]] std::string_view GetTitle() const { return _specification.Title; }
+		[[nodiscard]] int GetWidth() const
+		{
+			return _specification.Width;
+		}
+		[[nodiscard]] int GetHeight() const
+		{
+			return _specification.Height;
+		}
+		[[nodiscard]] std::string_view GetTitle() const
+		{
+			return _specification.Title;
+		}
 
 	private:
 		Window(std::unique_ptr<WindowBackend> backend, WindowSpecification specification);

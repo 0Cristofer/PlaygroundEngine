@@ -4,7 +4,7 @@ import PlaygroundEngine.Reflection;
 
 import std;
 
-namespace PgE::Harness
+namespace PgE::Snapshot
 {
 	namespace detail
 	{
@@ -19,30 +19,6 @@ namespace PgE::Harness
 		{
 			return value ? "true" : "false";
 		}
-
-		std::string_view KindName(const TypeKind kind)
-		{
-			switch (kind)
-			{
-			case TypeKind::Void: return "Void";
-			case TypeKind::NullPointer: return "NullPointer";
-			case TypeKind::Integral: return "Integral";
-			case TypeKind::FloatingPoint: return "FloatingPoint";
-			case TypeKind::Enum: return "Enum";
-			case TypeKind::Union: return "Union";
-			case TypeKind::Class: return "Class";
-			case TypeKind::Array: return "Array";
-			case TypeKind::Pointer: return "Pointer";
-			case TypeKind::MemberObjectPointer: return "MemberObjectPointer";
-			case TypeKind::MemberFunctionPointer: return "MemberFunctionPointer";
-			case TypeKind::Function: return "Function";
-			case TypeKind::LValueReference: return "LValueReference";
-			case TypeKind::RValueReference: return "RValueReference";
-			case TypeKind::Other: return "Other";
-			}
-
-			return "Other";
-		}
 	}
 
 	// A reflected type's machine-facing shape as stable text: an identity section (names, kinds, field
@@ -56,7 +32,7 @@ namespace PgE::Harness
 		const auto sink = std::back_inserter(out);
 
 		std::format_to(sink, "type {}\n", detail::Label(type));
-		std::format_to(sink, "kind {}\n", detail::KindName(type.GetKind()));
+		std::format_to(sink, "kind {}\n", ToString(type.GetKind()));
 
 		out += "identity\n";
 		for (const FieldInfo& field : type.GetFields())

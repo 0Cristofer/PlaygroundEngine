@@ -27,7 +27,10 @@ namespace ReflectionTestTypes
 		int Width;
 		int Height;
 
-		int Area() const { return Width * Height; }
+		int Area() const
+		{
+			return Width * Height;
+		}
 
 		void Resize(int w, int h)
 		{
@@ -40,18 +43,30 @@ namespace ReflectionTestTypes
 	{
 		int Value = 0;
 
-		int Get() const { return Value; }
+		int Get() const
+		{
+			return Value;
+		}
 
-		void Add(int amount) { Value += amount; }
+		void Add(int amount)
+		{
+			Value += amount;
+		}
 	};
 
 	struct Accessor
 	{
 		int Value = 5;
 
-		int& Mutable() { return Value; }
+		int& Mutable()
+		{
+			return Value;
+		}
 
-		const int& Readonly() const { return Value; }
+		const int& Readonly() const
+		{
+			return Value;
+		}
 	};
 
 	struct MoveOnly
@@ -67,7 +82,10 @@ namespace ReflectionTestTypes
 	{
 		int Value = 0;
 
-		void Consume(MoveOnly item) { Value = item.Tag; }
+		void Consume(MoveOnly item)
+		{
+			Value = item.Tag;
+		}
 	};
 
 	// Bitfields (no addressable byte) plus a plain field, to prove field access does not depend on
@@ -83,7 +101,10 @@ namespace ReflectionTestTypes
 	class Secret
 	{
 	public:
-		int Reveal() const { return _hidden; }
+		int Reveal() const
+		{
+			return _hidden;
+		}
 
 	private:
 		int _hidden = 7;
@@ -103,7 +124,8 @@ namespace ReflectionTestTypes
 		int& Alias;
 		const int& ConstAlias;
 
-		Referencing() : Alias(Target), ConstAlias(Target) {}
+		Referencing() : Alias(Target), ConstAlias(Target)
+		{}
 	};
 
 	// Move-only but move-assignable (like unique_ptr / Poly): settable through a move, not a copy.
@@ -157,9 +179,13 @@ namespace ReflectionTestTypes
 		bool Moved = false;
 		Tracked() = default;
 
-		Tracked(const Tracked& other) : Value(other.Value) {}
+		Tracked(const Tracked& other) : Value(other.Value)
+		{}
 
-		Tracked(Tracked&& other) noexcept : Value(other.Value) { other.Moved = true; }
+		Tracked(Tracked&& other) noexcept : Value(other.Value)
+		{
+			other.Moved = true;
+		}
 
 		Tracked& operator=(const Tracked&) = default;
 		Tracked& operator=(Tracked&&) = default;
@@ -169,7 +195,10 @@ namespace ReflectionTestTypes
 	{
 		int Stored = 0;
 
-		void Store(Tracked item) { Stored = item.Value; }
+		void Store(Tracked item)
+		{
+			Stored = item.Value;
+		}
 	};
 
 	// Copyable but with a deleted move constructor: the invoke binder must still copy it by value.
@@ -186,7 +215,10 @@ namespace ReflectionTestTypes
 	{
 		int Stored = 0;
 
-		void Take(CopyOnlyParam item) { Stored = item.Value; }
+		void Take(CopyOnlyParam item)
+		{
+			Stored = item.Value;
+		}
 	};
 
 	// A type whose own metadata names itself: a factory returning it by value, a method taking it by
@@ -196,9 +228,18 @@ namespace ReflectionTestTypes
 	{
 		int Value = 0;
 
-		Node Clone() const { return Node{Value}; }
-		void CopyFrom(const Node& other) { Value = other.Value; }
-		Node& Self() { return *this; }
+		Node Clone() const
+		{
+			return Node{Value};
+		}
+		void CopyFrom(const Node& other)
+		{
+			Value = other.Value;
+		}
+		Node& Self()
+		{
+			return *this;
+		}
 	};
 
 	// Two types that name each other by value: building either needs the other's TypeInfo, which needs
@@ -230,8 +271,14 @@ namespace ReflectionTestTypes
 		int Value = 0;
 
 	private:
-		int Doubled() const { return Value * 2; }
-		void SetValue(int v) { Value = v; }
+		int Doubled() const
+		{
+			return Value * 2;
+		}
+		void SetValue(int v)
+		{
+			Value = v;
+		}
 	};
 
 	// A rvalue-ref-qualified overload cannot be called on the erased lvalue object the thunk holds, so it
@@ -241,8 +288,14 @@ namespace ReflectionTestTypes
 	{
 		int Value = 0;
 
-		int OnRvalue() && { return Value; }
-		int OnAny() const { return Value; }
+		int OnRvalue() &&
+		{
+			return Value;
+		}
+		int OnAny() const
+		{
+			return Value;
+		}
 	};
 
 	// An enum with the default (int) underlying type. Stringifies to its enumerator name, which also
@@ -296,12 +349,18 @@ namespace ReflectionTestTypes
 		virtual ~Base() = default;
 		int V = 1;
 
-		virtual int GetV() { return V; }
+		virtual int GetV()
+		{
+			return V;
+		}
 	};
 
 	struct Child : Base
 	{
-		int GetV() override { return V + 1; }
+		int GetV() override
+		{
+			return V + 1;
+		}
 	};
 
 	struct ChildNoOverride : Base
@@ -333,7 +392,8 @@ namespace ReflectionTestTypes
 	{
 		const char* Text;
 
-		consteval Doc(const char* text) : Text(std::define_static_string(std::string_view{text})) {}
+		consteval Doc(const char* text) : Text(std::define_static_string(std::string_view{text}))
+		{}
 	};
 
 	struct Serializable
@@ -436,7 +496,10 @@ using ReflectionTestTypes::WithPrivate;
 template <>
 struct PgE::TypeInfoTraits<Labeled> : PgE::TypeInfoTraitsDefaults
 {
-	static consteval auto MakeFacets() { return std::tuple{LabelFacet{.Text = "the-label"}}; }
+	static consteval auto MakeFacets()
+	{
+		return std::tuple{LabelFacet{.Text = "the-label"}};
+	}
 };
 
 TEST_CASE("reflected type name is correct")

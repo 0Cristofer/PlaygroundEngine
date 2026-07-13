@@ -2,7 +2,7 @@ module PlaygroundTests.SnapshotHarness;
 
 import std;
 
-namespace PgE::Harness
+namespace PgE::Snapshot
 {
 	namespace
 	{

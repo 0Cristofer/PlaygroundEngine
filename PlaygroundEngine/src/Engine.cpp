@@ -12,7 +12,8 @@ import PlaygroundEngine.Reflection;
 
 namespace PgE
 {
-	Engine::Engine(AppDescriptorBase& appDescriptor) : _appDescriptor(appDescriptor) {}
+	Engine::Engine(AppDescriptorBase& appDescriptor) : _appDescriptor(appDescriptor)
+	{}
 
 	std::expected<void, BootError> Engine::BootPresentation()
 	{

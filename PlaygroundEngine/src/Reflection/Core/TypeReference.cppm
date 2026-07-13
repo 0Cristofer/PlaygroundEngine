@@ -14,6 +14,9 @@ namespace PgE
 
 		Resolver Resolve = nullptr;
 
-		const TypeInfo& Get() const { return Resolve(); }
+		const TypeInfo& Get() const
+		{
+			return Resolve();
+		}
 	};
 }

@@ -54,7 +54,8 @@ namespace PgE
 		[[nodiscard]] bool ShouldClose() const;
 
 	private:
-		explicit WindowBackend(GLFWwindow* handle) : _handle(handle) {}
+		explicit WindowBackend(GLFWwindow* handle) : _handle(handle)
+		{}
 
 		GLFWwindow* _handle;
 	};

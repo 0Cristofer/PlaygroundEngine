@@ -43,6 +43,9 @@ namespace PgE
 			return ToString(underlying);
 		}
 
-		static consteval auto MakeFacets() { return std::tuple{detail::MakeEnumerationFacet<T>()}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{detail::MakeEnumerationFacet<T>()};
+		}
 	};
 }

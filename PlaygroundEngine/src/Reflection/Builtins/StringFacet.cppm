@@ -24,7 +24,8 @@ namespace PgE
 		using ViewThunk = std::string_view (*)(const void*);
 		using AssignThunk = std::expected<void, FacetError> (*)(void*, std::string_view);
 
-		constexpr StringFacet(const ViewThunk view, const AssignThunk assign) : _view(view), _assign(assign) {}
+		constexpr StringFacet(const ViewThunk view, const AssignThunk assign) : _view(view), _assign(assign)
+		{}
 
 		std::string_view View(const void* obj) const
 		{
@@ -32,7 +33,10 @@ namespace PgE
 			return _view(obj);
 		}
 
-		bool CanAssign() const { return _assign != nullptr; }
+		bool CanAssign() const
+		{
+			return _assign != nullptr;
+		}
 
 		std::expected<void, FacetError> Assign(void* obj, const std::string_view value) const
 		{

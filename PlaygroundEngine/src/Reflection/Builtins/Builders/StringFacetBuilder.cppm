@@ -35,9 +35,15 @@ namespace PgE
 
 		using String = std::basic_string<char, Traits, Alloc>;
 
-		static std::string Stringify(const String& obj) { return std::format("\"{}\"", obj); }
+		static std::string Stringify(const String& obj)
+		{
+			return std::format("\"{}\"", obj);
+		}
 
-		static consteval auto MakeFacets() { return std::tuple{StringFacet{&detail::StringViewThunk<String>, &detail::StringAssignThunk<String>}}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{StringFacet{&detail::StringViewThunk<String>, &detail::StringAssignThunk<String>}};
+		}
 	};
 
 	template <typename Traits>
@@ -45,10 +51,16 @@ namespace PgE
 	{
 		using View = std::basic_string_view<char, Traits>;
 
-		static std::string Stringify(const View& obj) { return std::format("\"{}\"", obj); }
+		static std::string Stringify(const View& obj)
+		{
+			return std::format("\"{}\"", obj);
+		}
 
 		// A view reads but never writes: the assign thunk is null, the same nullable-capability encoding
 		// fields already use.
-		static consteval auto MakeFacets() { return std::tuple{StringFacet{&detail::StringViewThunk<View>, nullptr}}; }
+		static consteval auto MakeFacets()
+		{
+			return std::tuple{StringFacet{&detail::StringViewThunk<View>, nullptr}};
+		}
 	};
 }

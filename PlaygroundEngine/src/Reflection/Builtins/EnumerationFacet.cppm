@@ -20,7 +20,10 @@ namespace PgE
 			: DeclarationInfo(identifier, displayName, annotations), _value(value)
 		{}
 
-		std::uint64_t GetValue() const { return _value; }
+		std::uint64_t GetValue() const
+		{
+			return _value;
+		}
 
 	private:
 		std::uint64_t _value;
@@ -40,7 +43,10 @@ namespace PgE
 
 		const TypeInfo& GetUnderlyingType() const;
 
-		std::span<const EnumeratorInfo> GetEnumerators() const { return _enumerators; }
+		std::span<const EnumeratorInfo> GetEnumerators() const
+		{
+			return _enumerators;
+		}
 
 		const EnumeratorInfo* FindByIdentifier(std::string_view identifier) const;
 		const EnumeratorInfo* FindByValue(std::uint64_t value) const;

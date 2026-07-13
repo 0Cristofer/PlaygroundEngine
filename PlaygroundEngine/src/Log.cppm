@@ -55,6 +55,9 @@ namespace PgE
 			detail::LogDispatch(level, location, message);
 		}
 
-		static void Print(const LogLevel level, const std::source_location& location) { detail::LogDispatch(level, location, std::string_view{}); }
+		static void Print(const LogLevel level, const std::source_location& location)
+		{
+			detail::LogDispatch(level, location, std::string_view{});
+		}
 	};
 }

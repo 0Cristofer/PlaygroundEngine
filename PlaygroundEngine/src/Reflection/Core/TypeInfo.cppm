@@ -76,12 +76,27 @@ namespace PgE
 			  _stringifyThunk(stringifyThunk)
 		{}
 
-		const TypeTraits& GetTraits() const { return _traits; }
-		TypeKind GetKind() const { return _traits.Kind; }
-		std::size_t GetSize() const { return _traits.Size; }
-		std::size_t GetAlignment() const { return _traits.Alignment; }
+		const TypeTraits& GetTraits() const
+		{
+			return _traits;
+		}
+		TypeKind GetKind() const
+		{
+			return _traits.Kind;
+		}
+		std::size_t GetSize() const
+		{
+			return _traits.Size;
+		}
+		std::size_t GetAlignment() const
+		{
+			return _traits.Alignment;
+		}
 
-		std::span<const FacetEntry> GetFacets() const { return _facets; }
+		std::span<const FacetEntry> GetFacets() const
+		{
+			return _facets;
+		}
 		template <typename Facet>
 		const Facet* GetFacet() const
 		{
@@ -99,7 +114,10 @@ namespace PgE
 		std::span<const FunctionInfo> GetFunctions() const;
 		std::vector<const FunctionInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
 
-		std::span<const FieldInfo> GetFields() const { return _fields; }
+		std::span<const FieldInfo> GetFields() const
+		{
+			return _fields;
+		}
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
 		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
@@ -166,8 +184,14 @@ namespace PgE
 			return field->GetRefAs<T>(obj);
 		}
 
-		bool CanStringify() const { return _stringifyThunk; }
-		std::string Stringify(const void* obj) const { return _stringifyThunk(obj); }
+		bool CanStringify() const
+		{
+			return _stringifyThunk;
+		}
+		std::string Stringify(const void* obj) const
+		{
+			return _stringifyThunk(obj);
+		}
 
 	private:
 		TypeTraits _traits;

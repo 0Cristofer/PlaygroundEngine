@@ -13,7 +13,10 @@ namespace
 		int Width = 0;
 		int Height = 0;
 
-		int Area() const { return Width * Height; }
+		int Area() const
+		{
+			return Width * Height;
+		}
 
 		void Resize(int width, int height)
 		{

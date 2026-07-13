@@ -14,7 +14,7 @@ NamespaceIndentation: All
 FixNamespaceComments: false
 IndentRequiresClause: false
 BreakTemplateDeclarations: Yes
-AllowShortFunctionsOnASingleLine: Inline
+AllowShortFunctionsOnASingleLine: None
 AllowShortCaseLabelsOnASingleLine: true
 BinPackParameters: false
 InsertBraces: true
