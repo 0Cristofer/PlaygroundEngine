@@ -12,12 +12,10 @@ namespace
 		return value * 2;
 	}
 
-	int WithoutSideEffect(int value)
+	int IncrementNonNegative(int value)
 	{
-		int result = 0;
 		contract_assert(value >= 0);
-		result = value + 1;
-		return result;
+		return value + 1;
 	}
 }
 
@@ -36,8 +34,8 @@ TEST_CASE("a violated precondition is rejected before the body runs")
 
 TEST_CASE("a violated contract_assert is rejected")
 {
-	CHECK(WithoutSideEffect(4) == 5);
-	CHECK_THROWS_AS(WithoutSideEffect(-1), PgETest::ContractViolationError);
+	CHECK(IncrementNonNegative(4) == 5);
+	CHECK_THROWS_AS(IncrementNonNegative(-1), PgETest::ContractViolationError);
 }
 
 // The violation-report kind text the runtime handler logs, pinned so the label a diagnostic surfaces

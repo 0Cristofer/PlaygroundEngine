@@ -51,8 +51,8 @@ namespace PgE
 		TypedRef ElementRef(void* obj, const std::size_t index) const
 			pre(_elementRef != nullptr)
 		{
-			// A read-only view (std::span<const T>) has no mutable element access; a caller that mutates must
-			// gate on CanMutateElements() first, the same as CanAppend gates Append.
+			// _elementRef is null for a read-only view (std::span<const T>), so this pre holds only for a
+			// mutable sequence; a caller that mutates gates on CanMutateElements() first, as CanAppend gates Append.
 			return _elementRef(obj, index);
 		}
 

@@ -20,4 +20,24 @@ if [ "${#files[@]}" -eq 0 ]; then
 	exit 0
 fi
 
-exec "$root/scripts/lint.sh" "${files[@]}"
+# Lint the staged content, not the working tree, so a partially-staged file is checked exactly as it
+# will be committed. Extract each staged blob to a temp mirror and lint that; the temp prefix is
+# stripped from findings so paths still read as repo paths.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+staged=()
+for file in "${files[@]}"; do
+	destination="$tmp/$file"
+	mkdir -p "$(dirname "$destination")"
+	if git show ":$file" >"$destination" 2>/dev/null; then
+		staged+=("$destination")
+	fi
+done
+
+if [ "${#staged[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+"$root/scripts/lint.sh" "${staged[@]}" 2>&1 | sed "s#$tmp/##g"
+exit "${PIPESTATUS[0]}"

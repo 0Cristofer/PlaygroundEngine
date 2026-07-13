@@ -181,7 +181,10 @@ throwing test-seam handler (below) is needed identically either way. Each non-tr
 still validated with a throwaway compile before it is relied on, per the working method.
 
 - **`contract_assert`** replaces in-body `assert`; **`pre`/`post`** replace the assert-at-entry and
-  assert-at-exit idiom and become part of the declaration, visible to callers.
+  assert-at-exit idiom and become part of the declaration, visible to callers. Contracts carry no
+  message string, so where the predicate does not by itself convey the invariant, a brief comment
+  states what it guards or how a caller avoids it (a [CLAUDE.md](../CLAUDE.md) code-style rule), so the
+  reasoning the old `assert` string held is not lost.
 - **Semantics by zone.** Enforce in `PGE_DEV`, observe in a telemetry build, ignore in shipping,
   selected with `-fcontract-evaluation-semantic=`. Because contracts terminate without unwinding,
   they hold under `-fno-exceptions`, which the runtime zone requires.

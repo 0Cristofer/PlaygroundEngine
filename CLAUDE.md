@@ -69,6 +69,7 @@ Do not run the heavy path on light work.
 - Functions are clear in intent and do one job; split when doing too much (`OnClick()` calls `Purchase()`; it is not itself the purchase).
 - Class interfaces read like documentation; keep them clean, and if internals must surface, organize them clearly.
 - Comments only where logic is genuinely complex or assumes low-level knowledge; code should be self-documenting. Put comments inside their block, never floating above it where they would read as API docs (real API docs come later, once the surface stabilizes).
+- A `pre`/`post`/`contract_assert` whose predicate does not by itself convey the invariant gets a brief comment saying what it guards or how a caller avoids it. C++26 contracts carry no message (unlike `assert`), so the reasoning the old assert string held must live in a comment, not be lost. Skip it only when the predicate is self-evident.
 
 ## Design rationale notes
 
