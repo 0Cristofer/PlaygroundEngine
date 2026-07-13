@@ -49,7 +49,14 @@ set_target_properties(PlaygroundTests PROPERTIES
 target_sources(PlaygroundTests
 		PRIVATE
 		src/TestMain.cpp
-		src/ReflectionTests.cpp
+		src/Reflection/ReflectionTypeInfoTests.cpp
+		src/Reflection/ReflectionStringificationTests.cpp
+		src/Reflection/ReflectionFunctionTests.cpp
+		src/Reflection/ReflectionFieldTests.cpp
+		src/Reflection/ReflectionTypeGraphTests.cpp
+		src/Reflection/ReflectionEnumTests.cpp
+		src/Reflection/ReflectionAnnotationTests.cpp
+		src/Reflection/ReflectionFacetTests.cpp
 		src/LogTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp
@@ -64,6 +71,7 @@ target_sources(PlaygroundTests
 		FILE_SET CXX_MODULES
 		BASE_DIRS src
 		FILES
+		src/Reflection/ReflectionTestTypes.cppm
 		src/SnapshotHarness.cppm
 		src/ContractSeam.cppm
 )
