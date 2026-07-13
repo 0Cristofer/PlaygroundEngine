@@ -57,6 +57,7 @@ target_sources(PlaygroundTests
 		src/ContractsTests.cpp
 		src/ContractSeam.cpp
 		src/RuntimeContractTests.cpp
+		src/VerifyTests.cpp
 		src/Scratch.cpp
 
 		PUBLIC
