@@ -1,7 +1,5 @@
 module;
 
-#include <cassert>
-
 #include "PlaygroundEngine/Log.h"
 
 module PlaygroundEngine;
@@ -61,8 +59,6 @@ namespace PgE
 
 	void Engine::StartRun()
 	{
-		assert(_app && _world && "Engine::Run called before a successful Boot()");
-
 		_app->OnStartRun(_world.get());
 		Run();
 	}
