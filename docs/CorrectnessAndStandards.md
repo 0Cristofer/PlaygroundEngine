@@ -301,11 +301,15 @@ comment length, naming).
 The guaranteed-portable floor: `scripts/lint.sh` enforces the regex-checkable rules from
 [CLAUDE.md](../CLAUDE.md) and `.editorconfig`. Shipped checks: the em-dash ban (U+2014), trailing
 whitespace (which also catches whitespace on otherwise-blank lines), final newline, and the 3-line
-comment cap. With no arguments it audits every tracked source and Markdown file; with file arguments
-it lints only those, so the merge gate can pass just the files changed versus `main` and grandfather
-existing code. Run-of-directive comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are
-exempt from the comment cap. The rules that need an AST clang cannot build here (naming, abbreviation)
-are left to the IDE, not approximated, to avoid false positives.
+comment cap. With no arguments it audits every tracked C++, Markdown, and CMake file; with file
+arguments it lints only those, so the merge gate can pass just the files changed versus `main` and
+grandfather existing code. CMake files (`CMakeLists.txt`, `*.cmake`) get the em-dash / whitespace /
+final-newline hygiene, since those rules are not C++-specific and CMake was previously an unlinted
+blind spot; the comment cap stays C++ only (it scans `//` and `/* */`, not CMake `#`). Run-of-directive
+comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are exempt from the comment cap. The
+rules that need an AST clang cannot build here (naming, abbreviation) are left to the IDE, not
+approximated, to avoid false positives. A CMake *formatter* (`gersemi` / `cmake-format --check`,
+mirroring the clang-format stage) is a candidate follow-up, deferred like the sanitizer spike.
 
 ### Comment length [built]
 

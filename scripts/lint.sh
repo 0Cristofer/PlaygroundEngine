@@ -4,9 +4,10 @@
 # comment cap. Naming and abbreviation checks need an AST clang cannot build here and are left
 # to the IDE for now (see docs/CorrectnessAndStandards.md).
 #
-# With no arguments, lints every tracked source and Markdown file (a full audit). With file
+# With no arguments, lints every tracked C++, Markdown, and CMake file (a full audit). With file
 # arguments, lints only those (the merge gate passes the files changed versus main, so existing
-# code is grandfathered and only new violations block).
+# code is grandfathered and only new violations block). CMake files get the em-dash / whitespace /
+# final-newline hygiene; the comment cap is C++ only (it scans `//` and `/* */`).
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,14 +16,19 @@ cd "$root" || exit 1
 if [ "$#" -gt 0 ]; then
 	files=("$@")
 else
-	mapfile -t files < <(git ls-files '*.cpp' '*.cppm' '*.h' '*.hpp' '*.md')
+	mapfile -t files < <(git ls-files '*.cpp' '*.cppm' '*.h' '*.hpp' '*.md' '*CMakeLists.txt' '*.cmake')
 fi
 
 violations=0
 flag() { printf 'lint: %s\n' "$1"; violations=$((violations + 1)); }
 
-is_source() { case "$1" in *.cpp | *.cppm | *.h | *.hpp) return 0 ;; *) return 1 ;; esac; }
-is_prose() { case "$1" in *.cpp | *.cppm | *.h | *.hpp | *.md) return 0 ;; *) return 1 ;; esac; }
+# The C++ comment cap is `//`-based, so it applies only to C++ sources. Trailing-whitespace and the
+# em-dash / final-newline hygiene are broader: CMake files get them too, Markdown skips trailing
+# whitespace (a trailing double-space is a hard line break there).
+is_cpp() { case "$1" in *.cpp | *.cppm | *.h | *.hpp) return 0 ;; *) return 1 ;; esac; }
+is_cmake() { case "$1" in *CMakeLists.txt | *.cmake) return 0 ;; *) return 1 ;; esac; }
+is_source() { if is_cpp "$1" || is_cmake "$1"; then return 0; else return 1; fi; }
+is_prose() { case "$1" in *.cpp | *.cppm | *.h | *.hpp | *.md | *CMakeLists.txt | *.cmake) return 0 ;; *) return 1 ;; esac; }
 
 for file in "${files[@]}"; do
 	[ -f "$file" ] || continue
@@ -44,8 +50,11 @@ for file in "${files[@]}"; do
 		while IFS=: read -r number _; do
 			flag "$file:$number trailing whitespace"
 		done < <(grep -nP '[ \t]+$' "$file" || true)
+	fi
 
-		# Comment length: a longer explanation belongs in a docs/ document, not inline.
+	if is_cpp "$file"; then
+		# Comment length: a longer explanation belongs in a docs/ document, not inline. The scan is
+		# `//` and `/* */`-based, so it is C++ only; CMake `#` comments are not subject to the cap.
 		while IFS= read -r finding; do
 			flag "$finding"
 		done < <(awk '

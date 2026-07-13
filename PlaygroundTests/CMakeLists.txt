@@ -14,7 +14,7 @@ FetchContent_Declare(
 )
 
 # We provide our own entry point (DOCTEST_CONFIG_IMPLEMENT + main() in TestMain.cpp),
-# so doctest's bundled static-main lib is unwanted — don't build it.
+# so doctest's bundled static-main lib is unwanted; don't build it.
 set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF CACHE BOOL "" FORCE)
 
 # doctest's CMakeLists declares cmake_minimum_required below CMake 4.x's supported

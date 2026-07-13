@@ -73,7 +73,7 @@ endif ()
 
 # Ensures import std is correctly understood by CLion/Rider. Should be removed when better support comes
 if (LINUX)
-	# The std module sources must come from the active toolchain — a version mismatch
+	# The std module sources must come from the active toolchain, since a version mismatch
 	# (e.g. the system libstdc++'s std.cc against this compiler's headers) fails to build.
 	get_filename_component(_gccBinDir "${CMAKE_CXX_COMPILER}" DIRECTORY)
 	file(GLOB _stdModuleSource "${_gccBinDir}/../include/c++/*/bits/std.cc")
@@ -96,7 +96,7 @@ if (LINUX)
 				$<$<CXX_COMPILER_ID:Clang>:-w>
 		)
 	else ()
-		message(STATUS "[PlaygroundEngine] std module source not found — 'import std' may not resolve in IDE")
+		message(STATUS "[PlaygroundEngine] std module source not found; 'import std' may not resolve in IDE")
 	endif ()
 endif ()
 
