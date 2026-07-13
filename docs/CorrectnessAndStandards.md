@@ -460,10 +460,14 @@ effects of the work.
 - **P1.** *Harness self-verification first:* the reflection ground-truth cross-check (reflected
   numbers equal `sizeof`/`alignof`/`offsetof`/`is_trivially_copyable_v`) and the snapshot
   discrimination test, plus display-string quarantine in `DescribeType`, all buildable now with no
-  dependency. Then runtime contracts (a `linux-dev` plus `-fcontracts` preset, the violation handler,
-  the throwing test-seam handler, the `PGE_VERIFY` residue, adopting `contract_assert`/`pre`/`post`
-  directly with no interim macro), retiring `<cassert>` and migrating the durable `assert` sites
-  (`Engine.cpp:64`, the reflection facets). The property-based-testing loop primitive (hand-written
+  dependency. Runtime contracts [built]: `-fcontracts` with the enforce semantic is global (validated
+  against the modular `import std` build), the engine's `LogContractViolation` policy routes through
+  spdlog and the game installs a runtime handler that calls it, the test build installs a throwing
+  seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
+  is the always-on residue, and `<cassert>` is retired at the migrated sites (`Engine::StartRun` now a
+  `pre`, the reflection facet op-tables now `pre`). Adopted `contract_assert`/`pre`/`post` directly
+  with no interim macro. Still open in P1: the per-zone semantic split (observe/ignore) once shipping
+  and telemetry presets exist. The property-based-testing loop primitive (hand-written
   generators to start). The sanitizer spike then presets, with the fuzzing-instrumentation spike
   piggybacked. The namespace-enumeration spike gating the coverage manifest, then the manifest as a
   default-on report. The doc-coverage report. New local pipeline stages, all toolchain-only: the
