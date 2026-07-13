@@ -190,7 +190,12 @@ still validated with a throwaway compile before it is relied on, per the working
   `PGE_LOG` / spdlog with the assertion kind, source location, and predicate text, and applies the
   fatal-or-telemetry policy for the build zone. This is the language's own customization point, not
   an engine idiom. Validate the exact GCC 16 handler signature with a throwaway compile before
-  relying on it (contracts are experimental).
+  relying on it (contracts are experimental). **The engine owns this, not the game.** Since the engine
+  owns `main`, it defines the global-linkage handler in its entry-point translation unit (`main.cpp`),
+  which is co-linked into any engine-driven executable and never pulled into targets with their own
+  `main` (tests, benchmarks). The reusable formatting/zone *policy* lives in `PlaygroundEngine.Diagnostics`;
+  the handler is a thin dispatch to it. A game needing custom behavior would attach through an
+  engine-provided hook, not by defining the replaceable function itself, that stays an engine concern.
 - **Test seam.** An enforced violation terminates and cannot be caught by doctest. The observe
   semantic is not a fix: it records the violation and then *continues into the body with the bad
   input*, which is the undefined behavior the precondition existed to prevent. So the **test build
@@ -462,8 +467,9 @@ effects of the work.
   discrimination test, plus display-string quarantine in `DescribeType`, all buildable now with no
   dependency. Runtime contracts [built]: `-fcontracts` with the enforce semantic is global (validated
   against the modular `import std` build), the engine's `LogContractViolation` policy routes through
-  spdlog and the game installs a runtime handler that calls it, the test build installs a throwing
-  seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
+  spdlog and the engine installs the runtime handler at its own entry point (`main.cpp`, co-linked
+  into any engine-driven executable, so the game stays unaware of it), the test build installs a
+  throwing seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
   is the always-on residue, and `<cassert>` is retired at the migrated sites (`Engine::StartRun` now a
   `pre`, the reflection facet op-tables now `pre`). Adopted `contract_assert`/`pre`/`post` directly
   with no interim macro. Still open in P1: the per-zone semantic split (observe/ignore) once shipping
