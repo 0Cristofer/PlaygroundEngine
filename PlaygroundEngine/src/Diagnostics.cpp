@@ -26,8 +26,7 @@ namespace PgE
 
 	void LogContractViolation(const std::contracts::contract_violation& violation)
 	{
-		const std::string message =
-			std::format("contract violation [{}]: {}", ContractKindText(violation.kind()), violation.comment());
+		const std::string message = std::format("contract violation [{}]: {}", ContractKindText(violation.kind()), violation.comment());
 		Log::Print(LogLevel::Fatal, violation.location(), message);
 	}
 }

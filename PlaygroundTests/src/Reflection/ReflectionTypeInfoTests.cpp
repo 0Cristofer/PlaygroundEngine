@@ -52,8 +52,7 @@ TEST_CASE("identifier and display name are exposed separately on every declarati
 	const std::span<const PgE::ParameterInfo> params = functions.front()->GetParams();
 	REQUIRE(params.size() == 1);
 	CHECK(params.front().GetIdentifier() == "amount");
-	CHECK(params.front().GetDisplayName() ==
-		  "<parameter amount of int ReflectionTestTypes::Gadget@PlaygroundTests.ReflectionTestTypes::Hurt(int)>");
+	CHECK(params.front().GetDisplayName() == "<parameter amount of int ReflectionTestTypes::Gadget@PlaygroundTests.ReflectionTestTypes::Hurt(int)>");
 }
 
 TEST_CASE("type layout reports size and alignment")
