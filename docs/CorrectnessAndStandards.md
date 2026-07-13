@@ -6,10 +6,11 @@ machine-facing side, and how style, comments, and documentation are kept uniform
 zones, memory seam, object model), [TestingSystem.md](TestingSystem.md) (test harness). Rationale
 notes live in [CLAUDE.md](../CLAUDE.md).
 
-**Status:** design only. Nothing here is built yet; this document is the agreed architecture and a
-phased roadmap. Each phase (P0 and later) is implemented under its own approval. Where a toolchain
-fact is stated as validated, it was checked against GCC 16.1.1 on this machine; everything else is a
-design commitment.
+**Status:** P0 built; later phases are design. This document is the agreed architecture and a phased
+roadmap; each phase is implemented under its own approval. Where a toolchain fact is stated as
+validated, it was checked against GCC 16.1.1 on this machine; everything past P0 is a design
+commitment. What P0 delivered is marked **[built]** inline and summarized in
+[Section 9](#9-phased-roadmap).
 
 ## 1. Principle: the two-faced feature contract
 
@@ -79,18 +80,26 @@ the harness exercises them. It holds:
 - **Probes.** `Tracked<T>` is a value type that counts its copies, moves, constructions, and
   destructions, for dropping into a container or a reflected struct to assert that an operation moves
   rather than copies.
-- **Snapshots.** A generic `Snapshot(name, text)` compares against a committed reference file under
-  `PlaygroundTests/snapshots/` and fails on any difference, with a `--bless` (or environment
-  variable) flow to re-accept an intended change. A reflection-driven `DescribeType<T>()` produces the
-  textual description, and a serialization dumper does the same for bytes. `DescribeType` **separates
-  identity (names, kinds, field order) from layout numbers (size, alignment, offsets, padding) into
-  distinct sections with canonical ordering**, so a compiler upgrade that only shifts padding touches
-  one region and a reviewer can see at a glance that nothing structural changed.
-- **Static-contract helpers.** `consteval` predicates over reflected types, `IsTriviallyReplicable`,
-  `HasNoPadding`, `FitsBudget<T, N>`, `IsHandleLike`, `AllFieldsReflected`, with `static_assert`
-  wrappers so a violated machine contract is a compile error at the point of definition. P0 delivers
-  these as tools; *systematically applying* them as gates waits on the systems that define which types
-  must satisfy them (the replication design, and the handle/C#-boundary identity scheme still open in
+- **Snapshots [built].** `CheckSnapshot(name, actual)` compares against a committed reference file
+  under `PlaygroundTests/snapshots/` and fails on any difference, reporting the first differing line;
+  the `PGE_BLESS` environment variable re-writes the golden to re-accept an intended change. A missing
+  golden without blessing is a failure, not a silent pass. A reflection-driven `DescribeType<T>()`
+  produces the textual description (a serialization dumper for bytes is future). `DescribeType`
+  **separates identity (names, kinds, field order) from layout numbers (size, alignment, offsets,
+  padding) into distinct sections with canonical ordering**, so a compiler upgrade that only shifts
+  padding touches one region and a reviewer can see at a glance that nothing structural changed. It
+  renders the type kind through the reflection system's own `ToString(TypeKind)` rather than a
+  hand-maintained switch, so a new kind cannot drift out of sync with the describer. These live in
+  module `PlaygroundTests.SnapshotHarness`, namespace `PgE::Snapshot` (the domain name, matching
+  `PgE::Benchmark`, not a generic `Harness`).
+- **Static-contract helpers [built, partial].** `consteval` predicates over reflected types with
+  `static_assert` wrappers so a violated machine contract is a compile error at the point of
+  definition. P0 shipped `IsTriviallyReplicable`, `HasNoPadding` (reflection-walked, summing
+  `offset_of`/`size_of` and rejecting any bit offset or gap), and `FitsBudget<T, MaxBytes>` in module
+  `PlaygroundEngine.Reflection.Contracts` (re-exported from `PlaygroundEngine.Reflection`). The
+  boundary-specific `IsHandleLike` and `AllFieldsReflected` are deferred: *systematically applying*
+  predicates as gates waits on the systems that define which types must satisfy them (the replication
+  design, and the handle/C#-boundary identity scheme still open in
   [CoreConventions.md](CoreConventions.md)).
 
 Snapshots are the backbone (they catch changes nobody thought to assert); targeted `static_assert`s
@@ -187,32 +196,45 @@ enforced by the IDE; a `compile_commands.json` already exists for when mainline 
 which point this is re-evaluated.
 
 `clang-format` is a separate tool that needs no compile: it is lexer-based and recent versions handle
-`export module` and `import`. The P0 spike is **done and positive** (clang-format 22.1.2): it does
-**not mangle** any bleeding-edge syntax, `^^T`, splicers `[:...:]`, `std::meta`, and
-`export module ... : partition;` all survive formatting intact (exit 0, no errors), and a
-project-matching config (Microsoft base, tabs, 150-column, Allman via `BreakBeforeBraces: Custom`,
-`IndentRequiresClause: false`, `FixNamespaceComments: false`, `SplitEmptyFunction: false`) took a
-representative file to **zero churn**. Residual churn on dense files is a few more tunable knobs
-(`BreakTemplateDeclarations`, `AllowShortFunctionsOnASingleLine: Inline`, `BinPackParameters: false`),
-not divergence. **Decision: adopt clang-format** for layout enforcement. Adoption is its own step:
-commit a tuned `.clang-format`, do a one-time whole-repo reflow that becomes the new baseline, and
-point ReSharper at the same `.clang-format` so the IDE and the pipeline agree. The textual lint below
-stays for the rules clang-format does not cover (em-dash ban, comment length, naming).
+`export module` and `import`. The P0 spike was **positive** (clang-format 22.1.2): it does **not
+mangle** any bleeding-edge syntax, `^^T`, splicers `[:...:]`, `std::meta`, and
+`export module ... : partition;` all survive formatting intact. **clang-format is now adopted
+[built].** The committed `.clang-format` (Microsoft base, tabs, 150-column, Allman via
+`BreakBeforeBraces: Custom`, `IndentRequiresClause: false`, `FixNamespaceComments: false`,
+`SplitEmptyFunction: false`) drove a one-time whole-repo reflow that is the current baseline. Two
+choices there are load-bearing and were tightened past the spike:
 
-### Textual lint
+- **`InsertBraces: true`** makes the [CLAUDE.md](../CLAUDE.md) "always braces" rule mechanical:
+  every `if`/`else`/loop gets braces even for a single-statement body, and the formatter adds them.
+- **`AllowShortFunctionsOnASingleLine: None`** (the spike had used `Inline`): no function body is
+  collapsed onto its signature line. Every block opens on the next line, so a one-line accessor reads
+  the same as any other function. This is a deliberate uniformity call.
 
-The guaranteed-portable floor, a script enforcing the regex-checkable rules from
-[CLAUDE.md](../CLAUDE.md) and `.editorconfig`: the em-dash ban, tabs not spaces, final newline, no
-trailing whitespace, maximum line length, an Allman brace heuristic, comment placement (no floating
-comment above a block), the 3-line comment cap (below), and an approximate abbreviated-name
-heuristic. Full naming and abbreviation checks need an AST that clang cannot build here, so the lint
-approximates them.
+Point ReSharper at the same `.clang-format` so the IDE and the pipeline agree (an IDE setting, not
+yet done). The textual lint below stays for the rules clang-format does not cover (em-dash ban,
+comment length, naming).
 
-### Comment length
+### Textual lint [built]
+
+The guaranteed-portable floor: `scripts/lint.sh` enforces the regex-checkable rules from
+[CLAUDE.md](../CLAUDE.md) and `.editorconfig`. Shipped checks: the em-dash ban (U+2014), trailing
+whitespace (which also catches whitespace on otherwise-blank lines), final newline, and the 3-line
+comment cap. With no arguments it audits every tracked source and Markdown file; with file arguments
+it lints only those, so the merge gate can pass just the files changed versus `main` and grandfather
+existing code. Run-of-directive comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are
+exempt from the comment cap. The rules that need an AST clang cannot build here (naming, abbreviation)
+are left to the IDE, not approximated, to avoid false positives.
+
+### Comment length [built]
 
 No comment is longer than **3 lines**. Anything that needs more explanation belongs in a `docs/`
 document, not inline. This reinforces the existing minimal-comments stance (comments only where logic
-is genuinely complex), is enforced by the textual lint, and is added to the code-style rules.
+is genuinely complex) and is enforced by `scripts/lint.sh`. Enforcing it across the existing tree
+surfaced the knowledge-dense reflection comments; rather than delete them, the load-bearing material
+(the `TypeOfMeta` recursion knot, lazy `TypeReference`, the GCC-16 mangling-collision workaround, the
+validated `std::meta` patterns) was migrated to [ReflectionInternals.md](ReflectionInternals.md), and
+the inline comments now point there. Migrating outsized comments to a doc, not condensing away the
+reasoning, is the intended response when this cap bites.
 
 ### Documentation
 
@@ -226,14 +248,21 @@ intended effects are discoverable next to the tests that hold them.
 
 ## 7. Enforcement fabric: a local pipeline that mirrors cloud
 
-A single canonical pipeline, a `scripts/verify.sh` script and/or a CMake `verify` target, with
-ordered, independently invokable stages:
+A single canonical pipeline, `scripts/verify.sh`, with ordered, independently invokable stages
+(pass a stage name to run one, or nothing to run all). The full designed sequence:
 
 ```
 configure → build (warnings as errors) → textual lint → static contracts (compile)
           → unit + characterization tests → snapshots → sanitizers (asan/ubsan/tsan)
           → benchmarks / budgets
 ```
+
+**Built so far:** `configure → build → lint → test`. Configure always runs before build (a source
+addition to a `CMakeLists.txt` is otherwise silently skipped by an incremental `--build`). Static
+contracts are `static_assert`s, so they are enforced *within* the build stage rather than as a
+separate step, and the snapshot checks currently run *within* the test stage (they are doctest cases).
+The sanitizer and benchmark stages are not built (they need the presets and spikes in P1). The current
+pipeline runs green: build clean, lint clean, 74/74 tests.
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`
@@ -256,6 +285,10 @@ free workspace:
 | Claude Code `Stop` / `SubagentStop` | build + affected tests, reported | advisory |
 | git `pre-commit` / feature-branch push | fast lint + affected tests, reported | advisory |
 | **merge into `main`** | **full pipeline** (build, lint, static contracts, tests, snapshots, sanitizers) | **hard-block** |
+
+None of these hooks or the merge gate are wired yet: `verify.sh` exists and is run by hand today. The
+git hooks, the Claude Code hooks, and the `main`-integration gate are P1 wiring on top of the
+stages that already run.
 
 This is what dissolves the collision with `.claude/agents/autonomous-worker.md`: sketch-with-TODO
 commits and mid-feature red stops live on the branch, which is allowed to be red; only integration
@@ -286,14 +319,19 @@ or agent, declare and pin the effects of the work.
 
 ## 9. Phased roadmap
 
-- **P0, foundations.** The reflection-serving tools that generalize what `ReflectionTests.cpp` does
-  by hand today: the snapshot harness and `DescribeType`, the static-contract *predicates*, the
-  clang-format spike, the textual lint script, the `verify.sh` skeleton, and the cheapest hooks. The
-  memory probes are deliberately not here (no consumer yet).
+- **P0, foundations [done].** Delivered: the snapshot harness and `DescribeType`
+  (`PlaygroundTests.SnapshotHarness`, `PgE::Snapshot`); the static-contract predicates
+  `IsTriviallyReplicable` / `HasNoPadding` / `FitsBudget` (`PlaygroundEngine.Reflection.Contracts`);
+  the clang-format spike **and** adoption plus whole-repo reflow (`InsertBraces`, no single-line
+  bodies); the textual lint script (`scripts/lint.sh`, em-dash / whitespace / final-newline / 3-line
+  comment cap); and the `verify.sh` pipeline (configure/build/lint/test). Deferred out of P0: the
+  memory probes (no consumer yet), the `IsHandleLike` / `AllFieldsReflected` predicates (boundary
+  designs still open), and the hooks (P1 wiring).
 - **P1.** Runtime contracts (a `linux-dev` plus `-fcontracts` preset, the violation handler, the
   throwing test-seam handler, the `PGE_VERIFY` residue), retiring `<cassert>` and migrating the
   durable `assert` sites (`Engine.cpp:64`, the reflection facets), the sanitizer spike then presets,
-  and the doc-coverage report.
+  the doc-coverage report, and wiring the enforcement fabric on top of `verify.sh` (the git and
+  Claude Code hooks, and the `main`-integration gate).
 - **P2.** The memory probes (`TrackingResource`, `NoAllocScope`, `Tracked<T>`) arriving with their
   first consumer, serialization snapshots and round-trip property tests (with serialization), and the
   content validation layer (with annotations and the editor).
