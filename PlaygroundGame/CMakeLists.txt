@@ -40,6 +40,7 @@ target_sources(PlaygroundGame
 		PRIVATE
 		src/App.cpp
 		src/PlaygroundGame.cpp
+		src/ContractHandler.cpp
 
 		PUBLIC
 		FILE_SET CXX_MODULES

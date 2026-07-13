@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 
+import std;
+import PlaygroundEngine.Diagnostics;
 import PlaygroundTests.ContractSeam;
 
 namespace
@@ -36,4 +38,13 @@ TEST_CASE("a violated contract_assert is rejected")
 {
 	CHECK(WithoutSideEffect(4) == 5);
 	CHECK_THROWS_AS(WithoutSideEffect(-1), PgETest::ContractViolationError);
+}
+
+// The violation-report kind text the runtime handler logs, pinned so the label a diagnostic surfaces
+// stays stable per assertion kind.
+TEST_CASE("contract kind text maps each assertion kind")
+{
+	CHECK(PgE::ContractKindText(std::contracts::assertion_kind::pre) == "pre");
+	CHECK(PgE::ContractKindText(std::contracts::assertion_kind::post) == "post");
+	CHECK(PgE::ContractKindText(std::contracts::assertion_kind::assert) == "assert");
 }
