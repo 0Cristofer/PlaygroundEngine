@@ -55,6 +55,8 @@ target_sources(PlaygroundTests
 		src/SnapshotTests.cpp
 		src/HarnessSelfVerificationTests.cpp
 		src/ContractsTests.cpp
+		src/ContractSeam.cpp
+		src/RuntimeContractTests.cpp
 		src/Scratch.cpp
 
 		PUBLIC
@@ -62,6 +64,7 @@ target_sources(PlaygroundTests
 		BASE_DIRS src
 		FILES
 		src/SnapshotHarness.cppm
+		src/ContractSeam.cppm
 )
 
 # The snapshot harness resolves committed golden files relative to this directory at runtime.

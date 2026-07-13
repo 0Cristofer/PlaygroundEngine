@@ -1,0 +1,39 @@
+#include <doctest/doctest.h>
+
+import PlaygroundTests.ContractSeam;
+
+namespace
+{
+	int Doubled(int value)
+		pre(value > 0)
+	{
+		return value * 2;
+	}
+
+	int WithoutSideEffect(int value)
+	{
+		int result = 0;
+		contract_assert(value >= 0);
+		result = value + 1;
+		return result;
+	}
+}
+
+// Runtime contracts as tests exercise them: a satisfied contract runs the body, a violated one is
+// rejected before the body via the throwing test seam (ContractSeam.cpp), catchable by doctest.
+TEST_CASE("a satisfied precondition runs the body")
+{
+	CHECK(Doubled(3) == 6);
+}
+
+TEST_CASE("a violated precondition is rejected before the body runs")
+{
+	CHECK_THROWS_AS(Doubled(0), PgETest::ContractViolationError);
+	CHECK_THROWS_AS(Doubled(-1), PgETest::ContractViolationError);
+}
+
+TEST_CASE("a violated contract_assert is rejected")
+{
+	CHECK(WithoutSideEffect(4) == 5);
+	CHECK_THROWS_AS(WithoutSideEffect(-1), PgETest::ContractViolationError);
+}
