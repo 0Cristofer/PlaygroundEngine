@@ -384,9 +384,20 @@ importing even a trivial user module suppresses them). Every first-party TU impo
 analyzer sees none of our code; wiring the stage would be a slow, memory-hungry build (the analyzer
 also explodes over `std::meta` instantiation) that catches nothing. So both deep-static-analysis
 options are currently unavailable, clang-tidy by a parse blocker and `-fanalyzer` by this module
-blocker, and the stage is deferred until the toolchain fixes the `import` interaction, re-checked with
-the same throwaway probe. The path-sensitive-bug layer is instead carried by the runtime sanitizers
-(ASan/UBSan, [Section 3](#3-verification-toolkit)), which run the real code and are module-agnostic.
+blocker. For now the path-sensitive-bug layer is carried by the runtime sanitizers (ASan/UBSan,
+[Section 3](#3-verification-toolkit)), which run the real code and are module-agnostic.
+
+**`-fanalyzer` stays a wanted revisit item, not a closed one**, because static and dynamic analysis
+are complementary rather than redundant. Sanitizers only see paths a test executes; with line coverage
+at ~21%, most code, including the cold `std::expected` error branches, is never reached at runtime. A
+static analyzer explores those paths symbolically with no triggering input, at compile time, which is
+exactly the blind spot sanitizers structurally cannot cover (its cost is false positives, which
+sanitizers avoid). Its value here is highest while coverage is low and shrinks but never vanishes as
+the suite grows. **Revisit trigger:** re-run the throwaway probe (an `import std` TU with an injected
+null-deref under `-fanalyzer -Werror`) on each GCC upgrade; when a module-importing TU produces the
+diagnostic, wire the stage (scoped off the reflection-dense TUs, which also explode the analyzer). The
+GCC analyzer's module support is experimental, so this is a "watch upstream," not a "never." The same
+re-check applies to clang-tidy if mainline clang gains P2996 and GCC-compatible modules (Section 6).
 
 **Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix → sanitizers → coverage`. Configure always
 runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
@@ -577,11 +588,13 @@ effects of the work.
   is proven. Default-deny gating on a churning reflected surface is deliberately avoided: it would
   train authors to reflex-bless, recreating the blessing risk above; the manifest forces a *visible*
   decision instead, and hard gating waits for per-module stability.
-- **No deep static analysis is available.** Both candidates are blocked on this toolchain: clang-tidy
-  cannot parse these units (Section 6), and `gcc -fanalyzer` emits nothing for a TU that imports a
-  module, so it never sees our code (Section 7). The path-sensitive-bug layer therefore rests on the
-  runtime sanitizers until the toolchain lifts one of the two blocks; re-check each with its throwaway
-  probe on a compiler upgrade.
+- **No deep static analysis is available (a wanted revisit, not a closed door).** Both candidates are
+  blocked on this toolchain: clang-tidy cannot parse these units (Section 6), and `gcc -fanalyzer`
+  emits nothing for a TU that imports a module, so it never sees our code (Section 7). The
+  path-sensitive-bug layer rests on the runtime sanitizers *for now*, but static analysis stays worth
+  restoring because it covers the unexecuted paths sanitizers structurally cannot (most of the code
+  while coverage is low). Re-run each tool's throwaway probe on every GCC/clang upgrade; wire the stage
+  the moment a module-importing TU produces a diagnostic. This is a "watch upstream," not a "never."
 - **Textual lint is heuristic.** Without a clang AST, naming and abbreviation checks are approximate;
   the IDE and review remain the backstop until mainline clang can parse these units.
 - **CI container maintenance.** Reproducing a source-built GCC 16 in an image is real upkeep, weighed
