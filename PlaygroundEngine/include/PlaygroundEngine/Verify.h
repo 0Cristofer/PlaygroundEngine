@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdlib>
+
 #include "PlaygroundEngine/Log.h"
 
 // Always-on assertion that survives even a build set to ignore contracts (the semantic is global per
