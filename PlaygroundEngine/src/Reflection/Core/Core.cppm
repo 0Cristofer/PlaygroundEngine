@@ -12,15 +12,9 @@ export import :TypeBuilder;
 
 import std;
 
-// The reflection core: the type model (the ...Info types), the facet table mechanism (FacetEntry, the
-// generic MakeFacetsFromType), and the builders that assemble a TypeInfo. It names no concrete facet, so a
-// facet (built-in or user) is an extension layered on top. TypeOf is the entry point; it lives here because
-// TypeInfo::GetFacet reflects the facet type through it, so the core cannot be built without it.
-//
-// Rendering (ObjectToString/ToString) is core too: it drives a type's stringify thunk, or walks its fields
-// when there is none. It names no facet either. A facet renders itself through the thunk its TypeInfoTraits
-// installs (which may recurse back here for nested content), so there is no per-facet case in the renderer,
-// and any type extends its own rendering the same way. That is why ObjectToString can live in the core.
+// The reflection core: the type model (the ...Info types), the facet-table mechanism, the builders that
+// assemble a TypeInfo, and rendering. It names no concrete facet, so a facet is an extension on top.
+// See docs/ReflectionInternals.md (module layering, rendering).
 
 namespace PgE
 {

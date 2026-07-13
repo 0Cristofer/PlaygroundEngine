@@ -12,14 +12,9 @@ namespace PgE
 {
 	export class SequenceFacet
 	{
-		// An ordered, random-access run of elements. Element access is expected O(1) (the std deny-list keeps
-		// non-random-access containers out of reflected data); mutation goes through the thunks. A fixed-size
-		// sequence (std::array, T[N], a span) has no clear/reserve/append and reports so through the CanX
-		// queries, mutating only through the element refs. A read-only view (std::span<const T>) goes one step
-		// further: its elements are not writable in place, so the mutable element ref is absent too and
-		// CanMutateElements() is false; the const element ref is always present. Its elements are the whole
-		// value, so this supersedes the raw field view (see Supersedes); the thunks are captured at
-		// reflection-build-time where the concrete type is known.
+		// An ordered, random-access run of elements; capacity mutation and element mutation each go through
+		// thunks gated by CanX queries, so fixed-size and read-only views report their limits. It supersedes
+		// the structural field view. See docs/ReflectionInternals.md (Facets).
 
 	public:
 		// Read generically by the builder: a facet declaring Supersedes = true empties the structural
@@ -33,15 +28,21 @@ namespace PgE
 		using ReserveThunk = void (*)(void*, std::size_t);
 		using AppendThunk = std::expected<void, FacetError> (*)(void*, const TypedRef&);
 
-		constexpr SequenceFacet(const TypeReference element, const SizeThunk size,
-		                        const ElementRefThunk elementRef, const ConstElementRefThunk constElementRef,
-		                        const ClearThunk clear, const ReserveThunk reserve, const AppendThunk append) :
-			_element(element), _size(size), _elementRef(elementRef), _constElementRef(constElementRef),
-			_clear(clear), _reserve(reserve), _append(append)
-		{
-		}
+		constexpr SequenceFacet(const TypeReference element,
+								const SizeThunk size,
+								const ElementRefThunk elementRef,
+								const ConstElementRefThunk constElementRef,
+								const ClearThunk clear,
+								const ReserveThunk reserve,
+								const AppendThunk append)
+			: _element(element), _size(size), _elementRef(elementRef), _constElementRef(constElementRef), _clear(clear), _reserve(reserve),
+			  _append(append)
+		{}
 
-		const TypeInfo& ElementType() const { return _element.Get(); }
+		const TypeInfo& ElementType() const
+		{
+			return _element.Get();
+		}
 
 		std::size_t Size(const void* obj) const
 		{
@@ -63,10 +64,22 @@ namespace PgE
 			return _constElementRef(obj, index);
 		}
 
-		bool CanMutateElements() const { return _elementRef != nullptr; }
-		bool CanClear() const { return _clear != nullptr; }
-		bool CanReserve() const { return _reserve != nullptr; }
-		bool CanAppend() const { return _append != nullptr; }
+		bool CanMutateElements() const
+		{
+			return _elementRef != nullptr;
+		}
+		bool CanClear() const
+		{
+			return _clear != nullptr;
+		}
+		bool CanReserve() const
+		{
+			return _reserve != nullptr;
+		}
+		bool CanAppend() const
+		{
+			return _append != nullptr;
+		}
 
 		std::expected<void, FacetError> Clear(void* obj) const
 		{

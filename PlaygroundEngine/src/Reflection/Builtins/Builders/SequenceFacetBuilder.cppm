@@ -23,10 +23,9 @@ namespace PgE
 			return static_cast<const Container*>(obj)->size();
 		}
 
-		// The element type's reflection is a template parameter, not a `^^Element` spelled in the body: the
-		// reflection operator is consteval-only and cannot appear in a runtime thunk. The tag is resolved
-		// into a local before the TypedRef literal, since GCC flags a TypeOfMeta call inside a
-		// designated-initializer list as a consteval-only expression in a runtime context.
+		// The element reflection is a template parameter, not `^^Element` in the body (consteval-only, cannot
+		// appear in a runtime thunk). The tag is resolved into a local before the TypedRef literal, since GCC
+		// flags a TypeOfMeta call inside a designated-initializer list as consteval-only in a runtime context.
 		template <typename Container, std::meta::info ElementMeta>
 		TypedRef SequenceElementRefThunk(void* obj, const std::size_t index)
 		{
@@ -94,7 +93,9 @@ namespace PgE
 		{
 			using Element = [:ElementMeta:];
 			if (in.Type != &TypeOfMeta<ElementMeta>())
+			{
 				return std::unexpected(FacetError{FacetError::TypeMismatch});
+			}
 
 			Container& container = *static_cast<Container*>(obj);
 			Element* source = static_cast<Element*>(in.Data);
@@ -105,14 +106,20 @@ namespace PgE
 			if constexpr (std::is_move_constructible_v<Element> && std::is_copy_constructible_v<Element>)
 			{
 				if (moveAllowed)
+				{
 					container.push_back(std::move(*source));
+				}
 				else
+				{
 					container.push_back(*source);
+				}
 			}
 			else if constexpr (std::is_move_constructible_v<Element>)
 			{
 				if (!moveAllowed)
+				{
 					return std::unexpected(FacetError{FacetError::NotWritable});
+				}
 				container.push_back(std::move(*source));
 			}
 			else if constexpr (std::is_copy_constructible_v<Element>)
@@ -132,10 +139,9 @@ namespace PgE
 		{
 			using Element = Container::value_type;
 
-			// A non-movable, non-copyable element cannot be appended or reserved for (both operations relocate
-			// elements), so those thunks stay null and the sequence is reachable only through the element refs.
-			// The branch also keeps SequenceReserveThunk/SequenceAppendThunk from instantiating for such an
-			// element, where reserve's MoveInsertable requirement would be a hard error. Documented, not one.
+			// A non-movable, non-copyable element cannot be appended or reserved for (both relocate elements),
+			// so those thunks stay null and the sequence is reachable only through the element refs. The branch
+			// also keeps them from instantiating, where reserve's MoveInsertable requirement would be a hard error.
 			if constexpr (std::is_move_constructible_v<Element> || std::is_copy_constructible_v<Element>)
 			{
 				return SequenceFacet{
@@ -214,14 +220,20 @@ namespace PgE
 			for (const Element& element : value)
 			{
 				if (index >= elementsToRender)
+				{
 					break;
+				}
 				if (index != 0)
+				{
 					out += ", ";
+				}
 				out += ToString(element);
 				++index;
 			}
 			if (isLongSequence)
+			{
 				out += ", ...";
+			}
 			return out + "]";
 		}
 	}
@@ -270,28 +282,24 @@ namespace PgE
 
 		static consteval auto MakeFacets()
 		{
-			return std::tuple{
-				SequenceFacet{
-					detail::TypeReferenceTo<^^Element>(),
-					&detail::CArraySizeThunk<Count>,
-					&detail::CArrayElementRefThunk<^^Element>,
-					&detail::CArrayElementRefConstThunk<^^Element>,
-					nullptr,
-					nullptr,
-					nullptr,
-				}
-			};
+			return std::tuple{SequenceFacet{
+				detail::TypeReferenceTo<^^Element>(),
+				&detail::CArraySizeThunk<Count>,
+				&detail::CArrayElementRefThunk<^^Element>,
+				&detail::CArrayElementRefConstThunk<^^Element>,
+				nullptr,
+				nullptr,
+				nullptr,
+			}};
 		}
 	};
 
 	template <typename Element, std::size_t Extent>
 	struct TypeInfoTraits<std::span<Element, Extent>> : TypeInfoTraitsDefaults
 	{
-		// A non-owning view over a contiguous run, of either extent: like std::array it exposes size and element
-		// refs with no resize, but it never owns its elements, so a serializer treats it as a borrow rather than
-		// inline data (the facet only states the in-place read/mutate capability, not ownership). A const-element
-		// view (std::span<const T>) is read-only: MakeFixedSequenceFacet detects the const references from
-		// operator[] and omits the mutable element ref, so CanMutateElements() is false while reads still work.
+		// A non-owning view over a contiguous run: like std::array it exposes size and element refs with no
+		// resize, but never owns its elements. A const-element span is read-only (the mutable element ref is
+		// omitted, CanMutateElements() is false). See docs/ReflectionInternals.md (Facets).
 
 		static std::string Stringify(const std::span<Element, Extent>& value)
 		{

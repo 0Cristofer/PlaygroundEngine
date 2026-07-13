@@ -10,7 +10,8 @@ namespace PgG
 	export class PlaygroundGameAppDescriptor : public PgE::AppDescriptorBase
 	{
 	public:
-		explicit PlaygroundGameAppDescriptor(const PgE::CommandLine commandLine) : AppDescriptorBase(commandLine) {}
+		explicit PlaygroundGameAppDescriptor(const PgE::CommandLine commandLine) : AppDescriptorBase(commandLine)
+		{}
 
 		std::unique_ptr<PgE::AppBase> GetApp() override;
 	};

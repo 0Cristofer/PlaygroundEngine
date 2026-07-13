@@ -1,19 +1,8 @@
 #pragma once
 
-// =============================================================================
-// Field Printing
-//
-// The simplest reflection use-case: enumerate every data field of a struct and
-// print its name and current value — with zero per-type boilerplate.
-//
-// Concepts demonstrated:
-//   ^^T                          — reflects type T into a std::meta::info handle
-//   std::meta::identifier_of(r)  — extracts a name from a reflection as string_view
-//   nonstatic_data_members_of(r) — returns the compile-time list of data members
-//   std::define_static_array(r)  — materialises a reflection range into a static span
-//   template for (constexpr …)   — compile-time loop (each iteration is its own instantiation)
-//   obj.[:member:]               — splicer: turns a member reflection back into a field access
-// =============================================================================
+// Field printing: the simplest reflection use-case, enumerate every data field of a struct and print its
+// name and value with zero per-type boilerplate (^^T, nonstatic_data_members_of, template for,
+// obj.[:member:]). See docs/ReflectionInternals.md (Validated std::meta patterns).
 
 struct Vec3 { float x, y, z; };
 
@@ -22,7 +11,7 @@ struct Vec3 { float x, y, z; };
 template <typename T>
 void PrintMembers(const T& obj)
 {
-	// ^^T produces a compile-time "reflection" of the type — a std::meta::info value.
+	// ^^T produces a compile-time "reflection" of the type, a std::meta::info value.
 	std::cout << "Type: " << std::meta::identifier_of(^^T) << "\n";
 
 	// nonstatic_data_members_of returns a compile-time list of member reflections.

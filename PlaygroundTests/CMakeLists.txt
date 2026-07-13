@@ -51,7 +51,22 @@ target_sources(PlaygroundTests
 		src/TestMain.cpp
 		src/ReflectionTests.cpp
 		src/LogTests.cpp
+		src/SnapshotHarness.cpp
+		src/SnapshotTests.cpp
+		src/ContractsTests.cpp
 		src/Scratch.cpp
+
+		PUBLIC
+		FILE_SET CXX_MODULES
+		BASE_DIRS src
+		FILES
+		src/SnapshotHarness.cppm
+)
+
+# The snapshot harness resolves committed golden files relative to this directory at runtime.
+target_compile_definitions(PlaygroundTests
+		PRIVATE
+		PGE_SNAPSHOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/snapshots"
 )
 
 target_link_libraries(PlaygroundTests

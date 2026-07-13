@@ -39,8 +39,10 @@ namespace PgE
 		static void Configure();
 
 		template <typename... Arguments>
-		static void Print(const LogLevel level, const std::source_location& location,
-		                  std::format_string<Arguments...> formatString, Arguments&&... arguments)
+		static void Print(const LogLevel level,
+						  const std::source_location& location,
+						  std::format_string<Arguments...> formatString,
+						  Arguments&&... arguments)
 		{
 			// Formatting stays in-module so callers need no std::format import.
 			detail::LogDispatch(level, location, std::format(formatString, std::forward<Arguments>(arguments)...));

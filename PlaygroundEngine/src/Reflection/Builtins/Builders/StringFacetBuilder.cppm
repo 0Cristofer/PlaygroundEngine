@@ -42,8 +42,7 @@ namespace PgE
 
 		static consteval auto MakeFacets()
 		{
-			return std::tuple{
-				StringFacet{&detail::StringViewThunk<String>, &detail::StringAssignThunk<String>}};
+			return std::tuple{StringFacet{&detail::StringViewThunk<String>, &detail::StringAssignThunk<String>}};
 		}
 	};
 

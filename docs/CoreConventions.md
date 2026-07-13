@@ -5,9 +5,9 @@ Engine-wide decisions: object model, memory, native/managed boundary, std usage,
 ## Object Model
 
 - **No garbage collector.** Native lifetime is explicit. Gameplay object graphs are the .NET GC's job, on the C# side.
-- **Generational handles are the canonical reference to engine objects** (entities, components, assets) — in C++, in C#, on the wire, on disk. A handle is a POD stable ID, validated on dereference: `TryGet(handle)` returns a pointer or null. Handles never own; destruction is deterministic and invalidates all outstanding handles immediately.
+- **Generational handles are the canonical reference to engine objects** (entities, components, assets), in C++, in C#, on the wire, on disk. A handle is a POD stable ID, validated on dereference: `TryGet(handle)` returns a pointer or null. Handles never own; destruction is deterministic and invalidates all outstanding handles immediately.
   - Backings: **slot + generation** for pooled simulation objects; **ID table** for tree-owned objects (e.g. UI widgets), registered/unregistered by the object's constructor/destructor.
-  - A field that references an object it does not own is a handle. The `TryGet` result is a transient borrow — used in scope, never stored.
+  - A field that references an object it does not own is a handle. The `TryGet` result is a transient borrow, used in scope, never stored.
 - **The simulation is a full ECS**: entities are handles; components are concrete value types in contiguous per-type storage; behavior is composition. The current `World`/`GameObject` skeleton is a placeholder and will be replaced. No runtime polymorphism in component storage; struct inheritance for field reuse is allowed.
 - **Not everything is ECS.** Retained object trees with runtime polymorphism are the correct model for some domains (UI is the anticipated case): parent owns children, cross-references are handles.
 - A simple-game **facade** over the ECS may exist later. It owns no state; engine systems see only ECS state.
@@ -20,18 +20,18 @@ Engine-wide decisions: object model, memory, native/managed boundary, std usage,
   | `AssetRef<T>` | Asset reference | Asset GUID |
   | `Poly<T>` | Owned, polymorphic (boxed) | Type discriminator + fields |
 
-  `Poly<T>` captures the concrete type's `TypeInfo` at the point of erasure (templated constructor) — no RTTI, no common base class required.
+  `Poly<T>` captures the concrete type's `TypeInfo` at the point of erasure (templated constructor), no RTTI, no common base class required.
 
 ## Ownership & Memory
 
-- **Ownership is a tree.** Every object has one serialization home; every other mention is an ID. Assets are never serialized inline — always referenced by GUID.
+- **Ownership is a tree.** Every object has one serialization home; every other mention is an ID. Assets are never serialized inline, always referenced by GUID.
 - **Smart pointers are for plumbing, not gameplay references.** `unique_ptr` is the default owner. `shared_ptr` is rare and justified case-by-case (shared non-entity resources, e.g. asset payloads pinned by in-flight GPU work); `weak_ptr` only alongside those. Raw pointers/references are transient borrows. `shared_ptr` does not appear in reflected data.
 - **Entities and components are not created with `make_unique`**: pools construct in place and return a handle.
-- **Memory funnel — two entry points, one allocator:**
-  - *Ambient:* a global `operator new`/`delete` override (eventual) routes all plain allocations — `std` containers, `make_unique`, third-party — through the engine allocator with tracking and budgets.
+- **Memory funnel, two entry points, one allocator:**
+  - *Ambient:* a global `operator new`/`delete` override (eventual) routes all plain allocations, `std` containers, `make_unique`, third-party, through the engine allocator with tracking and budgets.
   - *Deliberate:* `std::pmr` memory resources where the allocation pattern is a design property (per-frame arenas, asset streaming, anything allocating inside the frame loop). pmr upstreams chain to the same engine allocator.
   - *Structural:* ECS chunk storage and GPU memory are allocator code themselves and bypass `new`.
-- **The day-one requirement is the seam, not the pools**: pattern-sensitive systems take a `memory_resource*` (defaulted to the global resource), and reflection-driven construction is placement-agnostic — factories return by value or accept a placement target. Plain `new` is a valid default because it is engine-defined.
+- **The day-one requirement is the seam, not the pools**: pattern-sensitive systems take a `memory_resource*` (defaulted to the global resource), and reflection-driven construction is placement-agnostic, factories return by value or accept a placement target. Plain `new` is a valid default because it is engine-defined.
 - Plain `std` containers by default; `pmr` only where the pattern matters. Game code never sees allocators. Scratch arenas are thread-local (the engine is multithread-first).
 
 ## Native/Managed Boundary
@@ -43,7 +43,7 @@ Engine-wide decisions: object model, memory, native/managed boundary, std usage,
 
 ## Standard Library
 
-Use `std` directly — no engine wrapper aliases. Components are replaced individually when profiling demands it.
+Use `std` directly, no engine wrapper aliases. Components are replaced individually when profiling demands it.
 
 Deny-list for runtime code:
 
@@ -73,6 +73,6 @@ Zones split by **"does this native code ship in the console runtime?"**:
 
 ## Open Questions
 
-- **Handle granularity** — per-entity only, or per-component too. Belongs to the simulation design.
-- **One handle scheme or siblings** — whether asset GUIDs and entity handles share an identity scheme. Tied to the stable-ID design in [ReflectionSystem.md](ReflectionSystem.md).
-- **C# event subscription lifetime** — needs a focused pass when binding generator work starts.
+- **Handle granularity**, per-entity only, or per-component too. Belongs to the simulation design.
+- **One handle scheme or siblings**, whether asset GUIDs and entity handles share an identity scheme. Tied to the stable-ID design in [ReflectionSystem.md](ReflectionSystem.md).
+- **C# event subscription lifetime**, needs a focused pass when binding generator work starts.

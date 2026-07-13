@@ -34,16 +34,18 @@ namespace PgE
 	export class FieldInfo : public DeclarationInfo
 	{
 	public:
-		constexpr FieldInfo(const TypeReference typeInfo, const std::string_view identifier,
-		                    const std::string_view displayName, const int byteOffset, const int bitOffset,
-		                    const FieldGetter getter, const FieldSetter setter,
-		                    const FieldReferencer referencer,
-		                    const std::span<const AnnotationInfo> annotations) :
-			DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo),
-			_byteOffset(byteOffset), _bitOffset(bitOffset), _getter(getter), _setter(setter),
-			_referencer(referencer)
-		{
-		}
+		constexpr FieldInfo(const TypeReference typeInfo,
+							const std::string_view identifier,
+							const std::string_view displayName,
+							const int byteOffset,
+							const int bitOffset,
+							const FieldGetter getter,
+							const FieldSetter setter,
+							const FieldReferencer referencer,
+							const std::span<const AnnotationInfo> annotations)
+			: DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo), _byteOffset(byteOffset), _bitOffset(bitOffset),
+			  _getter(getter), _setter(setter), _referencer(referencer)
+		{}
 
 		int GetByteOffset() const;
 		const TypeInfo& GetTypeInfo() const;
@@ -58,10 +60,10 @@ namespace PgE
 		std::expected<T, FieldError> GetAs(const void* obj) const
 		{
 			alignas(T) std::byte storage[sizeof(T)];
-			if (const auto result = GetValue(obj, TypedRef{
-				                                 .Type = &TypeOf<T>(), .Data = storage, .IsConst = false
-			                                 }); !result)
+			if (const auto result = GetValue(obj, TypedRef{.Type = &TypeOf<T>(), .Data = storage, .IsConst = false}); !result)
+			{
 				return std::unexpected(result.error());
+			}
 
 			T* pointer = std::launder(reinterpret_cast<T*>(storage));
 			T value = std::move(*pointer);
@@ -72,22 +74,14 @@ namespace PgE
 		template <typename T>
 		std::expected<void, FieldError> SetAs(void* obj, const T& value) const
 		{
-			return SetValue(obj, TypedRef{
-				                .Type = &TypeOf<T>(),
-				                .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))),
-				                .IsConst = true
-			                });
+			return SetValue(
+				obj, TypedRef{.Type = &TypeOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
 		}
 
 		template <typename T>
 		std::expected<void, FieldError> MoveAs(void* obj, T& value) const
 		{
-			return SetValue(obj, TypedRef{
-				                .Type = &TypeOf<T>(),
-				                .Data = std::addressof(value),
-				                .IsConst = false,
-				                .Movable = true
-			                });
+			return SetValue(obj, TypedRef{.Type = &TypeOf<T>(), .Data = std::addressof(value), .IsConst = false, .Movable = true});
 		}
 
 		template <typename T>
@@ -95,11 +89,17 @@ namespace PgE
 		{
 			const auto ref = GetRef(obj);
 			if (!ref)
+			{
 				return std::unexpected(ref.error());
+			}
 			if (ref->Type != &TypeOf<T>())
+			{
 				return std::unexpected(FieldError{FieldError::TypeMismatch});
+			}
 			if (ref->IsConst)
+			{
 				return std::unexpected(FieldError{FieldError::NotWritable});
+			}
 
 			return std::reference_wrapper<T>(*static_cast<T*>(ref->Data));
 		}
@@ -109,9 +109,13 @@ namespace PgE
 		{
 			const auto ref = GetRef(obj);
 			if (!ref)
+			{
 				return std::unexpected(ref.error());
+			}
 			if (ref->Type != &TypeOf<T>())
+			{
 				return std::unexpected(FieldError{FieldError::TypeMismatch});
+			}
 
 			return std::reference_wrapper<const T>(*static_cast<const T*>(ref->Data));
 		}

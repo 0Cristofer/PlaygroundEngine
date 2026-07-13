@@ -17,10 +17,9 @@ namespace PgE::detail
 	template <std::meta::info Annotation>
 	struct AnnotationStorage
 	{
-		// Materializes one annotation value into static storage, keyed by its reflection so
-		// each distinct annotation gets its own constant with a stable, program-lifetime
-		// address. The split alias keeps the spliced type out of a template argument
-		// (GCC -Wtemplate-body).
+		// Materializes one annotation value into static storage, keyed by its reflection so each distinct
+		// annotation gets its own constant with a stable, program-lifetime address. The split alias keeps the
+		// spliced type out of a template argument (GCC -Wtemplate-body).
 
 		using Declared = [:std::meta::type_of(Annotation):];
 		using Type = std::remove_cvref_t<Declared>;
@@ -42,7 +41,9 @@ namespace PgE::detail
 	{
 		std::vector<std::meta::info> annotations;
 		for (const std::meta::info annotation : std::meta::annotations_of(entity))
+		{
 			annotations.push_back(annotation);
+		}
 		return annotations;
 	}
 

@@ -29,10 +29,9 @@ namespace PgE
 			return logger;
 		}
 
-		// Ambient L0 facility (see ApplicationArchitecture.md): the logger is created on
-		// first use with a default stdout sink, so it is valid before Boot and after
-		// Shutdown, with no Engine. Configure() only swaps sinks and levels on this same
-		// instance. Function-local static init is thread-safe.
+		// Ambient L0 facility (see ApplicationArchitecture.md): the logger is created on first use with a
+		// default stdout sink, so it is valid before Boot and after Shutdown, with no Engine. Configure() only
+		// swaps sinks and levels on this same instance; function-local static init is thread-safe.
 		std::shared_ptr<spdlog::logger>& DefaultLogger()
 		{
 			static std::shared_ptr<spdlog::logger> logger = MakeDefaultLogger();
@@ -43,13 +42,13 @@ namespace PgE
 		{
 			switch (level)
 			{
-				case LogLevel::Trace: return spdlog::level::trace;
-				case LogLevel::Debug: return spdlog::level::debug;
-				case LogLevel::Info:  return spdlog::level::info;
-				case LogLevel::Warn:  return spdlog::level::warn;
-				case LogLevel::Error: return spdlog::level::err;
-				case LogLevel::Fatal: return spdlog::level::critical;
-				case LogLevel::Off:   return spdlog::level::off;
+			case LogLevel::Trace: return spdlog::level::trace;
+			case LogLevel::Debug: return spdlog::level::debug;
+			case LogLevel::Info: return spdlog::level::info;
+			case LogLevel::Warn: return spdlog::level::warn;
+			case LogLevel::Error: return spdlog::level::err;
+			case LogLevel::Fatal: return spdlog::level::critical;
+			case LogLevel::Off: return spdlog::level::off;
 			}
 			return spdlog::level::off;
 		}
@@ -67,12 +66,24 @@ namespace PgE
 			std::size_t parenthesisIndex = std::string_view::npos;
 			for (std::size_t i = 0; i < signature.size(); ++i)
 			{
-				if (const char character = signature[i]; character == '<') ++angleDepth;
-				else if (character == '>') { if (angleDepth > 0) --angleDepth; }
-				else if (character == '(' && angleDepth == 0) { parenthesisIndex = i; break; }
+				if (const char character = signature[i]; character == '<')
+				{
+					++angleDepth;
+				}
+				else if (character == '>')
+				{
+					if (angleDepth > 0)
+					{
+						--angleDepth;
+					}
+				}
+				else if (character == '(' && angleDepth == 0)
+				{
+					parenthesisIndex = i;
+					break;
+				}
 			}
-			const std::string_view prefix =
-				(parenthesisIndex == std::string_view::npos) ? signature : signature.substr(0, parenthesisIndex);
+			const std::string_view prefix = (parenthesisIndex == std::string_view::npos) ? signature : signature.substr(0, parenthesisIndex);
 
 			// The qualified name starts after the last depth-0 space (separating
 			// it from the return type). No space => no return type (constructors).
@@ -80,13 +91,27 @@ namespace PgE
 			std::size_t nameStart = 0;
 			for (std::size_t i = 0; i < prefix.size(); ++i)
 			{
-				if (const char character = prefix[i]; character == '<') ++angleDepth;
-				else if (character == '>') { if (angleDepth > 0) --angleDepth; }
-				else if (character == ' ' && angleDepth == 0) nameStart = i + 1;
+				if (const char character = prefix[i]; character == '<')
+				{
+					++angleDepth;
+				}
+				else if (character == '>')
+				{
+					if (angleDepth > 0)
+					{
+						--angleDepth;
+					}
+				}
+				else if (character == ' ' && angleDepth == 0)
+				{
+					nameStart = i + 1;
+				}
 			}
 			std::string_view qualifiedName = prefix.substr(nameStart);
 			while (!qualifiedName.empty() && (qualifiedName.front() == '*' || qualifiedName.front() == '&'))
+			{
 				qualifiedName.remove_prefix(1);
+			}
 
 			// Copy out, skipping any "@Module.Name" run (terminated by '::' / '<' / '(').
 			std::string result;
@@ -94,11 +119,21 @@ namespace PgE
 			bool skipping = false;
 			for (const char character : qualifiedName)
 			{
-				if (character == '@') { skipping = true; continue; }
+				if (character == '@')
+				{
+					skipping = true;
+					continue;
+				}
 				if (skipping)
 				{
-					if (character == ':' || character == '<' || character == '(' || character == ' ') skipping = false;
-					else continue;
+					if (character == ':' || character == '<' || character == '(' || character == ' ')
+					{
+						skipping = false;
+					}
+					else
+					{
+						continue;
+					}
 				}
 				result.push_back(character);
 			}
@@ -108,10 +143,9 @@ namespace PgE
 
 	namespace
 	{
-		// Interns each call site's parsed name so the pointer handed to spdlog's
-		// non-owning source_loc lives for the program's duration — safe for any sink,
-		// including a future asynchronous one. Keyed on the function_name() pointer,
-		// a stable per-call-site static, so a given site is parsed only once.
+		// Interns each call site's parsed name so the pointer handed to spdlog's non-owning source_loc lives
+		// for the program's duration, safe for any sink. Keyed on the function_name() pointer, a stable
+		// per-call-site static, so a given site is parsed only once.
 		const char* InternQualifiedName(const char* signature)
 		{
 			static std::mutex poolMutex;
@@ -120,7 +154,9 @@ namespace PgE
 			const std::scoped_lock lock(poolMutex);
 			auto [entry, inserted] = pool.try_emplace(signature);
 			if (inserted)
+			{
 				entry->second = detail::ExtractQualifiedName(signature);
+			}
 			return entry->second.c_str();
 		}
 	}
@@ -138,8 +174,7 @@ namespace PgE
 		{
 			// Exported (despite being detail) so importer-side Print instantiations link
 			// across module boundaries.
-			const spdlog::source_loc spdlogLocation{
-				location.file_name(), location.line(), InternQualifiedName(location.function_name())};
+			const spdlog::source_loc spdlogLocation{location.file_name(), location.line(), InternQualifiedName(location.function_name())};
 
 			DefaultLogger()->log(spdlogLocation, ToSpdlogLevel(level), message);
 		}

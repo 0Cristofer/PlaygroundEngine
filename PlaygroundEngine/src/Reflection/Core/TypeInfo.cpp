@@ -22,7 +22,9 @@ namespace PgE
 		for (const FunctionInfo& function : _functions)
 		{
 			if (function.GetIdentifier() == identifier)
+			{
 				matches.push_back(&function);
+			}
 		}
 
 		return matches;
@@ -35,12 +37,13 @@ namespace PgE
 		for (const FieldInfo& field : _fields)
 		{
 			if (field.GetIdentifier() == identifier)
+			{
 				return &field;
+			}
 		}
 
 		return nullptr;
 	}
-
 
 	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier, const TypedRef& out) const
 	{

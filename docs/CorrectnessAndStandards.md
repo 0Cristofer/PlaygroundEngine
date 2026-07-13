@@ -60,10 +60,15 @@ it is deferred to a later phase.
 
 ## 3. Verification toolkit
 
-A `PlaygroundTestSupport` library, the shared support library already anticipated in
-[TestingSystem.md](TestingSystem.md#direction). Building it by hand is expected: the bespoke
-toolchain (GCC 16, named modules, `import std`, `-freflection`) rules out most off-the-shelf test
-tooling, and doctest plus the hand-rolled `PlaygroundBenchmark.Harness` are the precedent. It holds:
+The verification harness, the shared test-support library already anticipated in
+[TestingSystem.md](TestingSystem.md#direction). The name follows the existing
+`PlaygroundBenchmark.Harness`: a harness drives code and observes it, which is exactly the job here.
+It lives inside `PlaygroundTests` until a second consumer forces extraction (per that document's
+"do not split prematurely"). Building it by hand is expected: the bespoke toolchain (GCC 16, named
+modules, `import std`, `-freflection`) rules out most off-the-shelf test tooling, and doctest plus
+`PlaygroundBenchmark.Harness` are the precedent. The driving pieces are harnesses (`SnapshotHarness`);
+the passive instruments (`Tracked<T>`, `TrackingResource`, the predicates) keep their own names and
+the harness exercises them. It holds:
 
 - **Memory.** `TrackingResource` wraps an upstream `std::pmr::memory_resource` and records
   allocation count, bytes, and peak. `NoAllocScope` installs a resource that fails the test on any
@@ -182,11 +187,17 @@ enforced by the IDE; a `compile_commands.json` already exists for when mainline 
 which point this is re-evaluated.
 
 `clang-format` is a separate tool that needs no compile: it is lexer-based and recent versions handle
-`export module` and `import`, so it may enforce the Allman, brace, whitespace, and layout rules even
-on reflection files. This is **not yet verified** (no clang is installed on this machine). P0 carries
-a spike: install `clang-format`, run it on a reflection-using `.cppm` and a plain file, and adopt it
-for layout enforcement if it round-trips without mangling the `^^` or module syntax. If it fails the
-spike, the textual lint below is the fallback.
+`export module` and `import`. The P0 spike is **done and positive** (clang-format 22.1.2): it does
+**not mangle** any bleeding-edge syntax, `^^T`, splicers `[:...:]`, `std::meta`, and
+`export module ... : partition;` all survive formatting intact (exit 0, no errors), and a
+project-matching config (Microsoft base, tabs, 150-column, Allman via `BreakBeforeBraces: Custom`,
+`IndentRequiresClause: false`, `FixNamespaceComments: false`, `SplitEmptyFunction: false`) took a
+representative file to **zero churn**. Residual churn on dense files is a few more tunable knobs
+(`BreakTemplateDeclarations`, `AllowShortFunctionsOnASingleLine: Inline`, `BinPackParameters: false`),
+not divergence. **Decision: adopt clang-format** for layout enforcement. Adoption is its own step:
+commit a tuned `.clang-format`, do a one-time whole-repo reflow that becomes the new baseline, and
+point ReSharper at the same `.clang-format` so the IDE and the pipeline agree. The textual lint below
+stays for the rules clang-format does not cover (em-dash ban, comment length, naming).
 
 ### Textual lint
 

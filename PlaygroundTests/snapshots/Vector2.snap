@@ -1,0 +1,13 @@
+type Vector2
+kind Class
+identity
+  field X : int
+  field Y : int
+layout
+  size 8
+  alignment 4
+  trivially_copyable true
+  standard_layout true
+  unique_object_representations true
+  field X @ 0
+  field Y @ 4

@@ -141,6 +141,7 @@ target_sources(PlaygroundEngine
         src/Reflection/Core/FieldInfo.cppm
         src/Reflection/Core/FunctionInfo.cppm
         src/Reflection/Reflection.cppm
+        src/Reflection/Contracts.cppm
         src/Reflection/Core/TypedRef.cppm
         src/Reflection/Core/TypeInfo.cppm
         src/Reflection/Core/TypeReference.cppm

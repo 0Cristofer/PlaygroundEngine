@@ -1,11 +1,6 @@
-// Development scratchpad — NOT a real test. A hidden doctest case for running engine
-// code by hand during development and watching log output, using the test harness as
-// a ready-made execution environment (it already links the engine and inits logging).
-//
-// Skipped by default so normal and CI runs ignore it. Run it on demand via the shared
-// "Scratchpad test" IDE run configuration (.run/), which builds, runs, and can debug it;
-// or directly:
-//   ./build/linux/PlaygroundTests/Debug/PlaygroundTests --test-case=scratch --no-skip
+// Development scratchpad, NOT a real test: a hidden, skipped doctest case for running engine code by hand
+// and watching log output (the harness links the engine and inits logging). Run via the "Scratchpad test"
+// IDE config, or: ./build/linux/PlaygroundTests/Debug/PlaygroundTests --test-case=scratch --no-skip
 #include <doctest/doctest.h>
 
 #include "PlaygroundEngine/Log.h"
@@ -50,14 +45,12 @@ TEST_CASE("scratch" * doctest::skip())
 	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
 
 	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(),
-	        valueGet ? "" : PgE::ToString(valueGet.error().Reason));
+	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(), valueGet ? "" : PgE::ToString(valueGet.error().Reason));
 
 	Movable source;
 	source.Tag = 5;
 	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
-	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(),
-	        valueSet ? "" : PgE::ToString(valueSet.error().Reason));
+	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(), valueSet ? "" : PgE::ToString(valueSet.error().Reason));
 
 	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
 	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
@@ -80,8 +73,7 @@ TEST_CASE("scratch" * doctest::skip())
 	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
 	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
 
-	auto window = PgE::Window::Create(PgE::WindowSpecification{
-		.Title = "Playground Window", .Width = 960, .Height = 540});
+	auto window = PgE::Window::Create(PgE::WindowSpecification{.Title = "Playground Window", .Width = 960, .Height = 540});
 
 	if (!window)
 	{
@@ -89,8 +81,7 @@ TEST_CASE("scratch" * doctest::skip())
 		return;
 	}
 
-	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(),
-			(*window)->GetTitle());
+	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(), (*window)->GetTitle());
 
 	while (!(*window)->ShouldClose())
 	{

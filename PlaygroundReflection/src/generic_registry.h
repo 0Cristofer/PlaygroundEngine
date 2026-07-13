@@ -1,28 +1,8 @@
 #pragma once
 
-// =============================================================================
-// Generic Any-Erased Function Registry
-//
-// A registry that works for ANY type and ANY member function signature.
-// Arguments and return values are erased to std::any so every function fits
-// the same runtime Invoker pointer — at the cost of boxing each value.
-//
-// Concepts demonstrated:
-//   std::meta::parameters_of(Fn)    — compile-time list of a function's parameters
-//   std::meta::return_type_of(Fn)   — reflection of a function's return type
-//   std::meta::type_of(param)       — reflection of a parameter's type
-//   std::index_sequence             — used to unpack parameter types as a pack
-//
-// GCC-specific workarounds needed in this file:
-//   ArgCast<Param>    — GCC forbids a bare splicer as a template argument inside a
-//                       function body (-Wtemplate-body). Moving the splice into a
-//                       struct's using-alias (which is in a valid consteval context)
-//                       and calling a plain static function avoids the restriction.
-//   InvokeImpl/Invoke — std::make_index_sequence<N> in a lambda body is also
-//                       consteval-only in GCC. Splitting into two functions lifts
-//                       the index_sequence construction to template-instantiation
-//                       time, which is a constant-evaluated context.
-// =============================================================================
+// A generic any-erased function registry: erases any type and signature to a shared Invoker via std::any,
+// with the two GCC workarounds (ArgCast moves the splice into a using-alias; the InvokeImpl/Invoke split
+// lifts make_index_sequence out of a lambda body). See docs/ReflectionInternals.md.
 
 // --- Demo types ---
 
@@ -50,13 +30,9 @@ struct Timer
 using Args    = std::span<std::any>;
 using Invoker = std::any (*)(void* obj, Args args);
 
-// Owns the type splice for one function parameter.
-//
-// GCC restriction: a splicer used directly as a template argument inside a
-// function body (e.g. std::any_cast<[:type_of(p):]>) triggers -Wtemplate-body.
-// Solution: move the splice into a using-alias here at namespace scope, where
-// it is in a valid consteval context. The static from() function then uses the
-// resulting 'type' alias normally, avoiding any splicer in template-arg position.
+// Owns the type splice for one parameter: a splicer used directly as a template argument in a function
+// body triggers GCC -Wtemplate-body, so the splice moves into a using-alias here at namespace scope (a
+// valid consteval context), which the static from() then uses normally.
 template <std::meta::info Param>
 struct ArgCast
 {
@@ -67,10 +43,8 @@ struct ArgCast
 	static type from(std::any& argument) { return std::any_cast<type>(argument); }
 };
 
-// Core thunk — one instantiation per (T, Fn) pair.
-//
-// The I... pack is the index sequence for the parameter list, injected by Invoke
-// so that std::make_index_sequence is constructed outside any lambda body.
+// Core thunk, one instantiation per (T, Fn) pair. The I... index-sequence pack is injected by Invoke so
+// make_index_sequence is constructed outside any lambda body.
 template <typename T, std::meta::info Fn, std::size_t... I>
 std::any InvokeImpl(void* obj, Args args, std::index_sequence<I...>)
 {
@@ -93,12 +67,9 @@ std::any InvokeImpl(void* obj, Args args, std::index_sequence<I...>)
 	}
 }
 
-// Wrapper that computes the parameter count at template-instantiation time
-// (a constant-evaluated context) and passes the resulting index_sequence to InvokeImpl.
-//
-// The split exists because GCC treats std::make_index_sequence<N> inside a lambda
-// body as consteval-only. At function-template instantiation time (here), N is a
-// proper constant expression and the restriction does not apply.
+// Wrapper that computes the parameter count at template-instantiation time (a constant-evaluated context)
+// and passes the index_sequence to InvokeImpl. The split exists because GCC treats make_index_sequence<N>
+// inside a lambda body as consteval-only, but N is a proper constant here.
 template <typename T, std::meta::info Fn>
 std::any Invoke(void* obj, Args args)
 {
