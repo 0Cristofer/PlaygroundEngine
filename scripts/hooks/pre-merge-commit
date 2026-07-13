@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Tracked git hook (activated by scripts/setup-hooks.sh setting core.hooksPath).
+# Since git 2.24 a clean automatic merge commit runs pre-merge-commit, NOT pre-commit, so the
+# main-integration hard gate must live here to fire on the common --no-ff merge. pre-commit carries
+# the same gate for the other case (a conflicted merge finished by a manual git commit). See
+# docs/CorrectnessAndStandards.md Section 7.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+# This hook only ever runs during a merge, so being on main is the whole condition for the gate.
+if [ "$branch" = "main" ]; then
+	printf 'pre-merge-commit: integrating into main, running the full verify pipeline (hard gate)\n'
+	exec "$root/scripts/verify.sh"
+fi
