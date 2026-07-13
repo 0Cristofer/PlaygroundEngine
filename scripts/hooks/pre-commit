@@ -9,7 +9,8 @@ root="$(git rev-parse --show-toplevel)"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 mergeHead="$(git rev-parse --git-path MERGE_HEAD)"
 
-# A --no-ff merge into main creates a commit, so this hook fires exactly on the integration we gate.
+# A clean merge fires pre-merge-commit (the primary gate), not pre-commit. This path covers the other
+# case: a conflicted merge that git finishes as a manual commit, where MERGE_HEAD still exists here.
 if [ -f "$mergeHead" ] && [ "$branch" = "main" ]; then
 	printf 'pre-commit: integrating into main, running the full verify pipeline (hard gate)\n'
 	exec "$root/scripts/verify.sh"

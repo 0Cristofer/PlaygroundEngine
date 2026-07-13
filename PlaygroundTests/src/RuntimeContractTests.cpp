@@ -6,8 +6,7 @@ import PlaygroundTests.ContractSeam;
 
 namespace
 {
-	int Doubled(int value)
-		pre(value > 0)
+	int Doubled(int value) pre(value > 0)
 	{
 		return value * 2;
 	}

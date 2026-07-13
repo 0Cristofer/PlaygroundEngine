@@ -4,17 +4,18 @@ cmake_minimum_required(VERSION 4.3)
 include(FetchContent)
 
 FetchContent_Declare(
-		doctest
-		GIT_REPOSITORY https://github.com/doctest/doctest.git
-		GIT_TAG v2.5.2
-		SYSTEM
-		FIND_PACKAGE_ARGS
+	doctest
+	GIT_REPOSITORY https://github.com/doctest/doctest.git
+	GIT_TAG v2.5.2
+	SYSTEM
+	FIND_PACKAGE_ARGS
 		CONFIG
-		NAMES doctest
+		NAMES
+			doctest
 )
 
 # We provide our own entry point (DOCTEST_CONFIG_IMPLEMENT + main() in TestMain.cpp),
-# so doctest's bundled static-main lib is unwanted — don't build it.
+# so doctest's bundled static-main lib is unwanted; don't build it.
 set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF CACHE BOOL "" FORCE)
 
 # doctest's CMakeLists declares cmake_minimum_required below CMake 4.x's supported
@@ -28,26 +29,31 @@ add_executable(PlaygroundTests)
 
 target_compile_features(PlaygroundTests PRIVATE cxx_std_26)
 
-target_compile_options(PlaygroundTests
-		PRIVATE
+target_compile_options(
+	PlaygroundTests
+	PRIVATE
 		# Same warning bar as the rest of the project. doctest's headers are pulled in
 		# SYSTEM (see FetchContent SYSTEM), so its own warnings are suppressed; only our
 		# test code is held to this. -freflection comes from the global options (root).
 		$<$<CXX_COMPILER_ID:MSVC>:/W4>
 		$<$<CXX_COMPILER_ID:MSVC>:/permissive->
-
 		$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall>
 		$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wextra>
 		$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wpedantic>
 )
 
-set_target_properties(PlaygroundTests PROPERTIES
-		COMPILE_WARNING_AS_ERROR ON
-		CMAKE_LINK_WARNING_AS_ERROR ON
+set_target_properties(
+	PlaygroundTests
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			ON
+		CMAKE_LINK_WARNING_AS_ERROR
+			ON
 )
 
-target_sources(PlaygroundTests
-		PRIVATE
+target_sources(
+	PlaygroundTests
+	PRIVATE
 		src/TestMain.cpp
 		src/Reflection/ReflectionTypeInfoTests.cpp
 		src/Reflection/ReflectionStringificationTests.cpp
@@ -66,24 +72,22 @@ target_sources(PlaygroundTests
 		src/RuntimeContractTests.cpp
 		src/VerifyTests.cpp
 		src/Scratch.cpp
-
-		PUBLIC
+	PUBLIC
 		FILE_SET CXX_MODULES
-		BASE_DIRS src
-		FILES
-		src/Reflection/ReflectionTestTypes.cppm
-		src/SnapshotHarness.cppm
-		src/ContractSeam.cppm
+			BASE_DIRS
+				src
+			FILES
+				src/Reflection/ReflectionTestTypes.cppm
+				src/SnapshotHarness.cppm
+				src/ContractSeam.cppm
 )
 
 # The snapshot harness resolves committed golden files relative to this directory at runtime.
-target_compile_definitions(PlaygroundTests
-		PRIVATE
-		PGE_SNAPSHOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/snapshots"
-)
+target_compile_definitions(PlaygroundTests PRIVATE PGE_SNAPSHOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/snapshots")
 
-target_link_libraries(PlaygroundTests
-		PRIVATE
+target_link_libraries(
+	PlaygroundTests
+	PRIVATE
 		PlaygroundEngine
 		doctest::doctest
 )

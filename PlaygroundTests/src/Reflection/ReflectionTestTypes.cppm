@@ -452,10 +452,9 @@ export namespace ReflectionTestTypes
 	// ReSharper restore CppEnumeratorNeverUsed
 }
 
-// A user extends the facet system entirely from outside the library: specialize TypeInfoTraits for the
-// type and return the facet from MakeFacets. The reflection core assembles and keys it with no change.
-// Left non-exported: the specialization is reachable to importers through this module, which is what the
-// instantiation of TypeOf<Labeled> in the facet tests picks up (GCC 16 cross-module reachability).
+// A user extends the facet system from outside the library: specialize TypeInfoTraits and return the
+// facet from MakeFacets; the core assembles and keys it with no change. Non-exported but reachable to
+// importers through this module (GCC 16 cross-module reachability), which TypeOf<Labeled> picks up.
 template <>
 struct PgE::TypeInfoTraits<ReflectionTestTypes::Labeled> : PgE::TypeInfoTraitsDefaults
 {

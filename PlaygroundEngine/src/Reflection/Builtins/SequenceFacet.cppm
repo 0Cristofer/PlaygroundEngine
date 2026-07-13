@@ -42,22 +42,19 @@ namespace PgE
 			return _element.Get();
 		}
 
-		std::size_t Size(const void* obj) const
-			pre(_size != nullptr)
+		std::size_t Size(const void* obj) const pre(_size != nullptr)
 		{
 			return _size(obj);
 		}
 
-		TypedRef ElementRef(void* obj, const std::size_t index) const
-			pre(_elementRef != nullptr)
+		TypedRef ElementRef(void* obj, const std::size_t index) const pre(_elementRef != nullptr)
 		{
 			// _elementRef is null for a read-only view (std::span<const T>), so this pre holds only for a
 			// mutable sequence; a caller that mutates gates on CanMutateElements() first, as CanAppend gates Append.
 			return _elementRef(obj, index);
 		}
 
-		TypedRef ElementRef(const void* obj, const std::size_t index) const
-			pre(_constElementRef != nullptr)
+		TypedRef ElementRef(const void* obj, const std::size_t index) const pre(_constElementRef != nullptr)
 		{
 			return _constElementRef(obj, index);
 		}

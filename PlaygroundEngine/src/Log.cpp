@@ -42,13 +42,20 @@ namespace PgE
 		{
 			switch (level)
 			{
-			case LogLevel::Trace: return spdlog::level::trace;
-			case LogLevel::Debug: return spdlog::level::debug;
-			case LogLevel::Info: return spdlog::level::info;
-			case LogLevel::Warn: return spdlog::level::warn;
-			case LogLevel::Error: return spdlog::level::err;
-			case LogLevel::Fatal: return spdlog::level::critical;
-			case LogLevel::Off: return spdlog::level::off;
+			case LogLevel::Trace:
+				return spdlog::level::trace;
+			case LogLevel::Debug:
+				return spdlog::level::debug;
+			case LogLevel::Info:
+				return spdlog::level::info;
+			case LogLevel::Warn:
+				return spdlog::level::warn;
+			case LogLevel::Error:
+				return spdlog::level::err;
+			case LogLevel::Fatal:
+				return spdlog::level::critical;
+			case LogLevel::Off:
+				return spdlog::level::off;
 			}
 			return spdlog::level::off;
 		}

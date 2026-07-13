@@ -25,8 +25,7 @@ namespace PgE
 		constexpr StringFacet(const ViewThunk view, const AssignThunk assign) : _view(view), _assign(assign)
 		{}
 
-		std::string_view View(const void* obj) const
-			pre(_view != nullptr)
+		std::string_view View(const void* obj) const pre(_view != nullptr)
 		{
 			return _view(obj);
 		}

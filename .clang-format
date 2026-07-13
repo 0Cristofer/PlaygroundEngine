@@ -15,7 +15,7 @@ FixNamespaceComments: false
 IndentRequiresClause: false
 BreakTemplateDeclarations: Yes
 AllowShortFunctionsOnASingleLine: None
-AllowShortCaseLabelsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: false
 BinPackParameters: false
 InsertBraces: true
 ReflowComments: false

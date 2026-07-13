@@ -186,8 +186,13 @@ still validated with a throwaway compile before it is relied on, per the working
   states what it guards or how a caller avoids it (a [CLAUDE.md](../CLAUDE.md) code-style rule), so the
   reasoning the old `assert` string held is not lost.
 - **Semantics by zone.** Enforce in `PGE_DEV`, observe in a telemetry build, ignore in shipping,
-  selected with `-fcontract-evaluation-semantic=`. Because contracts terminate without unwinding,
-  they hold under `-fno-exceptions`, which the runtime zone requires.
+  selected with `-fcontract-evaluation-semantic=`. The semantic rides the build config rather than a
+  standalone knob (it is a whole-program property, uniform across every TU including the `import std`
+  target, so it cannot be a per-target option): the root `CMakeLists.txt` sets `enforce` for the dev
+  configs (Debug, RelWithDebInfo) and `ignore` for Release (shipping) via `$<CONFIG>` [built]. Because
+  contracts terminate without unwinding, they hold under `-fno-exceptions`, which the runtime zone
+  requires; the telemetry `observe` config and the `-fno-exceptions` runtime get their own presets
+  (still open).
 - **The value over `assert` lives in the violation handler.** The contracts proposal defines a
   **standard, replaceable contract-violation handler**; the engine supplies one that routes to
   `PGE_LOG` / spdlog with the assertion kind, source location, and predicate text, and applies the
@@ -288,6 +293,9 @@ choices there are load-bearing and were tightened past the spike:
 - **`AllowShortFunctionsOnASingleLine: None`** (the spike had used `Inline`): no function body is
   collapsed onto its signature line. Every block opens on the next line, so a one-line accessor reads
   the same as any other function. This is a deliberate uniformity call.
+- **`AllowShortCaseLabelsOnASingleLine: false`**: a `case` body always goes on the next line, never
+  collapsed onto the label. Same uniformity call as the function-body one, so a one-line case reads
+  like any other.
 
 Point ReSharper at the same `.clang-format` so the IDE and the pipeline agree (an IDE setting, not
 yet done). The textual lint below stays for the rules clang-format does not cover (em-dash ban,
@@ -298,11 +306,19 @@ comment length, naming).
 The guaranteed-portable floor: `scripts/lint.sh` enforces the regex-checkable rules from
 [CLAUDE.md](../CLAUDE.md) and `.editorconfig`. Shipped checks: the em-dash ban (U+2014), trailing
 whitespace (which also catches whitespace on otherwise-blank lines), final newline, and the 3-line
-comment cap. With no arguments it audits every tracked source and Markdown file; with file arguments
-it lints only those, so the merge gate can pass just the files changed versus `main` and grandfather
-existing code. Run-of-directive comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are
-exempt from the comment cap. The rules that need an AST clang cannot build here (naming, abbreviation)
-are left to the IDE, not approximated, to avoid false positives.
+comment cap. With no arguments it audits every tracked C++, Markdown, and CMake file; with file
+arguments it lints only those, so the merge gate can pass just the files changed versus `main` and
+grandfather existing code. CMake files (`CMakeLists.txt`, `*.cmake`) get the em-dash / whitespace /
+final-newline hygiene, since those rules are not C++-specific and CMake was previously an unlinted
+blind spot; the comment cap stays C++ only (it scans `//` and `/* */`, not CMake `#`). Run-of-directive
+comment blocks (`// ReSharper disable`, `NOLINT`, `clang-format`) are exempt from the comment cap. The
+rules that need an AST clang cannot build here (naming, abbreviation) are left to the IDE, not
+approximated, to avoid false positives. A CMake *formatter* is now adopted [built]: **gersemi**
+(`.gersemirc`: tabs and 150 columns to match `.editorconfig` / `.clang-format`) drove a one-time
+reflow of every `CMakeLists.txt`, and the `cmakeformat` verify stage runs `gersemi --check`, mirroring
+the clang-format stage for C++. Its opinionated `if(...)` (no space) becomes the CMake baseline, the
+same kind of uniformity call as the clang-format choices above; the unknown-command warning for
+doctest's `doctest_discover_tests` helper is informational and does not fail the stage.
 
 ### Comment length [built]
 
@@ -360,12 +376,23 @@ paths where contracts compile out), **gcov coverage** (advisory), and the **cont
 that discharges the build-mode risk in [Section 10](#10-open-questions-and-risks). TSan is deferred
 until real concurrency exists (the ECS/networking), where it earns its keep.
 
-**Built so far:** `configure → build → lint → test`. Configure always runs before build (a source
-addition to a `CMakeLists.txt` is otherwise silently skipped by an incremental `--build`). Static
-contracts are `static_assert`s, so they are enforced *within* the build stage rather than as a
-separate step, and the snapshot checks currently run *within* the test stage (they are doctest cases).
-The sanitizer and benchmark stages are not built (they need the presets and spikes in P1). The current
-pipeline runs green: build clean, lint clean, 74/74 tests.
+**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix`. Configure always
+runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
+incremental `--build`). The **format check** (`clang-format --dry-run -Werror`), **shellcheck**, and
+**build matrix** stages are now wired [built]; the tool-bearing ones detect their tool across
+environments (the versioned `clang-format-22` here versus an unversioned container install; shellcheck
+on `PATH` or under `~/.local/bin`). Two format-stage carve-outs were forced by the spike:
+clang-format-22 misreads a bare `identifier && identifier` inside a contract `pre(...)` as an
+rvalue-ref, so contract predicates are written with explicit comparisons
+(`_app != nullptr && _world != nullptr`), which read better anyway; and the `PlaygroundReflection`
+`std::meta` scratch headers are exempt (their `^^` operators trip clang-format's Objective-C guesser,
+and they keep intentional hand-alignment as throwaway exploration). The build matrix adds only the
+RelWithDebInfo and Release configs (Debug is already built and feeds the tests) and runs last as the
+heaviest stage. Static contracts are `static_assert`s, so they are enforced *within* the build stage
+rather than as a separate step, and the snapshot checks currently run *within* the test stage (they are
+doctest cases). The `gcc -fanalyzer`, gcov, contract-mode-matrix, sanitizer, and benchmark stages are
+not built (they need presets and spikes still in P1). The current pipeline runs green: build clean,
+format clean, lint clean, shellcheck clean, 84/84 tests, matrix (Debug/RelWithDebInfo/Release) clean.
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`
@@ -413,13 +440,18 @@ interception; a mass-churn re-bless on a toolchain upgrade is exactly when a rea
 the count is not a nicety but the enforcement of conscious acceptance the whole snapshot mechanism
 rests on.
 
-The git hooks are wired [built]: tracked under `scripts/hooks/` and activated by
-`scripts/setup-hooks.sh` (which points `core.hooksPath` there, so they are version-controlled rather
-than untracked in `.git/hooks`). `pre-commit` lints the changed files on a branch commit and runs the
-full `verify.sh` when the commit is a `--no-ff` merge into `main` (the hard gate); `pre-push` mirrors
-that gate for when a remote exists. The Claude Code hooks (`PostToolUse` lint on edit, `Stop` build
-plus tests) are wired in `.claude/settings.json` as advisory reports. A `main` merge must be `--no-ff`
-so the gate fires: a fast-forward creates no commit and would slip past `pre-commit`.
+The git hooks are wired [built]: tracked under `scripts/hooks/` and activated automatically at CMake
+configure time (the root `CMakeLists.txt` points `core.hooksPath` there, so they are version-controlled
+rather than untracked in `.git/hooks`, and no manual per-clone step is needed; `scripts/setup-hooks.sh`
+is the manual equivalent). Git has no clone-time hook by design, so folding activation into the
+configure step every developer runs is the automatic path. `pre-commit` lints the changed files on a branch commit. The hard
+gate (full `verify.sh`) lives in **`pre-merge-commit`**, because since git 2.24 a clean automatic
+merge commit runs that hook, not `pre-commit`; `pre-commit` carries the same gate only for the other
+path, a conflicted merge that git finishes as a manual commit (`MERGE_HEAD` still present). `pre-push`
+mirrors the gate for when a remote exists. The Claude Code hooks (`PostToolUse` lint on edit, `Stop`
+build plus tests) are wired in `.claude/settings.json` as advisory reports. A `main` merge must be
+`--no-ff` so a merge commit exists for the gate to run on: a fast-forward creates no commit and would
+slip past the hooks entirely.
 
 This is what dissolves the collision with `.claude/agents/autonomous-worker.md`: sketch-with-TODO
 commits and mid-feature red stops live on the branch, which is allowed to be red; only integration
@@ -475,14 +507,17 @@ effects of the work.
   throwing seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
   is the always-on residue, and `<cassert>` is retired at the migrated sites (`Engine::StartRun` now a
   `pre`, the reflection facet op-tables now `pre`). Adopted `contract_assert`/`pre`/`post` directly
-  with no interim macro. Still open in P1: the per-zone semantic split (observe/ignore) once shipping
-  and telemetry presets exist. The property-based-testing loop primitive (hand-written
-  generators to start). The sanitizer spike then presets, with the fuzzing-instrumentation spike
-  piggybacked. The namespace-enumeration spike gating the coverage manifest, then the manifest as a
-  default-on report. The doc-coverage report. New local pipeline stages, all toolchain-only: the
-  `clang-format --dry-run -Werror` drift check, `shellcheck` on `scripts/*.sh`, the `gcc -fanalyzer`
-  static-analysis stage, the Debug/RelWithDebInfo/Release build matrix, `gcov` coverage (advisory),
-  and the contract-mode matrix (enforce/observe/ignore/`-fno-exceptions`). The enforcement fabric on
+  with no interim macro. The per-zone semantic split rides `$<CONFIG>` [built]: dev configs enforce,
+  Release ignores, so the build matrix already validates the enforce and ignore modes; still open are
+  the telemetry `observe` config and the `-fno-exceptions` runtime, each needing its own preset. The
+  property-based-testing loop primitive (hand-written generators to start). The sanitizer spike then
+  presets, with the fuzzing-instrumentation spike piggybacked. The namespace-enumeration spike gating
+  the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
+  pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
+  `shellcheck` on `scripts/*.sh` [built], the Debug/RelWithDebInfo/Release build matrix [built], and the
+  `gersemi` CMake-format check [built]; still open are the `gcc -fanalyzer` static-analysis stage,
+  `gcov` coverage (advisory), and the remaining contract-mode-matrix legs (`observe` /
+  `-fno-exceptions`) once their presets exist. The enforcement fabric on
   top of `verify.sh` is wired [built]: the tracked git hooks (branch lint plus the `--no-ff`
   `main`-merge full-pipeline gate and its re-blessed-goldens category) and the advisory Claude Code
   hooks (`PostToolUse` lint, `Stop`/`SubagentStop` verify).
