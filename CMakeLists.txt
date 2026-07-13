@@ -14,6 +14,26 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 	)
 endif ()
 
+# Activate the tracked git hooks at configure time. Git has no clone-time hook by design, so folding
+# this into configure (which every developer runs before building) is the automatic path; it points
+# core.hooksPath at scripts/hooks so the main-merge verify gate needs no manual setup step. Guarded to
+# a real git checkout so a source tarball still configures. scripts/setup-hooks.sh is the manual equal.
+if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+	find_program(GIT_EXECUTABLE git)
+	if (GIT_EXECUTABLE)
+		execute_process(
+				COMMAND "${GIT_EXECUTABLE}" config core.hooksPath scripts/hooks
+				WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+				RESULT_VARIABLE _pgeHooksResult
+		)
+		if (_pgeHooksResult EQUAL 0)
+			message(STATUS "[PlaygroundEngine] git hooks active: core.hooksPath -> scripts/hooks")
+		else ()
+			message(WARNING "[PlaygroundEngine] could not set core.hooksPath; run scripts/setup-hooks.sh manually")
+		endif ()
+	endif ()
+endif ()
+
 # Modules and "import std"
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_CXX_MODULE_STD ON)
@@ -30,7 +50,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if (NOT _isMultiConfig AND NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
-	message(STATUS "[PlaygroundEngine] CMAKE_BUILD_TYPE not set — defaulting to Debug")
+	message(STATUS "[PlaygroundEngine] CMAKE_BUILD_TYPE not set: defaulting to Debug")
 endif ()
 
 include(CheckIPOSupported)
