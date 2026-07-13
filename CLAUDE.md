@@ -69,6 +69,7 @@ Do not run the heavy path on light work.
 - Functions are clear in intent and do one job; split when doing too much (`OnClick()` calls `Purchase()`; it is not itself the purchase).
 - Class interfaces read like documentation; keep them clean, and if internals must surface, organize them clearly.
 - Comments only where logic is genuinely complex or assumes low-level knowledge; code should be self-documenting. Put comments inside their block, never floating above it where they would read as API docs (real API docs come later, once the surface stabilizes).
+- A `pre`/`post`/`contract_assert` whose predicate does not by itself convey the invariant gets a brief comment saying what it guards or how a caller avoids it. C++26 contracts carry no message (unlike `assert`), so the reasoning the old assert string held must live in a comment, not be lost. Skip it only when the predicate is self-evident.
 
 ## Design rationale notes
 
@@ -91,6 +92,8 @@ Background for the decisions in `docs/`, useful when evaluating proposals or ext
 - **Commit messages are a single line.** No body, no bullet list, no trailing metadata. State what the commit does in one imperative line.
 - **Never mention Claude, Claude Code, or any AI assistant** in commit messages, and add no `Co-Authored-By` trailer for one. Commits read as the author's own work.
 - Commit or push only when asked; when starting new work off `main`, branch first.
+- **Integrate into `main` with `--no-ff`.** The `pre-commit` hook runs the full `verify.sh` gate only on a merge commit, so a fast-forward merge would bypass it. `main` stays green.
+- Run `scripts/setup-hooks.sh` once per clone to activate the tracked git hooks (`core.hooksPath`).
 
 ## Toolchain constraints
 

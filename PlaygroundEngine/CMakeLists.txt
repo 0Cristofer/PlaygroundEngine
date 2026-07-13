@@ -93,6 +93,7 @@ target_sources(PlaygroundEngine
         PRIVATE
         src/GameObject.cpp
         src/Log.cpp
+        src/Diagnostics.cpp
         src/Engine.cpp
         src/World.cpp
         src/Component/ComponentBase.cpp
@@ -113,6 +114,7 @@ target_sources(PlaygroundEngine
         FILES
         src/GameObject.cppm
         src/Log.cppm
+        src/Diagnostics.cppm
         src/Engine.cppm
         src/App.cppm
         src/World.cppm
@@ -155,4 +157,5 @@ target_sources(PlaygroundEngine
         FILES
         include/PlaygroundEngine/Log.h
         include/PlaygroundEngine/EntryPoint.h
+        include/PlaygroundEngine/Verify.h
 )

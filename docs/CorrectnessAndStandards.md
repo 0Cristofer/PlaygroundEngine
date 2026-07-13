@@ -181,7 +181,10 @@ throwing test-seam handler (below) is needed identically either way. Each non-tr
 still validated with a throwaway compile before it is relied on, per the working method.
 
 - **`contract_assert`** replaces in-body `assert`; **`pre`/`post`** replace the assert-at-entry and
-  assert-at-exit idiom and become part of the declaration, visible to callers.
+  assert-at-exit idiom and become part of the declaration, visible to callers. Contracts carry no
+  message string, so where the predicate does not by itself convey the invariant, a brief comment
+  states what it guards or how a caller avoids it (a [CLAUDE.md](../CLAUDE.md) code-style rule), so the
+  reasoning the old `assert` string held is not lost.
 - **Semantics by zone.** Enforce in `PGE_DEV`, observe in a telemetry build, ignore in shipping,
   selected with `-fcontract-evaluation-semantic=`. Because contracts terminate without unwinding,
   they hold under `-fno-exceptions`, which the runtime zone requires.
@@ -190,7 +193,12 @@ still validated with a throwaway compile before it is relied on, per the working
   `PGE_LOG` / spdlog with the assertion kind, source location, and predicate text, and applies the
   fatal-or-telemetry policy for the build zone. This is the language's own customization point, not
   an engine idiom. Validate the exact GCC 16 handler signature with a throwaway compile before
-  relying on it (contracts are experimental).
+  relying on it (contracts are experimental). **The engine owns this, not the game.** Since the engine
+  owns `main`, it defines the global-linkage handler in its entry-point translation unit (`main.cpp`),
+  which is co-linked into any engine-driven executable and never pulled into targets with their own
+  `main` (tests, benchmarks). The reusable formatting/zone *policy* lives in `PlaygroundEngine.Diagnostics`;
+  the handler is a thin dispatch to it. A game needing custom behavior would attach through an
+  engine-provided hook, not by defining the replaceable function itself, that stays an engine concern.
 - **Test seam.** An enforced violation terminates and cannot be caught by doctest. The observe
   semantic is not a fix: it records the violation and then *continues into the body with the bad
   input*, which is the undefined behavior the precondition existed to prevent. So the **test build
@@ -250,12 +258,21 @@ Two compile-time and data-time layers distinct from runtime contracts:
 
 ### Style enforcement and the clang question
 
-Semantic clang tooling cannot run here, and the reason is more than modules. P2996 reflection
-(`^^T`, `std::meta`) is not in mainline clang (only the `clang-p2996` fork), and `-freflection` is a
-GCC-only flag clang rejects, so the reflection translation units will not compile under stock clang,
-and clang-tidy needs a compile. `.clang-tidy` therefore stays the **naming source of truth**,
-enforced by the IDE; a `compile_commands.json` already exists for when mainline clang catches up, at
-which point this is re-evaluated.
+Semantic clang tooling cannot run here, and the reason is more than modules. The dividing line is
+that `clang-format` is lexer-only (it never parses), while `clang-tidy` needs a full parse and a
+semantic AST, so the two are not a package deal and one working says nothing about the other. This was
+**verified, not assumed**, against the installed clang 22.1.2 including `clang-tidy-22` itself:
+`-freflection` is rejected as an *unknown argument*, `--help-hidden` exposes *no* reflection or P2996
+flag at all, and `^^int` is a hard parse error (clang reads the `^` as its Blocks extension). Run on a
+real reflection module, `clang-tidy-22` fails even earlier, at `import std` (`module 'std' not
+found`), the BMI blocker below. P2996 reflection (`^^T`, `std::meta`,
+splicers) is not in mainline clang (only the `clang-p2996` fork), so any reflection translation unit
+fails at the parse `clang-tidy` depends on. A second, independent blocker: the module BMIs are
+GCC-produced and clang cannot consume them, so `clang-tidy` would have to rebuild the whole module
+graph (including `import std`) its own way regardless. `.clang-tidy` therefore stays the **naming
+source of truth**, enforced by the IDE; a `compile_commands.json` already exists for when mainline
+clang gains P2996 *and* GCC-compatible modules, at which point this is re-checked with the same
+throwaway probe.
 
 `clang-format` is a separate tool that needs no compile: it is lexer-based and recent versions handle
 `export module` and `import`. The P0 spike was **positive** (clang-format 22.1.2): it does **not
@@ -326,10 +343,22 @@ A single canonical pipeline, `scripts/verify.sh`, with ordered, independently in
 (pass a stage name to run one, or nothing to run all). The full designed sequence:
 
 ```
-configure → build (warnings as errors) → textual lint → static contracts (compile)
-          → unit + characterization tests → snapshots → sanitizers (asan/ubsan/tsan)
-          → benchmarks / budgets
+configure → build (warnings as errors; Debug / RelWithDebInfo / Release) → format check (clang-format)
+          → textual lint → shellcheck → static contracts (compile) → static analysis (gcc -fanalyzer)
+          → unit + characterization tests → snapshots → property tests → coverage (gcov, advisory)
+          → sanitizers (asan / ubsan) → contract-mode matrix (enforce / observe / ignore / -fno-exceptions)
+          → fuzz targets (short) → benchmarks / budgets (advisory)
 ```
+
+Every stage above runs on this one machine; that is the point of local-equals-cloud. Beyond the P0
+four, the added stages are all local and toolchain-only: a **format check** (`clang-format
+--dry-run -Werror`, lexer-based, catches drift since the one-time reflow), **shellcheck** on
+`scripts/*.sh`, **`gcc -fanalyzer`** as the deep static analyzer (clang-tidy is out per
+[Section 6](#6-standardization-style-comments-documentation), so GCC's own path-sensitive analyzer
+fills that hole), a **Debug/RelWithDebInfo/Release build matrix** (config-dependent breakage, and the
+paths where contracts compile out), **gcov coverage** (advisory), and the **contract-mode matrix**
+that discharges the build-mode risk in [Section 10](#10-open-questions-and-risks). TSan is deferred
+until real concurrency exists (the ECS/networking), where it earns its keep.
 
 **Built so far:** `configure → build → lint → test`. Configure always runs before build (a source
 addition to a `CMakeLists.txt` is otherwise silently skipped by an incremental `--build`). Static
@@ -348,6 +377,22 @@ clang-format spike, sanitizers get a validation step (confirm they configure, li
 false-positive on the module runtime) before entering the hard pipeline. The benchmarks/budgets stage
 is **advisory**: perf under WSL and containers is flaky, so it measures and reports, and gates only on
 large regressions with wide tolerance, if at all.
+
+**What a server adds that a machine cannot.** Because local equals cloud, a CI server does not run
+*different* work, it runs the same `verify.sh`. It exists only for the four properties one developer
+box structurally lacks: (1) **unbypassable enforcement**, the local `pre-commit` merge gate is honest
+but skippable (`--no-verify`, a manual merge), so "`main` is always green" as an *invariant* needs
+server-side branch protection with required checks; (2) a **merge queue** that tests the *combination*
+of two individually-green branches, catching merge skew nothing local can see; (3) **environments this
+box does not have**, the cross-compiler / cross-OS matrix (Windows/MSVC, clang, macOS), mostly
+*deferred* here since the project is GCC-16-only, and each such environment needs its own blessed
+golden set because [Section 10](#10-open-questions-and-risks) goldens are single-toolchain; and (4)
+**always-on, scaled, historical** work, the clean-room from-scratch build in the `Dockerfile`
+(proving it builds on nothing, not on a hand-built `~/gcc-16` under WSL), sustained fuzzing and
+determinism soaks, matrix sharding, and perf/coverage *trends* over time. Everything else, including
+short fuzz runs and single-machine sanitizer passes, is local. Given the single-toolchain reality
+today, the server's near-term value is items (1) and (4) only; the rest arrives with a second target
+or a second contributor.
 
 **The one hard gate is merge into `main`.** The full pipeline must be green to integrate a branch
 into `main`; `main` is always green. Everything before that boundary is advisory, so the branch is a
@@ -368,9 +413,13 @@ interception; a mass-churn re-bless on a toolchain upgrade is exactly when a rea
 the count is not a nicety but the enforcement of conscious acceptance the whole snapshot mechanism
 rests on.
 
-None of these hooks or the merge gate are wired yet: `verify.sh` exists and is run by hand today. The
-git hooks, the Claude Code hooks, and the `main`-integration gate are P1 wiring on top of the
-stages that already run.
+The git hooks are wired [built]: tracked under `scripts/hooks/` and activated by
+`scripts/setup-hooks.sh` (which points `core.hooksPath` there, so they are version-controlled rather
+than untracked in `.git/hooks`). `pre-commit` lints the changed files on a branch commit and runs the
+full `verify.sh` when the commit is a `--no-ff` merge into `main` (the hard gate); `pre-push` mirrors
+that gate for when a remote exists. The Claude Code hooks (`PostToolUse` lint on edit, `Stop` build
+plus tests) are wired in `.claude/settings.json` as advisory reports. A `main` merge must be `--no-ff`
+so the gate fires: a fast-forward creates no commit and would slip past `pre-commit`.
 
 This is what dissolves the collision with `.claude/agents/autonomous-worker.md`: sketch-with-TODO
 commits and mid-feature red stops live on the branch, which is allowed to be red; only integration
@@ -419,14 +468,24 @@ effects of the work.
 - **P1.** *Harness self-verification first:* the reflection ground-truth cross-check (reflected
   numbers equal `sizeof`/`alignof`/`offsetof`/`is_trivially_copyable_v`) and the snapshot
   discrimination test, plus display-string quarantine in `DescribeType`, all buildable now with no
-  dependency. Then runtime contracts (a `linux-dev` plus `-fcontracts` preset, the violation handler,
-  the throwing test-seam handler, the `PGE_VERIFY` residue, adopting `contract_assert`/`pre`/`post`
-  directly with no interim macro), retiring `<cassert>` and migrating the durable `assert` sites
-  (`Engine.cpp:64`, the reflection facets). The property-based-testing loop primitive (hand-written
+  dependency. Runtime contracts [built]: `-fcontracts` with the enforce semantic is global (validated
+  against the modular `import std` build), the engine's `LogContractViolation` policy routes through
+  spdlog and the engine installs the runtime handler at its own entry point (`main.cpp`, co-linked
+  into any engine-driven executable, so the game stays unaware of it), the test build installs a
+  throwing seam (`PlaygroundTests.ContractSeam`) that tests assert against with `CHECK_THROWS_AS`, `PGE_VERIFY`
+  is the always-on residue, and `<cassert>` is retired at the migrated sites (`Engine::StartRun` now a
+  `pre`, the reflection facet op-tables now `pre`). Adopted `contract_assert`/`pre`/`post` directly
+  with no interim macro. Still open in P1: the per-zone semantic split (observe/ignore) once shipping
+  and telemetry presets exist. The property-based-testing loop primitive (hand-written
   generators to start). The sanitizer spike then presets, with the fuzzing-instrumentation spike
   piggybacked. The namespace-enumeration spike gating the coverage manifest, then the manifest as a
-  default-on report. The doc-coverage report. Wiring the enforcement fabric on top of `verify.sh` (the
-  git and Claude Code hooks, the `main`-integration gate, and the re-blessed-goldens gate category).
+  default-on report. The doc-coverage report. New local pipeline stages, all toolchain-only: the
+  `clang-format --dry-run -Werror` drift check, `shellcheck` on `scripts/*.sh`, the `gcc -fanalyzer`
+  static-analysis stage, the Debug/RelWithDebInfo/Release build matrix, `gcov` coverage (advisory),
+  and the contract-mode matrix (enforce/observe/ignore/`-fno-exceptions`). The enforcement fabric on
+  top of `verify.sh` is wired [built]: the tracked git hooks (branch lint plus the `--no-ff`
+  `main`-merge full-pipeline gate and its re-blessed-goldens category) and the advisory Claude Code
+  hooks (`PostToolUse` lint, `Stop`/`SubagentStop` verify).
 - **P2.** The reflected-instance generator `Arbitrary<T>` (the shared keystone for properties,
   fuzzing, and structure-aware mutation), arriving with serialization as its first consumer. The
   memory probes (`TrackingResource`, `NoAllocScope`, `Tracked<T>`). Serialization byte snapshots and

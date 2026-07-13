@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Tracked git hook (activated by scripts/setup-hooks.sh setting core.hooksPath).
+# Branch commits are advisory-fast: lint only the changed files, so a red or WIP branch is still
+# committable but hygiene violations are caught. Merging into main is the one hard gate: it runs the
+# full verify pipeline and blocks the merge on any failure. See docs/CorrectnessAndStandards.md Section 7.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+mergeHead="$(git rev-parse --git-path MERGE_HEAD)"
+
+# A --no-ff merge into main creates a commit, so this hook fires exactly on the integration we gate.
+if [ -f "$mergeHead" ] && [ "$branch" = "main" ]; then
+	printf 'pre-commit: integrating into main, running the full verify pipeline (hard gate)\n'
+	exec "$root/scripts/verify.sh"
+fi
+
+mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- '*.cpp' '*.cppm' '*.h' '*.hpp' '*.md')
+if [ "${#files[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+# Lint the staged content, not the working tree, so a partially-staged file is checked exactly as it
+# will be committed. Extract each staged blob to a temp mirror and lint that; the temp prefix is
+# stripped from findings so paths still read as repo paths.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+staged=()
+for file in "${files[@]}"; do
+	destination="$tmp/$file"
+	mkdir -p "$(dirname "$destination")"
+	if git show ":$file" >"$destination" 2>/dev/null; then
+		staged+=("$destination")
+	fi
+done
+
+if [ "${#staged[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+"$root/scripts/lint.sh" "${staged[@]}" 2>&1 | sed "s#$tmp/##g"
+exit "${PIPESTATUS[0]}"

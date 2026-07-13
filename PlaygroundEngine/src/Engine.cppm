@@ -60,7 +60,8 @@ namespace PgE
 		explicit Engine(AppDescriptorBase& appDescriptor);
 
 		[[nodiscard]] std::expected<void, BootError> Boot();
-		void StartRun();
+		// pre: a successful Boot() ran first, so the app and world exist.
+		void StartRun() pre(_app && _world);
 		void Shutdown();
 
 		void RequestStop();

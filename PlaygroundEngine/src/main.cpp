@@ -1,7 +1,16 @@
 #include "PlaygroundEngine/EntryPoint.h"
 
 import PlaygroundEngine;
+import PlaygroundEngine.Diagnostics;
 import std;
+
+// The engine owns the process entry point, so it installs the process-wide contract-violation handler
+// here too (a global-linkage definition the contract runtime resolves against, co-linked with main).
+// It logs through the engine; under the enforce semantic the runtime then terminates without unwinding.
+void handle_contract_violation(const std::contracts::contract_violation& violation)
+{
+	PgE::LogContractViolation(violation);
+}
 
 int main(const int argc, char** argv)
 {
