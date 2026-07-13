@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The verification pipeline: ordered, fail-fast stages that mirror what a future cloud CI runs.
 # Run every stage, or one by name: scripts/verify.sh
-# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix|sanitizers].
+# [configure|build|format|cmakeformat|lint|shellcheck|test|matrix|sanitizers|coverage].
 # A cloud CI job is a thin wrapper that calls these same stages, so local and cloud stay identical.
 set -uo pipefail
 
@@ -43,6 +43,19 @@ find_gersemi() {
 	fi
 	if [ -x "$HOME/.local/bin/gersemi" ]; then
 		printf '%s' "$HOME/.local/bin/gersemi"
+		return 0
+	fi
+	return 1
+}
+
+# gcovr fronts gcov for a filtered summary (installed under ~/.local/bin here, on PATH in a container).
+find_gcovr() {
+	if command -v gcovr >/dev/null 2>&1; then
+		printf 'gcovr'
+		return 0
+	fi
+	if [ -x "$HOME/.local/bin/gcovr" ]; then
+		printf '%s' "$HOME/.local/bin/gcovr"
 		return 0
 	fi
 	return 1
@@ -129,7 +142,24 @@ stage_sanitizers() {
 		(cd build/linux-asan && ctest -C Debug --output-on-failure)
 }
 
-order=(configure build format cmakeformat lint shellcheck test matrix sanitizers)
+# gcov line/branch coverage, advisory: builds the instrumented linux-coverage tree, runs the suite to
+# emit the .gcda counters, and reports via gcovr filtered to first-party source. Uses the toolchain's
+# own gcov (a mismatched system gcov cannot read GCC 16 coverage data). Advisory: it measures and
+# prints, it does not gate on a coverage threshold, so only a broken build or a failing test fails it.
+stage_coverage() {
+	local gcovr
+	if ! gcovr="$(find_gcovr)"; then
+		printf 'verify: gcovr not found (pipx install gcovr, or drop it in ~/.local/bin)\n'
+		return 1
+	fi
+	cmake --preset linux-coverage && cmake --build --preset linux-coverage &&
+		(cd build/linux-coverage && ctest -C Debug --output-on-failure) &&
+		"$gcovr" --root "$root" --gcov-executable "$HOME/gcc-16/bin/gcov" \
+			--filter 'PlaygroundEngine/src/' --filter 'PlaygroundGame/src/' \
+			--print-summary "$root/build/linux-coverage"
+}
+
+order=(configure build format cmakeformat lint shellcheck test matrix sanitizers coverage)
 
 run_stage() {
 	local name="$1"

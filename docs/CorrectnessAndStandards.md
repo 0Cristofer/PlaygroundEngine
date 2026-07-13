@@ -388,7 +388,7 @@ blocker, and the stage is deferred until the toolchain fixes the `import` intera
 the same throwaway probe. The path-sensitive-bug layer is instead carried by the runtime sanitizers
 (ASan/UBSan, [Section 3](#3-verification-toolkit)), which run the real code and are module-agnostic.
 
-**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix → sanitizers`. Configure always
+**Built so far:** `configure → build → format → cmakeformat → lint → shellcheck → test → matrix → sanitizers → coverage`. Configure always
 runs before build (a source addition to a `CMakeLists.txt` is otherwise silently skipped by an
 incremental `--build`). The **format check** (`clang-format --dry-run -Werror`), **shellcheck**, and
 **build matrix** stages are now wired [built]; the tool-bearing ones detect their tool across
@@ -404,11 +404,16 @@ heaviest stage. Static contracts are `static_assert`s, so they are enforced *wit
 rather than as a separate step, and the snapshot checks currently run *within* the test stage (they are
 doctest cases). The **sanitizers** stage is now wired [built]: ASan + UBSan on the whole program via
 the `linux-asan` preset, running the suite; its parallelism is memory-capped because ASan roughly
-doubles per-TU memory. The gcov, contract-mode-matrix, and benchmark stages are not built (they need
-presets and spikes still in P1); `gcc -fanalyzer` is not a stage at all, ruled out above by the module
-blocker. The current pipeline runs green: build clean, format clean, lint clean, shellcheck clean,
-84/84 tests, matrix (Debug/RelWithDebInfo/Release) clean, and 84/84 again under ASan+UBSan with zero
-sanitizer diagnostics.
+doubles per-TU memory. The **coverage** stage is now wired [built] and **advisory**: the `linux-coverage`
+preset instruments with `--coverage`, the suite runs to emit the counters, and `gcovr` reports a
+summary filtered to first-party source (using the toolchain's own `gcov`; a mismatched system `gcov`
+cannot read GCC 16 data). It measures and prints, it does not gate on a threshold. The
+contract-mode-matrix and benchmark stages are not built (they need presets and spikes still in P1);
+`gcc -fanalyzer` is not a stage at all, ruled out above by the module blocker. The current pipeline
+runs green: build clean, format clean, lint clean, shellcheck clean, 84/84 tests, matrix
+(Debug/RelWithDebInfo/Release) clean, 84/84 again under ASan+UBSan with zero sanitizer diagnostics, and
+a coverage report (currently line 21% of first-party source, honestly low: the reflection-focused suite
+does not exercise the windowing or GameObject-skeleton code).
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`
@@ -538,7 +543,8 @@ effects of the work.
   the coverage manifest, then the manifest as a default-on report. The doc-coverage report. New local
   pipeline stages, all toolchain-only: the `clang-format --dry-run -Werror` drift check [built],
   `shellcheck` on `scripts/*.sh` [built], the Debug/RelWithDebInfo/Release build matrix [built], and the
-  `gersemi` CMake-format check [built]; still open are `gcov` coverage (advisory) and the remaining
+  `gersemi` CMake-format check [built], and the `gcov` coverage stage [built, advisory] (`linux-coverage`
+  preset, `gcovr`-summarized, filtered to first-party source); still open are the remaining
   contract-mode-matrix legs (`observe` / `-fno-exceptions`) once their presets exist. The
   `gcc -fanalyzer` static-analysis stage was spiked and dropped: its analyzer emits nothing for a TU
   that imports a module (Section 7), so it is blind to our code. The enforcement fabric on

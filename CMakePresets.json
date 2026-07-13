@@ -79,6 +79,18 @@
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
       }
+    },
+
+    {
+      "name": "linux-coverage",
+      "displayName": "Linux  ·  Ninja Multi-Config  ·  GCC  ·  --coverage",
+      "description": "Coverage build: gcov instrumentation (--coverage). Advisory; driven by verify.sh's coverage stage and reported via gcovr filtered to first-party source.",
+      "inherits": "linux",
+      "binaryDir": "${sourceDir}/build/linux-coverage",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "--coverage",
+        "CMAKE_EXE_LINKER_FLAGS": "--coverage"
+      }
     }
   ],
 
@@ -136,6 +148,13 @@
       "displayName": "Linux  ·  ASan+UBSan (Debug)",
       "inherits": "build-base",
       "configurePreset": "linux-asan",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-coverage",
+      "displayName": "Linux  ·  Coverage (Debug)",
+      "inherits": "build-base",
+      "configurePreset": "linux-coverage",
       "configuration": "Debug"
     }
   ]
