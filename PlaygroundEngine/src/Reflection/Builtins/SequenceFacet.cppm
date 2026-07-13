@@ -1,7 +1,5 @@
 module;
 
-#include <cassert>
-
 export module PlaygroundEngine.Reflection.Builtins:SequenceFacet;
 
 import PlaygroundEngine.Reflection.Core;
@@ -45,22 +43,22 @@ namespace PgE
 		}
 
 		std::size_t Size(const void* obj) const
+			pre(_size != nullptr)
 		{
-			assert(_size && "SequenceFacet is missing its size read thunk");
 			return _size(obj);
 		}
 
 		TypedRef ElementRef(void* obj, const std::size_t index) const
+			pre(_elementRef != nullptr)
 		{
 			// A read-only view (std::span<const T>) has no mutable element access; a caller that mutates must
 			// gate on CanMutateElements() first, the same as CanAppend gates Append.
-			assert(_elementRef && "SequenceFacet elements are not mutable in place; check CanMutateElements()");
 			return _elementRef(obj, index);
 		}
 
 		TypedRef ElementRef(const void* obj, const std::size_t index) const
+			pre(_constElementRef != nullptr)
 		{
-			assert(_constElementRef && "SequenceFacet is missing its const element-ref thunk");
 			return _constElementRef(obj, index);
 		}
 

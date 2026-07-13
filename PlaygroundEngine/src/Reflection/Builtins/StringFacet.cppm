@@ -1,7 +1,5 @@
 module;
 
-#include <cassert>
-
 export module PlaygroundEngine.Reflection.Builtins:StringFacet;
 
 import PlaygroundEngine.Reflection.Core;
@@ -28,8 +26,8 @@ namespace PgE
 		{}
 
 		std::string_view View(const void* obj) const
+			pre(_view != nullptr)
 		{
-			assert(_view && "StringFacet is missing its view read thunk");
 			return _view(obj);
 		}
 
