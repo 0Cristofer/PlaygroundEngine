@@ -1,0 +1,13 @@
+type Derived
+kind Class
+identity
+  base Base : Public
+  field A : int
+layout
+  base Base @ 0
+  size 8
+  alignment 4
+  trivially_copyable true
+  standard_layout false
+  unique_object_representations true
+  field A @ 4

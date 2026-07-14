@@ -6,6 +6,7 @@ import :FieldInfo;
 import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
+import :BaseInfo;
 import :Facets;
 
 import std;
@@ -71,9 +72,10 @@ namespace PgE
 						   const std::span<const FacetEntry> facets,
 						   const std::span<const FunctionInfo> functions,
 						   const std::span<const FieldInfo> fields,
+						   const std::span<const BaseInfo> bases,
 						   std::string (*stringifyThunk)(const void*))
 			: DeclarationInfo(identifier, displayName, annotations), _traits(traits), _facets(facets), _functions(functions), _fields(fields),
-			  _stringifyThunk(stringifyThunk)
+			  _bases(bases), _stringifyThunk(stringifyThunk)
 		{}
 
 		const TypeTraits& GetTraits() const
@@ -103,7 +105,7 @@ namespace PgE
 			// Linear scan for now, this should be a small array
 			for (const FacetEntry& entry : _facets)
 			{
-				if (&entry.Key.Get() == &TypeOf<Facet>())
+				if (&entry.Type.Get() == &TypeOf<Facet>())
 				{
 					return static_cast<const Facet*>(entry.Data);
 				}
@@ -117,6 +119,11 @@ namespace PgE
 		std::span<const FieldInfo> GetFields() const
 		{
 			return _fields;
+		}
+
+		std::span<const BaseInfo> GetBases() const
+		{
+			return _bases;
 		}
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
@@ -198,6 +205,7 @@ namespace PgE
 		std::span<const FacetEntry> _facets;
 		std::span<const FunctionInfo> _functions;
 		std::span<const FieldInfo> _fields;
+		std::span<const BaseInfo> _bases;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
 	};
 }

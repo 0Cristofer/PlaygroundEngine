@@ -126,6 +126,7 @@ target_sources(
 				src/Reflection/Core/Builders/AnnotationsBuilder.cppm
 				src/Reflection/Core/Builders/FieldsBuilder.cppm
 				src/Reflection/Core/Builders/FunctionsBuilder.cppm
+				src/Reflection/Core/Builders/BasesBuilder.cppm
 				src/Reflection/Core/Builders/TraitsBuilder.cppm
 				src/Reflection/Core/Builders/TypeBuilder.cppm
 				src/Reflection/Core/Builders/FacetsBuilder.cppm
@@ -140,6 +141,7 @@ target_sources(
 				src/Reflection/Builtins/Builtins.cppm
 				src/Reflection/Core/FieldInfo.cppm
 				src/Reflection/Core/FunctionInfo.cppm
+				src/Reflection/Core/BaseInfo.cppm
 				src/Reflection/Reflection.cppm
 				src/Reflection/Contracts.cppm
 				src/Reflection/Core/TypedRef.cppm

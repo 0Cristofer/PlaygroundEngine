@@ -16,7 +16,7 @@ TEST_CASE("the enumeration facet lives in the generic facet table")
 	CHECK(type.GetFacet<PgE::EnumerationFacet>() != nullptr);
 
 	// The entry's key resolves to EnumerationFacet's own TypeInfo, the pointer identity GetFacet matches on.
-	CHECK(&type.GetFacets().front().Key.Get() == &PgE::TypeOf<PgE::EnumerationFacet>());
+	CHECK(&type.GetFacets().front().Type.Get() == &PgE::TypeOf<PgE::EnumerationFacet>());
 
 	// A type with no facet has an empty table, and a facet query on it is null, not a crash.
 	CHECK(PgE::TypeOf<Widget>().GetFacets().empty());

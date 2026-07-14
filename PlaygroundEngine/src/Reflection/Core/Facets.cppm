@@ -8,7 +8,7 @@ namespace PgE
 {
 	export struct FacetEntry
 	{
-		TypeReference Key;
+		TypeReference Type;
 		const void* Data = nullptr;
 	};
 
