@@ -35,6 +35,10 @@ namespace PgE::Snapshot
 		std::format_to(sink, "kind {}\n", ToString(type.GetKind()));
 
 		out += "identity\n";
+		for (const BaseInfo& baseInfo : type.GetBases())
+		{
+			std::format_to(sink, "  base {} : {}\n", detail::Label(baseInfo.GetTypeInfo()), ToString(baseInfo.GetAccess()));
+		}
 		for (const FieldInfo& field : type.GetFields())
 		{
 			std::format_to(sink, "  field {} : {}\n", field.GetIdentifier(), detail::Label(field.GetTypeInfo()));
@@ -45,7 +49,7 @@ namespace PgE::Snapshot
 		}
 		for (const FacetEntry& facet : type.GetFacets())
 		{
-			std::format_to(sink, "  facet {}\n", detail::Label(facet.Key.Get()));
+			std::format_to(sink, "  facet {}\n", detail::Label(facet.Type.Get()));
 		}
 		for (const AnnotationInfo& annotation : type.GetAnnotations())
 		{
@@ -54,6 +58,10 @@ namespace PgE::Snapshot
 
 		const TypeTraits& traits = type.GetTraits();
 		out += "layout\n";
+		for (const BaseInfo& baseInfo : type.GetBases())
+		{
+			std::format_to(sink, "  base {} @ {}\n", detail::Label(baseInfo.GetTypeInfo()), baseInfo.GetOffset());
+		}
 		std::format_to(sink, "  size {}\n", traits.Size);
 		std::format_to(sink, "  alignment {}\n", traits.Alignment);
 		std::format_to(sink, "  trivially_copyable {}\n", detail::Bool(traits.IsTriviallyCopyable));

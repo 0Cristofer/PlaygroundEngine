@@ -422,6 +422,38 @@ export namespace ReflectionTestTypes
 		}
 	};
 
+	// Type-hierarchy fixtures. Distinct single-int bases so subobject offsets are deterministic (0, 4, 8).
+	struct RootA
+	{
+		int A = 1;
+	};
+	struct RootB
+	{
+		int B = 2;
+	};
+	struct RootC
+	{
+		int C = 3;
+	};
+
+	// Multiple inheritance with all three access specifiers; RootB/RootC sit at nonzero offsets.
+	struct MultiDerived : public RootA, protected RootB, private RootC
+	{
+		int Own = 0;
+	};
+
+	// Two public bases, so a test can independently check the reflected offset against a real upcast.
+	struct TwoPublic : public RootA, public RootB
+	{
+		int Own = 0;
+	};
+
+	// A grandchild, to prove reflected bases are direct-only (its only base is MultiDerived, not the roots).
+	struct Grandchild : public MultiDerived
+	{
+		int G = 0;
+	};
+
 	// A struct whose fields are reflected containers: the field walk recurses into each field's facet
 	// rather than the container's structure.
 	struct Inventory

@@ -65,7 +65,7 @@ namespace PgE::detail
 		static constexpr auto Facets = TypeInfoTraits<T>::MakeFacets();
 		static constexpr auto Facet = std::get<Index>(Facets);
 		using FacetType = std::remove_cvref_t<decltype(Facet)>;
-		return FacetEntry{.Key = TypeReferenceTo<^^FacetType>(), .Data = &Facet};
+		return FacetEntry{.Type = TypeReferenceTo<^^FacetType>(), .Data = &Facet};
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

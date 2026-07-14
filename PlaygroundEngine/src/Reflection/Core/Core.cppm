@@ -6,6 +6,7 @@ export import :TypedRef;
 export import :DeclarationInfo;
 export import :FieldInfo;
 export import :FunctionInfo;
+export import :BaseInfo;
 export import :TypeInfo;
 export import :Facets;
 export import :TypeBuilder;

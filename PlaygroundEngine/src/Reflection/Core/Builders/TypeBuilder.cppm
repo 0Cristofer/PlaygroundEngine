@@ -11,6 +11,7 @@ export import :AnnotationsBuilder;
 export import :FacetsBuilder;
 export import :FieldsBuilder;
 export import :FunctionsBuilder;
+export import :BasesBuilder;
 export import :TraitsBuilder;
 import :TypeInfo;
 import :Facets;
@@ -32,6 +33,7 @@ namespace PgE::detail
 
 		static constexpr auto Fields = MakeFieldsFromType<MetaType>();
 		static constexpr auto Functions = MakeFunctionsFromType<MetaType>();
+		static constexpr auto Bases = MakeBasesFromType<MetaType>();
 
 		static constexpr auto Annotations = MakeAnnotations<MetaType>();
 
@@ -44,11 +46,11 @@ namespace PgE::detail
 		// const T*. A type with fields has no thunk and is rendered structurally by ObjectToString instead.
 		if constexpr (Fields.empty() && std::is_object_v<T>)
 		{
-			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, &StringifyValue<T>);
+			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, Bases, &StringifyValue<T>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, nullptr);
+			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, Bases, nullptr);
 		}
 	}
 

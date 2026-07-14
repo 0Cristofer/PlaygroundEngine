@@ -76,6 +76,29 @@ partition.
   directly from the bound prvalue (guaranteed copy elision), so a type with a deleted move constructor
   still binds by copy.
 
+## Type hierarchy
+
+`:BasesBuilder`'s `MakeBasesFromType` collects a type's **direct** base classes into `BaseInfo` entries
+(`bases_of` returns direct bases only, so inherited bases are reached by recursing through a base's own
+`GetBases()`, never flattened in, the same direct-only convention the field walk uses). Each entry carries
+a lazy `TypeReference` to the base, its `AccessKind`, its byte `Offset`, and its annotations. A superseding
+facet suppresses bases for the same reason it suppresses fields.
+
+- **Offset is a chainable constant because virtual inheritance is rejected.** `MakeBase` `static_assert`s
+  on `is_virtual`. A virtual base's derived-to-base distance lives in the vtable and depends on the
+  most-derived type, so a stored constant would be wrong once the type is embedded further down; a
+  non-virtual base subobject sits at a fixed offset that sums along a path, which is what a later
+  `Cast<T>`/`IsA<T>` built on this layer relies on. The rejection fires lazily, when the offending type is
+  actually reflected. If a real virtual case ever appears, the fix is a per-base upcast thunk
+  (`static_cast<Base*>(static_cast<Derived*>(p))`, correct because it reads the runtime vptr), added then.
+- **Downward is not enumerable.** P2996 cannot list derived classes, so the hierarchy is upward-only;
+  object-to-data polymorphism is `Poly<T>`'s capture-at-erasure, not a bases walk.
+- **GCC 16 gap, annotated base specifiers:** `[[=Ann]]` on a base specifier ICEs GCC's module writer
+  (`write_class_def`), so a type that annotates a base **cannot be defined in a `.cppm` module**; it
+  compiles fine in a normal TU. `BaseInfo` carries the annotation span and the builder reads it, but until
+  the compiler is fixed the feature is only exercisable (and tested) for types defined outside module
+  interfaces.
+
 ## Facets
 
 A facet is a semantic view (string, sequence, enumeration) layered on a `TypeInfo`. The mechanism names
