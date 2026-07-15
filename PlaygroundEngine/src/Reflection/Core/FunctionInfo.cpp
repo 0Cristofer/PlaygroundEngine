@@ -7,11 +7,6 @@ import std;
 
 namespace PgE
 {
-	const TypeInfo& ParameterInfo::GetTypeInfo() const
-	{
-		return _typeInfo.Get();
-	}
-
 	const TypeInfo& FunctionInfo::GetReturnType() const
 	{
 		return _returnType.Get();

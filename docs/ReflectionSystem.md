@@ -51,7 +51,7 @@ Types arrive and leave at runtime (DLL load/unload); each binary registers into 
 One `TypeInfo` contract over C++, C#, and visual scripting. Each runtime keeps its own reflection mechanism (`std::meta`, .NET metadata, script asset definitions) and projects into the registry through a **provider**.
 - `TypeInfo` must be constructible at runtime, script types are defined by data, not compiled code.
 - Erased op-tables (construct/get/set/invoke) are per-type and provider-supplied (native thunks, managed runtime, interpreter).
-- `TypeInfo` carries a provenance facet (native/managed/script) through the facet mechanism ([ReflectionFacets.md](ReflectionFacets.md)); byte layout is optional (absent for script types).
+- `TypeInfo` carries a provenance facet (native/managed/script) through the facet mechanism ([ReflectionInternals.md, Facets](ReflectionInternals.md#facets)); byte layout is optional (absent for script types).
 - Generated C# wrappers are derivative of native `TypeInfo` and never re-project; only attributed, authored C# types register.
 - Stable IDs span all provenances.
 
@@ -80,7 +80,7 @@ The operations are everything that can be done to a type or an instance of it:
 - **invoke**: call a reflected function with erased arguments and return value.
 - **stringify** / **serialize**: render or encode an instance.
 
-**Where the ops live.** The table is not a monolith that supersedes `FieldInfo` / `FuncInfo`. The member-scoped ops are leaves on the metadata objects that own them: `invoke` on `FuncInfo`, `get` / `set` on `FieldInfo`. Only the type-scoped ops (`construct`, `destroy`, `stringify`) have no member to attach to and hang on `TypeInfo` directly. The op-table proper is the type-level aggregator that dispatches into those leaves. This is why the erased surface can be grown one thunk at a time before any unified table exists: `TypeInfo`'s stringify thunk and `FuncInfo`'s invoke thunk are already op-table entries under this model. Facet thunks (`StringFacet`, `SequenceFacet`, see [ReflectionFacets.md](ReflectionFacets.md)) are op-table leaves in the same sense: type-scoped, erased, `TypedRef`-ABI, and provider-fillable at runtime.
+**Where the ops live.** The table is not a monolith that supersedes `FieldInfo` / `FuncInfo`. The member-scoped ops are leaves on the metadata objects that own them: `invoke` on `FuncInfo`, `get` / `set` on `FieldInfo`. Only the type-scoped ops (`construct`, `destroy`, `stringify`) have no member to attach to and hang on `TypeInfo` directly. The op-table proper is the type-level aggregator that dispatches into those leaves. This is why the erased surface can be grown one thunk at a time before any unified table exists: `TypeInfo`'s stringify thunk and `FuncInfo`'s invoke thunk are already op-table entries under this model. Facet thunks (`StringFacet`, `SequenceFacet`, see [ReflectionInternals.md, Facets](ReflectionInternals.md#facets)) are op-table leaves in the same sense: type-scoped, erased, `TypedRef`-ABI, and provider-fillable at runtime.
 
 **Two dimensions the table must eventually span:**
 - **Providers** (use case 8): native tables are filled by the compile-time builder via `std::meta`, managed types by the .NET runtime, script types by the interpreter. One table shape, three fillers. This is the mechanism that lets a single `TypeInfo` contract cover all three runtimes.
@@ -113,7 +113,7 @@ Overload disambiguation and cross-build function identity are deferred to the st
 |---|---|
 | Stable, name-based type & field identity | Replication, hot reload, polymorphic serialization, asset references, handle save/load remap |
 | Field enumeration: name, type, annotations | All |
-| Template instantiation introspection (containers + vocabulary types), *satisfied by facets ([ReflectionFacets.md](ReflectionFacets.md))* | Serialization, replication, C# binding |
+| Template instantiation introspection (containers + vocabulary types), *satisfied by facets ([ReflectionInternals.md, Facets](ReflectionInternals.md#facets))* | Serialization, replication, C# binding |
 | Byte-level layout (offset, size, alignment) | GPU interop, replication delta encoding, binary cooking, C# direct component access |
 | Function reflection + typed invocation | C# binding, factories |
 | Erased invocation + runtime registry | Editor, visual scripting, hot reload |

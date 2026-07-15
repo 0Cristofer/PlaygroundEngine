@@ -26,7 +26,7 @@ namespace PgE::Snapshot
 				return std::nullopt;
 			}
 
-			std::FILE* file = std::fopen(path.string().c_str(), "rb");
+			std::FILE* file = std::fopen(path.c_str(), "rb");
 			if (file == nullptr)
 			{
 				return std::nullopt;
@@ -42,7 +42,7 @@ namespace PgE::Snapshot
 
 		bool WriteFile(const std::filesystem::path& path, const std::string_view contents)
 		{
-			std::FILE* file = std::fopen(path.string().c_str(), "wb");
+			std::FILE* file = std::fopen(path.c_str(), "wb");
 			if (file == nullptr)
 			{
 				return false;

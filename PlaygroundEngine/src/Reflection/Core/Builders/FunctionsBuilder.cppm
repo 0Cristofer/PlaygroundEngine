@@ -7,8 +7,10 @@ export module PlaygroundEngine.Reflection.Core:FunctionsBuilder;
 import :MetaCommon;
 import :FacetsBuilder;
 import :AnnotationsBuilder;
+import :ArgumentBinding;
 import :TypeInfo;
 import :FunctionInfo;
+import :ParameterInfo;
 import :TypedRef;
 import :DeclarationInfo;
 
@@ -34,98 +36,45 @@ namespace PgE::detail
 		return functions;
 	}
 
-	template <const std::meta::info MetaParameter>
-	consteval ParameterInfo MakeParameter()
+	constexpr InvokeError::Kind ToInvokeError(const ArgumentError error)
 	{
-		return ParameterInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>(), IdentifierOf(MetaParameter),
-							 DisplayStringOf(MetaParameter), MakeAnnotations<MetaParameter>());
-	}
+		// None is not a failure and never reaches here, since CheckInvokeArgument returns on it first. It
+		// cannot be a precondition: GCC 16 leaves __tu_has_violation undefined for a contract on an inline
+		// free function in a .cppm. See docs/ReflectionInternals.md (the argument binder).
+		switch (error)
+		{
+		case ArgumentError::NullArgument:
+			return InvokeError::NullArgument;
+		case ArgumentError::ConstViolation:
+			return InvokeError::ConstViolation;
+		case ArgumentError::NotMovable:
+			return InvokeError::NotMovable;
+		case ArgumentError::TypeMismatch:
+		case ArgumentError::None:
+			break;
+		}
 
-	template <std::meta::info MetaFunction, std::size_t... I>
-	consteval auto MakeParameterArray(std::index_sequence<I...>)
-	{
-		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
-		return std::array<ParameterInfo, sizeof...(I)>{MakeParameter<parameters[I]>()...};
-	}
-
-	template <std::meta::info MetaFunction>
-	constexpr std::span<const ParameterInfo> MakeParameters()
-	{
-		constexpr auto parameterCount = std::meta::parameters_of(MetaFunction).size();
-		static constexpr auto Parameters = MakeParameterArray<MetaFunction>(std::make_index_sequence<parameterCount>{});
-		return Parameters;
+		return InvokeError::TypeMismatch;
 	}
 
 	template <std::meta::info MetaParameter>
-	struct ArgumentBinding
+	void CheckInvokeArgument(const TypedRef& arg, const std::size_t index, bool& valid, InvokeError& error)
 	{
-		using Parameter = [:std::meta::type_of(MetaParameter):];
-		using Value = std::remove_reference_t<Parameter>;
-
-		static constexpr bool NeedsMutable =
-			(std::is_lvalue_reference_v<Parameter> && !std::is_const_v<Value>) || std::is_rvalue_reference_v<Parameter> ||
-			(!std::is_reference_v<Parameter> && std::is_move_constructible_v<Value> && !std::is_copy_constructible_v<Value>);
-
-		static const TypeInfo* ExpectedTag()
-		{
-			return &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>();
-		}
-
-		static decltype(auto) Bind(const TypedRef& arg)
-		{
-			// The parameter's own type drives the call: references bind to the caller's object,
-			// rvalue-ref and move-only value parameters move out of it, copyable value parameters copy.
-			Value* pointer = static_cast<Value*>(arg.Data);
-
-			if constexpr (std::is_rvalue_reference_v<Parameter>)
-			{
-				return std::move(*pointer);
-			}
-			else if constexpr (std::is_lvalue_reference_v<Parameter>)
-			{
-				return *pointer;
-			}
-			else if constexpr (std::is_move_constructible_v<Value> && !std::is_copy_constructible_v<Value>)
-			{
-				return std::move(*pointer);
-			}
-			else
-			{
-				// Copyable by-value parameter: copy by default, move only if the caller opted in, the
-				// source is mutable, and the type actually has a usable move constructor. Both branches
-				// yield a prvalue so decltype(auto) stays consistent.
-				if constexpr (std::is_move_constructible_v<Value>)
-				{
-					if (arg.Movable && !arg.IsConst)
-					{
-						return Value(std::move(*pointer));
-					}
-				}
-				return Value(*pointer);
-			}
-		}
-	};
-
-	template <std::meta::info MetaParameter>
-	void CheckArgument(const TypedRef& arg, const std::size_t index, bool& valid, InvokeError& error)
-	{
+		// Map the shared neutral check onto InvokeError. A free function (not a lambda) keeps the spliced
+		// parameter reflection in a constant-evaluated context (GCC -Wtemplate-body).
 		if (!valid)
 		{
 			return;
 		}
 
-		if (arg.Type != ArgumentBinding<MetaParameter>::ExpectedTag())
+		const ArgumentError result = CheckArgument<MetaParameter>(arg);
+		if (result == ArgumentError::None)
 		{
-			valid = false;
-			error = {.Reason = InvokeError::TypeMismatch, .ArgumentIndex = static_cast<std::uint16_t>(index)};
 			return;
 		}
 
-		if (ArgumentBinding<MetaParameter>::NeedsMutable && arg.IsConst)
-		{
-			valid = false;
-			error = {.Reason = InvokeError::ConstViolation, .ArgumentIndex = static_cast<std::uint16_t>(index)};
-		}
+		valid = false;
+		error = {.Reason = ToInvokeError(result), .ArgumentIndex = static_cast<std::uint16_t>(index)};
 	}
 
 	template <typename T, std::meta::info MetaFunction, std::size_t... I>
@@ -167,9 +116,7 @@ namespace PgE::detail
 		bool valid = true;
 		InvokeError error{};
 
-		// CheckArgument is a free function, not a lambda, so the spliced parameter reflections stay in a
-		// constant-evaluated context (GCC -Wtemplate-body).
-		(CheckArgument<parameters[I]>(args[I], I, valid, error), ...);
+		(CheckInvokeArgument<parameters[I]>(args[I], I, valid, error), ...);
 		if (!valid)
 		{
 			return std::unexpected(error);

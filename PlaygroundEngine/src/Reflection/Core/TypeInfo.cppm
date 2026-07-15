@@ -7,6 +7,7 @@ import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
 import :BaseInfo;
+import :ConstructorInfo;
 import :Facets;
 
 import std;
@@ -73,9 +74,11 @@ namespace PgE
 						   const std::span<const FunctionInfo> functions,
 						   const std::span<const FieldInfo> fields,
 						   const std::span<const BaseInfo> bases,
+						   const std::span<const ConstructorInfo> constructors,
+						   void (*destroyThunk)(void*),
 						   std::string (*stringifyThunk)(const void*))
 			: DeclarationInfo(identifier, displayName, annotations), _traits(traits), _facets(facets), _functions(functions), _fields(fields),
-			  _bases(bases), _stringifyThunk(stringifyThunk)
+			  _bases(bases), _constructors(constructors), _destroyThunk(destroyThunk), _stringifyThunk(stringifyThunk)
 		{}
 
 		const TypeTraits& GetTraits() const
@@ -125,6 +128,34 @@ namespace PgE
 		{
 			return _bases;
 		}
+
+		std::span<const ConstructorInfo> GetConstructors() const
+		{
+			return _constructors;
+		}
+
+		const ConstructorInfo* FindConstructor(ConstructorKind kind) const;
+		const ConstructorInfo* FindConstructor(std::span<const TypedRef> args) const;
+
+		std::expected<void, ConstructError> Construct(std::span<const TypedRef> args, const TypedRef& slot) const;
+
+		template <typename T, typename... Arguments>
+		std::expected<T, ConstructError> ConstructAs(Arguments&&... arguments) const
+		{
+			return detail::ValueFromSlot<T, ConstructError>(
+				[this](const std::span<const TypedRef> args, const TypedRef& slot) { return Construct(args, slot); },
+				detail::MakeTypedRefs(std::forward<Arguments>(arguments)...));
+		}
+
+		bool CanDestroy() const
+		{
+			return _destroyThunk;
+		}
+		void Destroy(void* obj) const pre(_destroyThunk != nullptr) pre(obj != nullptr)
+		{
+			_destroyThunk(obj);
+		}
+
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
 		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
 		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
@@ -195,17 +226,21 @@ namespace PgE
 		{
 			return _stringifyThunk;
 		}
-		std::string Stringify(const void* obj) const
+		std::string Stringify(const void* obj) const pre(_stringifyThunk != nullptr) pre(obj != nullptr)
 		{
 			return _stringifyThunk(obj);
 		}
 
 	private:
+		std::expected<const ConstructorInfo*, ConstructError> SelectConstructor(std::span<const TypedRef> args) const;
+
 		TypeTraits _traits;
 		std::span<const FacetEntry> _facets;
 		std::span<const FunctionInfo> _functions;
 		std::span<const FieldInfo> _fields;
 		std::span<const BaseInfo> _bases;
+		std::span<const ConstructorInfo> _constructors;
+		void (*_destroyThunk)(void*) = nullptr;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
 	};
 }

@@ -80,6 +80,11 @@ if(LINUX)
 	get_filename_component(_gccBinDir "${CMAKE_CXX_COMPILER}" DIRECTORY)
 	file(GLOB _stdModuleSource "${_gccBinDir}/../include/c++/*/bits/std.cc")
 	if(_stdModuleSource)
+		# An in-place toolchain upgrade leaves the old version's include tree (e.g. 16.1.1)
+		# beside the new one (17.0.0), so the glob matches both. Natural-sort descending and
+		# take the newest, otherwise a plain GET 0 picks the stale tree and the IDE indexes
+		# std against headers that don't match the active compiler.
+		list(SORT _stdModuleSource COMPARE NATURAL ORDER DESCENDING)
 		list(GET _stdModuleSource 0 _stdModuleSource)
 		get_filename_component(_stdModuleDir "${_stdModuleSource}" DIRECTORY)
 		# EXCLUDE_FROM_ALL: the target only exists so the IDE indexes the std module
@@ -106,6 +111,13 @@ if(LINUX)
 	else()
 		message(STATUS "[PlaygroundEngine] std module source not found; 'import std' may not resolve in IDE")
 	endif()
+
+	# Embed the toolchain's runtime library dir as an rpath so binaries load this GCC's libstdc++,
+	# not the older system one. The system libstdc++ lags the source-built GCC (e.g. it lacks the
+	# GLIBCXX_3.4.36 that GCC 17 emits), so without this the dynamic loader picks the system copy
+	# and load fails with "version GLIBCXX_... not found". add_link_options (not a preset linker
+	# flag) so it survives the asan/coverage presets overriding CMAKE_EXE_LINKER_FLAGS.
+	add_link_options("-Wl,-rpath,${_gccBinDir}/../lib64")
 endif()
 
 # Global options to ensure all compilation (including cmake internal) steps are using the same flags.

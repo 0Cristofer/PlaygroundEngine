@@ -50,6 +50,67 @@ TEST_CASE("invoke reports arity and type mismatches")
 	REQUIRE_FALSE(type.has_value());
 	CHECK(type.error().Reason == PgE::InvokeError::TypeMismatch);
 	CHECK(type.error().ArgumentIndex == 0);
+
+	// Data is the address of the argument object, so a null one names no object at all. Unlike the return
+	// slot, where null is the caller discarding the result, there is nothing an argument could mean by it.
+	const PgE::TypedRef noObject[] = {{.Type = &PgE::TypeOf<int>(), .Data = &width, .IsConst = false},
+									  {.Type = &PgE::TypeOf<int>(), .Data = nullptr, .IsConst = false}};
+	const auto null = resize->Invoke(&widget, noObject);
+	REQUIRE_FALSE(null.has_value());
+	CHECK(null.error().Reason == PgE::InvokeError::NullArgument);
+	CHECK(null.error().ArgumentIndex == 1);
+}
+
+// The counterpart to NullArgument above: for a pointer parameter the argument object is the pointer, so
+// null is an ordinary value reaching the call rather than a missing argument.
+TEST_CASE("a pointer parameter takes a null pointer as a value")
+{
+	PointerSink sink{};
+	const PgE::FunctionInfo* aim = PgE::TypeOf<PointerSink>().FindFunctionsByIdentifier("Aim").front();
+
+	int target = 3;
+	int* address = &target;
+	const PgE::TypedRef pointsAtTarget[] = {{.Type = &PgE::TypeOf<int*>(), .Data = &address, .IsConst = false}};
+	REQUIRE(aim->Invoke(&sink, pointsAtTarget).has_value());
+	CHECK(sink.Received == &target);
+
+	// Data is the address of the pointer, which holds null; the call must land with Received back to null.
+	sink = PointerSink{};
+	int* nothing = nullptr;
+	const PgE::TypedRef pointsAtNothing[] = {{.Type = &PgE::TypeOf<int*>(), .Data = &nothing, .IsConst = false}};
+	REQUIRE(aim->Invoke(&sink, pointsAtNothing).has_value());
+	CHECK(sink.Called);
+	CHECK(sink.Received == nullptr);
+}
+
+// All three pointer parameter forms erase to the same int* tag (remove_cvref collapses them), so the tag
+// cannot be what separates them: int*& is set apart by demanding a mutable argument it can write through.
+TEST_CASE("a reference-to-pointer parameter binds the caller's own pointer")
+{
+	PointerSink sink{};
+	const PgE::FunctionInfo* retarget = PgE::TypeOf<PointerSink>().FindFunctionsByIdentifier("Retarget").front();
+
+	int* address = nullptr;
+	const PgE::TypedRef mutablePointer[] = {{.Type = &PgE::TypeOf<int*>(), .Data = &address, .IsConst = false}};
+	REQUIRE(retarget->Invoke(&sink, mutablePointer).has_value());
+	CHECK(address == &sink.Owned);
+
+	const PgE::TypedRef constPointer[] = {{.Type = &PgE::TypeOf<int*>(), .Data = &address, .IsConst = true}};
+	const auto rejected = retarget->Invoke(&sink, constPointer);
+	REQUIRE_FALSE(rejected.has_value());
+	CHECK(rejected.error().Reason == PgE::InvokeError::ConstViolation);
+}
+
+TEST_CASE("a const-reference-to-pointer parameter takes a null pointer as a value")
+{
+	PointerSink sink{};
+	const PgE::FunctionInfo* peek = PgE::TypeOf<PointerSink>().FindFunctionsByIdentifier("Peek").front();
+
+	int* nothing = nullptr;
+	const PgE::TypedRef pointsAtNothing[] = {{.Type = &PgE::TypeOf<int*>(), .Data = &nothing, .IsConst = true}};
+	REQUIRE(peek->Invoke(&sink, pointsAtNothing).has_value());
+	CHECK(sink.Called);
+	CHECK(sink.Received == nullptr);
 }
 
 TEST_CASE("const object reaches only const-callable functions")
@@ -94,7 +155,7 @@ TEST_CASE("value-return sugar on a void function reports ReturnTypeMismatch")
 	CHECK(widget.Width == 0);
 }
 
-TEST_CASE("const argument to a move-only parameter is rejected")
+TEST_CASE("a move-only parameter takes only an argument the caller hands over")
 {
 	Sink sink{};
 	const PgE::FunctionInfo* consume = PgE::TypeOf<Sink>().FindFunctionsByIdentifier("Consume").front();
@@ -105,10 +166,18 @@ TEST_CASE("const argument to a move-only parameter is rejected")
 	REQUIRE_FALSE(rejected.has_value());
 	CHECK(rejected.error().Reason == PgE::InvokeError::ConstViolation);
 
+	// Consume(MoveOnly) can only move out of its argument, so a mutable but merely borrowed argument is
+	// refused too: being non-const is not the caller offering the object up.
+	MoveOnly borrowedArg;
+	const PgE::TypedRef borrowed[] = {{.Type = &PgE::TypeOf<MoveOnly>(), .Data = &borrowedArg, .IsConst = false, .Movable = false}};
+	const auto refused = consume->Invoke(&sink, borrowed);
+	REQUIRE_FALSE(refused.has_value());
+	CHECK(refused.error().Reason == PgE::InvokeError::NotMovable);
+
 	MoveOnly ownedArg;
 	ownedArg.Tag = 9;
-	const PgE::TypedRef mutableArg[] = {{&PgE::TypeOf<MoveOnly>(), &ownedArg, false}};
-	const auto accepted = consume->Invoke(&sink, mutableArg);
+	const PgE::TypedRef offered[] = {{.Type = &PgE::TypeOf<MoveOnly>(), .Data = &ownedArg, .IsConst = false, .Movable = true}};
+	const auto accepted = consume->Invoke(&sink, offered);
 	REQUIRE(accepted.has_value());
 	CHECK(sink.Value == 9);
 }
