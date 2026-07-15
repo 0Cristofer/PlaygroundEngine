@@ -182,8 +182,8 @@ namespace PgE::detail
 	consteval ConstructorInfo MakeConstructor()
 	{
 		return ConstructorInfo(MakeParameters<MetaConstructor>(), ClassifyConstructor(MetaConstructor), std::meta::is_explicit(MetaConstructor),
-							   DisplayStringOf(MetaConstructor), MakeConstructorThunk<MetaType, MetaConstructor>(),
-							   MakeAnnotations<MetaConstructor>());
+							   DisplayStringOf(MetaConstructor), ScopePathOf<MetaConstructor>(), AccessOf(MetaConstructor),
+							   MakeConstructorThunk<MetaType, MetaConstructor>(), MakeAnnotations<MetaConstructor>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
@@ -226,9 +226,19 @@ namespace PgE::detail
 		// a deleted or inaccessible one, and arrays are excluded because ~T() is ill-formed on them (elements
 		// are destroyed individually). Anything else reflects with no destroy thunk.
 		using T = [:MetaType:];
-		if constexpr (std::is_object_v<T> && std::is_destructible_v<T> && !std::is_array_v<T>)
+
+		// Nested, not one && chain: is_destructible_v requires a complete type, and a variable template is
+		// instantiated even where && would short-circuit its evaluation.
+		if constexpr (std::meta::is_complete_type(MetaType))
 		{
-			return &DestroyThunk<T>;
+			if constexpr (std::is_object_v<T> && std::is_destructible_v<T> && !std::is_array_v<T>)
+			{
+				return &DestroyThunk<T>;
+			}
+			else
+			{
+				return nullptr;
+			}
 		}
 		else
 		{

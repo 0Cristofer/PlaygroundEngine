@@ -79,10 +79,30 @@ namespace PgE::detail
 		}
 	}
 
+	consteval LinkageKind LinkageOf(const std::meta::info type)
+	{
+		if (std::meta::has_external_linkage(type))
+		{
+			return LinkageKind::External;
+		}
+		if (std::meta::has_module_linkage(type))
+		{
+			return LinkageKind::Module;
+		}
+		if (std::meta::has_internal_linkage(type))
+		{
+			return LinkageKind::Internal;
+		}
+		return LinkageKind::None;
+	}
+
 	template <std::meta::info Type>
 	consteval std::size_t SizeOf()
 	{
-		if constexpr (std::meta::is_object_type(Type))
+		// Completeness is the guard, and it covers more than it looks: an incomplete class (an opaque handle
+		// named by a pointer), an unbounded array, and void are all sizeless, and size_of is ill-formed for
+		// each. See docs/ReflectionInternals.md (incomplete types).
+		if constexpr (std::meta::is_object_type(Type) && std::meta::is_complete_type(Type))
 		{
 			return std::meta::size_of(Type);
 		}
@@ -93,9 +113,22 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info Type>
+	consteval std::size_t ExtentOf()
+	{
+		if constexpr (std::meta::is_array_type(Type))
+		{
+			return std::meta::extent(Type);
+		}
+		else
+		{
+			return 0;
+		}
+	}
+
+	template <std::meta::info Type>
 	consteval std::size_t AlignmentOf()
 	{
-		if constexpr (std::meta::is_object_type(Type))
+		if constexpr (std::meta::is_object_type(Type) && std::meta::is_complete_type(Type))
 		{
 			return std::meta::alignment_of(Type);
 		}
@@ -108,24 +141,40 @@ namespace PgE::detail
 	template <std::meta::info Type>
 	consteval TypeTraits MakeTraits()
 	{
-		return TypeTraits{
+		// The facts that hold for any type, complete or not: its category, how it is named and linked, and
+		// the shape it decomposes into.
+		TypeTraits traits{
 			.Kind = KindOf<Type>(),
+			.Linkage = LinkageOf(Type),
 			.Size = SizeOf<Type>(),
 			.Alignment = AlignmentOf<Type>(),
-			.IsTriviallyCopyable = std::meta::is_trivially_copyable_type(Type),
-			.IsTriviallyDefaultConstructible = std::meta::is_trivially_default_constructible_type(Type),
-			.IsTriviallyDestructible = std::meta::is_trivially_destructible_type(Type),
-			.IsStandardLayout = std::meta::is_standard_layout_type(Type),
-			.HasUniqueObjectRepresentations = std::meta::has_unique_object_representations(Type),
-			.IsDefaultConstructible = std::meta::is_default_constructible_type(Type),
-			.IsAggregate = std::meta::is_aggregate_type(Type),
-			.IsPolymorphic = std::meta::is_polymorphic_type(Type),
-			.IsAbstract = std::meta::is_abstract_type(Type),
-			.HasVirtualDestructor = std::meta::has_virtual_destructor(Type),
-			.IsEmpty = std::meta::is_empty_type(Type),
 			.IsTemplateInstance = std::meta::has_template_arguments(Type),
-			.IsSigned = std::meta::is_signed_type(Type),
-			.IsScopedEnum = std::meta::is_scoped_enum_type(Type),
+			.IsConst = std::meta::is_const_type(Type),
+			.IsVolatile = std::meta::is_volatile_type(Type),
+			.Extent = ExtentOf<Type>(),
 		};
+
+		// Every predicate below has a complete-type precondition, and an incomplete type genuinely has no
+		// answer for them: its definition is what decides them. They stay at their defaults, which is what an
+		// opaque handle reflects as. See docs/ReflectionInternals.md (incomplete types).
+		if constexpr (std::meta::is_complete_type(Type))
+		{
+			traits.IsTriviallyCopyable = std::meta::is_trivially_copyable_type(Type);
+			traits.IsTriviallyDefaultConstructible = std::meta::is_trivially_default_constructible_type(Type);
+			traits.IsTriviallyDestructible = std::meta::is_trivially_destructible_type(Type);
+			traits.IsStandardLayout = std::meta::is_standard_layout_type(Type);
+			traits.HasUniqueObjectRepresentations = std::meta::has_unique_object_representations(Type);
+			traits.IsDefaultConstructible = std::meta::is_default_constructible_type(Type);
+			traits.IsAggregate = std::meta::is_aggregate_type(Type);
+			traits.IsPolymorphic = std::meta::is_polymorphic_type(Type);
+			traits.IsAbstract = std::meta::is_abstract_type(Type);
+			traits.HasVirtualDestructor = std::meta::has_virtual_destructor(Type);
+			traits.IsEmpty = std::meta::is_empty_type(Type);
+			traits.IsFinal = std::meta::is_final(Type);
+			traits.IsSigned = std::meta::is_signed_type(Type);
+			traits.IsScopedEnum = std::meta::is_scoped_enum_type(Type);
+		}
+
+		return traits;
 	}
 }

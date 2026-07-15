@@ -32,7 +32,7 @@ namespace PgE::detail
 	template <std::meta::info Enumerator>
 	consteval EnumeratorInfo MakeEnumerator()
 	{
-		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator), EnumeratorValueOf<Enumerator>::Value,
+		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator), ScopePathOf<Enumerator>(), EnumeratorValueOf<Enumerator>::Value,
 							  MakeAnnotations<Enumerator>());
 	}
 

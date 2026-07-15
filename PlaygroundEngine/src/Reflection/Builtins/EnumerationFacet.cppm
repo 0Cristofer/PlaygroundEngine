@@ -15,9 +15,10 @@ namespace PgE
 	public:
 		constexpr EnumeratorInfo(const std::string_view identifier,
 								 const std::string_view displayName,
+								 const std::span<const std::string_view> scopePath,
 								 const std::uint64_t value,
 								 const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo(identifier, displayName, annotations), _value(value)
+			: DeclarationInfo(identifier, displayName, scopePath, annotations), _value(value)
 		{}
 
 		std::uint64_t GetValue() const

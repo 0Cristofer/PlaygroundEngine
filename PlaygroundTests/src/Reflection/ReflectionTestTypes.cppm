@@ -559,12 +559,220 @@ export namespace ReflectionTestTypes
 		int Value = 1;
 	};
 
+	// Extraction fixtures.
+
+	// A nested namespace, so the scope walk has more than one link to report.
+	namespace Deep
+	{
+		struct Buried
+		{
+			int Value = 0;
+		};
+	}
+
+	template <typename T>
+	struct Grid
+	{
+		T Value{};
+	};
+
+	// An annotation written on a class template: the language lands it on each instance, which is a type and
+	// therefore annotatable, so the template itself never needs to carry one.
+	template <typename T>
+	struct[[= Doc{"a annotated grid"}]] AnnotatedGrid
+	{
+		T Value{};
+	};
+
+	template <typename T, int N>
+	struct FixedArray
+	{
+		T Data[N];
+	};
+
+	template <template <typename> class C, typename T>
+	struct Holder
+	{
+		C<T> Held;
+	};
+
+	// Non-type parameters that are not plain values: a reference names an object rather than carrying one,
+	// and a pointer's value is the pointer itself.
+	inline int SharedSlot = 5;
+
+	template <int& R>
+	struct BoundToRef
+	{
+		int V = 0;
+	};
+
+	template <int* P>
+	struct BoundToPtr
+	{
+		int V = 0;
+	};
+
+	enum class Mode
+	{
+		Off,
+		On
+	};
+
+	template <Mode M>
+	struct Configured
+	{
+		int V = 0;
+	};
+
+	template <typename T>
+	struct Spec
+	{
+		T V{};
+	};
+
+	template <typename T>
+	struct Spec<T*>
+	{
+		T* V = nullptr;
+	};
+
+	struct DefaultPolicy
+	{};
+
+	// Stream<Inner> materializes two arguments: the defaulted one is indistinguishable from a written one.
+	template <typename T, typename Policy = DefaultPolicy>
+	struct Stream
+	{
+		T V{};
+	};
+
+	template <typename T>
+	using PtrAlias = T*;
+
+	struct FinalType final
+	{
+		int V = 0;
+	};
+
+	// Static data members spanning both halves of the value/address split. MaxSlots is the link trap: an
+	// in-class-initialized static const with no out-of-line definition, whose address cannot be taken.
+	struct Registry
+	{
+		static const int MaxSlots = 8;
+		static constexpr double Scale = 2.5;
+		static inline int Counter = 0;
+		static inline const std::string Label = "registry";
+
+		int Instance = 1;
+	};
+
+	// Every function-level language fact on one type.
+	struct Surface
+	{
+		virtual ~Surface() = default;
+
+		int Plain(int x)
+		{
+			return x;
+		}
+		int Constant() const
+		{
+			return 1;
+		}
+		static int Stat()
+		{
+			return 2;
+		}
+		int Never() const noexcept
+		{
+			return 3;
+		}
+		virtual int Virt()
+		{
+			return 4;
+		}
+		virtual int Pure() const = 0;
+		void Gone() = delete;
+		int OnLvalue() &
+		{
+			return 5;
+		}
+		int OnRvalue() &&
+		{
+			return 6;
+		}
+		int Defaulted(int a, int b = 7)
+		{
+			return a + b;
+		}
+		void Qualified(const std::string& byConstRef, std::string&& byRvalueRef)
+		{
+			(void)byConstRef;
+			(void)byRvalueRef;
+		}
+		const std::string& ByConstRef() const
+		{
+			return _name;
+		}
+
+	protected:
+		int Guarded()
+		{
+			return 8;
+		}
+
+	private:
+		std::string _name;
+	};
+
+	struct SurfaceChild : Surface
+	{
+		int Virt() override
+		{
+			return 9;
+		}
+		int Pure() const override
+		{
+			return 10;
+		}
+	};
+
+	// Field-level language facts: a bitfield with a width, a mutable member, a defaulted member, and the
+	// three access levels.
+	struct Members
+	{
+		unsigned Small : 3 = 5;
+		unsigned Wide : 10 = 300;
+		int Plain;
+		int WithDefault = 42;
+		mutable int Cached = 0;
+
+	protected:
+		int Guarded = 0;
+
+	private:
+		int Hidden = 0;
+	};
+
 	// ReSharper restore CppMemberFunctionMayBeConst
 	// ReSharper restore CppMemberFunctionMayBeStatic
 	// ReSharper restore CppParameterMayBeConst
 	// ReSharper restore CppDeclaratorNeverUsed
 	// ReSharper restore CppPassValueParameterByConstReference
 	// ReSharper restore CppEnumeratorNeverUsed
+}
+
+// Not exported, so it has module linkage rather than external: no cross-translation-unit identity. A
+// non-exported name is not visible to an importer, so an exported alias is what lets a test name it; the
+// alias does not change the linkage of the type it names.
+namespace ReflectionTestTypes
+{
+	struct ModuleLocal
+	{
+		int Value = 0;
+	};
+
+	export using ModuleLocalAlias = ModuleLocal;
 }
 
 // A user extends the facet system from outside the library: specialize TypeInfoTraits and return the

@@ -31,23 +31,74 @@ namespace PgE
 	export using FieldSetter = std::expected<void, FieldError> (*)(void* obj, const TypedRef& in);
 	export using FieldReferencer = TypedRef (*)(void* obj);
 
+	export struct FieldTraits
+	{
+		// The layout and language facts of one non-static data member, grouped so the FieldInfo constructor
+		// stays readable and each fact is named at the call site (the same shape TypeTraits uses on TypeInfo).
+
+		AccessKind Access = AccessKind::Public;
+
+		int ByteOffset = 0;
+		int BitOffset = 0;
+
+		// Width in bits, meaningful only when IsBitField. Without it a bitfield cannot be serialized,
+		// delta-encoded, or layout-matched against a shader.
+		bool IsBitField = false;
+		int BitSize = 0;
+
+		// A defaulted member is what lets a serializer omit an unchanged value from a text asset, which is
+		// what keeps assets small and mergeable.
+		bool HasDefaultInitializer = false;
+
+		bool IsMutable = false;
+	};
+
 	export class FieldInfo : public DeclarationInfo
 	{
 	public:
 		constexpr FieldInfo(const TypeReference typeInfo,
 							const std::string_view identifier,
 							const std::string_view displayName,
-							const int byteOffset,
-							const int bitOffset,
+							const std::span<const std::string_view> scopePath,
+							const FieldTraits& traits,
 							const FieldGetter getter,
 							const FieldSetter setter,
 							const FieldReferencer referencer,
 							const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo), _byteOffset(byteOffset), _bitOffset(bitOffset),
-			  _getter(getter), _setter(setter), _referencer(referencer)
+			: DeclarationInfo(identifier, displayName, scopePath, annotations), _typeInfo(typeInfo), _traits(traits), _getter(getter),
+			  _setter(setter), _referencer(referencer)
 		{}
 
+		const FieldTraits& GetTraits() const
+		{
+			return _traits;
+		}
 		int GetByteOffset() const;
+		int GetBitOffset() const
+		{
+			return _traits.BitOffset;
+		}
+		bool IsBitField() const
+		{
+			return _traits.IsBitField;
+		}
+		int GetBitSize() const
+		{
+			return _traits.BitSize;
+		}
+		AccessKind GetAccess() const
+		{
+			return _traits.Access;
+		}
+		bool HasDefaultInitializer() const
+		{
+			return _traits.HasDefaultInitializer;
+		}
+		bool IsMutable() const
+		{
+			return _traits.IsMutable;
+		}
+
 		const TypeInfo& GetTypeInfo() const;
 
 		std::expected<void, FieldError> GetValue(const void* obj, const TypedRef& out) const;
@@ -122,8 +173,7 @@ namespace PgE
 
 	private:
 		TypeReference _typeInfo;
-		int _byteOffset;
-		int _bitOffset;
+		FieldTraits _traits;
 		FieldGetter _getter = nullptr;
 		FieldSetter _setter = nullptr;
 		FieldReferencer _referencer = nullptr;

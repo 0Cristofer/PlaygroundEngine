@@ -2,7 +2,21 @@
 
 What the reflection system pulls out of `std::meta`, where it is stored, and by what mechanism. Scope: the metadata surface only. It says nothing about identifiers, wire formats, or migration; those belong to the consumers (see the reasoning in [ReflectionSystem.md](ReflectionSystem.md)).
 
-**Status:** gap analysis done, empirically validated against GCC 16.1.1. Not implemented.
+**Status:** implemented. Every fact below was re-validated against **GCC 17.0.0** (2026-07-14) after the
+compiler upgrade, and all of them still hold; the Part 3 table is unchanged. The implementation knowledge (the
+guards, the cv-node rule, the value/address split) lives in [ReflectionInternals.md](ReflectionInternals.md);
+this document keeps the reasoning about *what* to capture and *why*.
+
+Two things the analysis did not foresee, both recorded where they bite in
+[ReflectionInternals.md](ReflectionInternals.md):
+
+- **`parent_of` throws** for an entity with no parent (a fundamental type, `void`, a pointer), so the scope
+  walk is guarded by `has_parent`. Likewise `template_of` throws for a non-instance.
+- **A cv-qualified class still reports `is_class_type == true` and enumerates its members**, so a `const Foo`
+  node had to be excluded from the member walk explicitly, or it would duplicate `Foo`'s whole structure under
+  a second identity. Reaching `const Foo` at all is new: it arrives through pointer decomposition.
+- **Some member functions have no address**, which forced the invoke path to take one only where access
+  control demands it. See the invocation note in [ReflectionInternals.md](ReflectionInternals.md).
 
 ## Why this document exists
 
@@ -174,16 +188,19 @@ The reference qualifier is worth capturing because it is already load-bearing an
 
 `has_default_argument` is a hard blocker for both the C# generator (which must emit the same optional parameter) and visual scripting (which must let a node omit the pin). It is currently unreachable.
 
-The qualifier question is the deepest change proposed here, so it is stated as a fork rather than a decision. Everywhere the language spells a **qualified** type, the metadata currently stores a **bare** one, and reconstructs a fragment of the difference as binder policy. Two options:
+The qualifier question was the deepest change proposed here. Everywhere the language spells a **qualified** type, the metadata stored a **bare** one and reconstructed a fragment of the difference as binder policy. Two options were considered:
 
 1. **Qualifier flags beside the decayed type.** `ParameterInfo` gains `IsConst` / `IsLvalueReference` / `IsRvalueReference` as language facts, and `BindsByMove` / `RequiresMutable` stay as the binder's derived policy. Small, additive, no identity implications.
 2. **A `QualifiedTypeReference { TypeReference Type; Qualifiers Q; }`** used wherever a qualified type is spelled: parameters, the function return, const data members. Expresses the language properly and in one place, but it is a shape change touching every builder.
 
-Option 1 is the smaller step and does not preclude option 2. The reason not to store the undecayed type as a `TypeReference` directly is that it would require a `TypeInfo` for `const std::string&`, multiplying the type graph with entries that have no members, no size, and no purpose beyond spelling.
+**Option 1 was taken:** it is the smaller step and does not preclude option 2. The same flags carry the function return's qualifiers, which is what makes `InvokeAs<const std::string&>`'s legality a stated fact rather than an undocumented behavior of the thunk. The reason not to store the undecayed type as a `TypeReference` directly is that it would require a `TypeInfo` for `const std::string&`, multiplying the type graph with entries that have no members, no size, and no purpose beyond spelling.
 
-## Part 3: Validated GCC 16 facts
+Note that the compound-type work does add a node for `const std::string` (reached by decomposing `const std::string*`), but that is a different thing: a cv node names a real object type a field can have, and carries no reference qualifier.
 
-Everything above rests on these, each from a throwaway compile rather than from the paper.
+## Part 3: Validated GCC facts
+
+Everything above rests on these, each from a throwaway compile rather than from the paper. Established on GCC
+16.1.1 and re-confirmed unchanged on **GCC 17.0.0**, including the two link-time traps, which stayed traps.
 
 | Fact | Result |
 |---|---|

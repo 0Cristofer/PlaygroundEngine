@@ -126,6 +126,8 @@ target_sources(
 				src/Reflection/Core/Builders/MetaCommon.cppm
 				src/Reflection/Core/Builders/AnnotationsBuilder.cppm
 				src/Reflection/Core/Builders/FieldsBuilder.cppm
+				src/Reflection/Core/Builders/StaticFieldsBuilder.cppm
+				src/Reflection/Core/Builders/TemplateBuilder.cppm
 				src/Reflection/Core/Builders/FunctionsBuilder.cppm
 				src/Reflection/Core/Builders/BasesBuilder.cppm
 				src/Reflection/Core/Builders/ArgumentBinding.cppm
@@ -143,6 +145,8 @@ target_sources(
 				src/Reflection/Builtins/SequenceFacet.cppm
 				src/Reflection/Builtins/Builtins.cppm
 				src/Reflection/Core/FieldInfo.cppm
+				src/Reflection/Core/StaticFieldInfo.cppm
+				src/Reflection/Core/TemplateInfo.cppm
 				src/Reflection/Core/FunctionInfo.cppm
 				src/Reflection/Core/BaseInfo.cppm
 				src/Reflection/Core/ParameterInfo.cppm
@@ -152,6 +156,7 @@ target_sources(
 				src/Reflection/Core/TypedRef.cppm
 				src/Reflection/Core/TypeInfo.cppm
 				src/Reflection/Core/TypeReference.cppm
+				src/Reflection/Core/EntityInfo.cppm
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm

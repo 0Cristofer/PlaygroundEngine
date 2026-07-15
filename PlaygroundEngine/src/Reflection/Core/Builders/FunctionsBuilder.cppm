@@ -85,17 +85,33 @@ namespace PgE::detail
 		// constructor still binds by copy.
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
 
-		// Call through &[:MetaFunction:], not a direct member splice: it lets reflection invoke private member
-		// functions (GCC applies access control to a spliced call but not to a call through a pointer).
-		// See docs/ReflectionInternals.md (function invocation through a pointer).
-		constexpr auto pointer = &[:MetaFunction:];
-		if constexpr (std::meta::is_static_member(MetaFunction))
+		// An address is taken only where access control demands it, because some functions have none: an
+		// always_inline member of an extern-templated class (std::allocator<char>::allocate) is emitted
+		// nowhere. See docs/ReflectionInternals.md (function invocation).
+		if constexpr (std::meta::is_public(MetaFunction))
 		{
-			return pointer(ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			if constexpr (std::meta::is_static_member(MetaFunction))
+			{
+				return [:MetaFunction:](ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			}
+			else
+			{
+				return (static_cast<T*>(obj)->[:MetaFunction:])(ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			}
 		}
 		else
 		{
-			return (static_cast<T*>(obj)->*pointer)(ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			// GCC applies access control to a spliced call but not to a call through a pointer, so the
+			// pointer is what keeps private-member metadata invocable and symmetric with private fields.
+			constexpr auto pointer = &[:MetaFunction:];
+			if constexpr (std::meta::is_static_member(MetaFunction))
+			{
+				return pointer(ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			}
+			else
+			{
+				return (static_cast<T*>(obj)->*pointer)(ArgumentBinding<parameters[I]>::Bind(args[I])...);
+			}
 		}
 	}
 
@@ -181,11 +197,22 @@ namespace PgE::detail
 	template <typename T, std::meta::info MetaFunction, std::size_t... I>
 	consteval bool IsInvocableImpl(std::index_sequence<I...>)
 	{
-		// Mirror DoCall exactly (same pointer call, same ArgumentBinding::Bind per argument). A function the
+		// Mirror DoCall exactly (same call route, same ArgumentBinding::Bind per argument). A function the
 		// thunk cannot call on the erased lvalue (an rvalue-ref-qualified overload) reflects as metadata with
 		// no invoker, the way a bitfield reflects with no borrow, rather than failing the whole type's build.
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaFunction));
-		if constexpr (std::meta::is_static_member(MetaFunction))
+		if constexpr (std::meta::is_public(MetaFunction))
+		{
+			if constexpr (std::meta::is_static_member(MetaFunction))
+			{
+				return requires { [:MetaFunction:](ArgumentBinding<parameters[I]>::Bind(std::declval<const TypedRef&>())...); };
+			}
+			else
+			{
+				return requires(T* obj) { (obj->[:MetaFunction:])(ArgumentBinding<parameters[I]>::Bind(std::declval<const TypedRef&>())...); };
+			}
+		}
+		else if constexpr (std::meta::is_static_member(MetaFunction))
 		{
 			return requires { (&[:MetaFunction:])(ArgumentBinding<parameters[I]>::Bind(std::declval<const TypedRef&>())...); };
 		}
@@ -198,7 +225,16 @@ namespace PgE::detail
 	template <typename T, std::meta::info MetaFunction>
 	consteval bool IsInvocable()
 	{
-		return IsInvocableImpl<T, MetaFunction>(std::make_index_sequence<std::meta::parameters_of(MetaFunction).size()>{});
+		// A deleted function is never invocable, and is excluded by the stated fact rather than by SFINAE:
+		// naming one in the requires-expression is a hard error, not a substitution failure.
+		if constexpr (std::meta::is_deleted(MetaFunction))
+		{
+			return false;
+		}
+		else
+		{
+			return IsInvocableImpl<T, MetaFunction>(std::make_index_sequence<std::meta::parameters_of(MetaFunction).size()>{});
+		}
 	}
 
 	template <typename T, std::meta::info MetaFunction>
@@ -214,15 +250,48 @@ namespace PgE::detail
 		}
 	}
 
+	consteval RefQualifier RefQualifierOf(const std::meta::info function)
+	{
+		if (std::meta::is_lvalue_reference_qualified(function))
+		{
+			return RefQualifier::LValue;
+		}
+		if (std::meta::is_rvalue_reference_qualified(function))
+		{
+			return RefQualifier::RValue;
+		}
+		return RefQualifier::None;
+	}
+
+	template <std::meta::info MetaFunction>
+	consteval FunctionTraits MakeFunctionTraits()
+	{
+		constexpr std::meta::info returnType = std::meta::return_type_of(MetaFunction);
+
+		return FunctionTraits{
+			.Access = AccessOf(MetaFunction),
+			.IsStatic = std::meta::is_static_member(MetaFunction),
+			.IsConst = std::meta::is_const(MetaFunction),
+			.IsNoexcept = std::meta::is_noexcept(MetaFunction),
+			.IsVirtual = std::meta::is_virtual(MetaFunction),
+			.IsPureVirtual = std::meta::is_pure_virtual(MetaFunction),
+			.IsOverride = std::meta::is_override(MetaFunction),
+			.IsDeleted = std::meta::is_deleted(MetaFunction),
+			.RefQual = RefQualifierOf(MetaFunction),
+			.ReturnIsConst = std::meta::is_const_type(std::meta::remove_reference(returnType)),
+			.ReturnIsLvalueReference = std::meta::is_lvalue_reference_type(returnType),
+			.ReturnIsRvalueReference = std::meta::is_rvalue_reference_type(returnType),
+		};
+	}
+
 	template <std::meta::info MetaType, std::meta::info MetaFunction>
 	consteval FunctionInfo MakeFunction()
 	{
 		using T = [:MetaType:];
-		const bool constCallable = std::meta::is_const(MetaFunction) || std::meta::is_static_member(MetaFunction);
 
 		return FunctionInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>(), IdentifierOf(MetaFunction),
-							DisplayStringOf(MetaFunction), MakeParameters<MetaFunction>(), constCallable, MakeInvoker<T, MetaFunction>(),
-							MakeAnnotations<MetaFunction>());
+							DisplayStringOf(MetaFunction), ScopePathOf<MetaFunction>(), MakeParameters<MetaFunction>(),
+							MakeFunctionTraits<MetaFunction>(), MakeInvoker<T, MetaFunction>(), MakeAnnotations<MetaFunction>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

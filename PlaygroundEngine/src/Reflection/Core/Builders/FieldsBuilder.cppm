@@ -141,13 +141,30 @@ namespace PgE::detail
 		}
 	}
 
+	template <const std::meta::info MetaField>
+	consteval FieldTraits MakeFieldTraits()
+	{
+		const auto [bytes, bits] = std::meta::offset_of(MetaField);
+		const bool isBitField = std::meta::is_bit_field(MetaField);
+
+		return FieldTraits{
+			.Access = AccessOf(MetaField),
+			.ByteOffset = static_cast<int>(bytes),
+			.BitOffset = static_cast<int>(bits),
+			.IsBitField = isBitField,
+			// bit_size_of is only defined for a bitfield, so the query is guarded, not merely filtered.
+			.BitSize = isBitField ? static_cast<int>(std::meta::bit_size_of(MetaField)) : 0,
+			.HasDefaultInitializer = std::meta::has_default_member_initializer(MetaField),
+			.IsMutable = std::meta::is_mutable_member(MetaField),
+		};
+	}
+
 	template <std::meta::info MetaType, const std::meta::info MetaField>
 	consteval FieldInfo MakeField()
 	{
-		const auto [bytes, bits] = std::meta::offset_of(MetaField);
 		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), IdentifierOf(MetaField),
-						 DisplayStringOf(MetaField), bytes, bits, MakeFieldGetter<MetaType, MetaField>(), MakeFieldSetter<MetaType, MetaField>(),
-						 MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
+						 DisplayStringOf(MetaField), ScopePathOf<MetaField>(), MakeFieldTraits<MetaField>(), MakeFieldGetter<MetaType, MetaField>(),
+						 MakeFieldSetter<MetaType, MetaField>(), MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

@@ -1,8 +1,8 @@
 type Vector2
 kind Class
 identity
-  field X : int
-  field Y : int
+  field X : int32
+  field Y : int32
 layout
   size 8
   alignment 4

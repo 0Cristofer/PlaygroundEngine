@@ -3,11 +3,13 @@ export module PlaygroundEngine.Reflection.Core:TypeInfo;
 import :TypeInfoTraits;
 
 import :FieldInfo;
+import :StaticFieldInfo;
 import :FunctionInfo;
 import :TypedRef;
 import :DeclarationInfo;
 import :BaseInfo;
 import :ConstructorInfo;
+import :TemplateInfo;
 import :Facets;
 
 import std;
@@ -36,9 +38,22 @@ namespace PgE
 		Other,
 	};
 
+	export enum class LinkageKind : std::uint8_t
+	{
+		None,
+		Internal,
+		Module,
+		External,
+	};
+
 	export struct TypeTraits
 	{
 		TypeKind Kind = TypeKind::Other;
+
+		// What lets a consumer refuse: a module- or internal-linkage type has no cross-translation-unit
+		// identity by construction, so persisting a reference to one is a category error, and only
+		// reflection can report it.
+		LinkageKind Linkage = LinkageKind::None;
 
 		std::size_t Size = 0;
 		std::size_t Alignment = 0;
@@ -56,11 +71,20 @@ namespace PgE
 		bool HasVirtualDestructor = false;
 
 		bool IsEmpty = false;
+		bool IsFinal = false;
 
 		bool IsTemplateInstance = false;
 
 		bool IsSigned = false;
 		bool IsScopedEnum = false;
+
+		// The cv qualifiers of this type itself. A cv-qualified type is a decomposition node: it has no
+		// identifier and no structure of its own, and names its unqualified type through GetInnerType.
+		bool IsConst = false;
+		bool IsVolatile = false;
+
+		// Element count of an array type; 0 for an unbounded array.
+		std::size_t Extent = 0;
 	};
 
 	export class TypeInfo : public DeclarationInfo
@@ -68,17 +92,23 @@ namespace PgE
 	public:
 		constexpr TypeInfo(const std::string_view identifier,
 						   const std::string_view displayName,
+						   const std::span<const std::string_view> scopePath,
 						   const std::span<const AnnotationInfo> annotations,
 						   const TypeTraits& traits,
 						   const std::span<const FacetEntry> facets,
 						   const std::span<const FunctionInfo> functions,
 						   const std::span<const FieldInfo> fields,
+						   const std::span<const StaticFieldInfo> staticFields,
 						   const std::span<const BaseInfo> bases,
 						   const std::span<const ConstructorInfo> constructors,
+						   const TemplateInfo* templateInfo,
+						   const std::span<const TemplateArgumentInfo> templateArguments,
+						   const TypeReference innerType,
 						   void (*destroyThunk)(void*),
 						   std::string (*stringifyThunk)(const void*))
-			: DeclarationInfo(identifier, displayName, annotations), _traits(traits), _facets(facets), _functions(functions), _fields(fields),
-			  _bases(bases), _constructors(constructors), _destroyThunk(destroyThunk), _stringifyThunk(stringifyThunk)
+			: DeclarationInfo(identifier, displayName, scopePath, annotations), _traits(traits), _facets(facets), _functions(functions),
+			  _fields(fields), _staticFields(staticFields), _bases(bases), _constructors(constructors), _template(templateInfo),
+			  _templateArguments(templateArguments), _innerType(innerType), _destroyThunk(destroyThunk), _stringifyThunk(stringifyThunk)
 		{}
 
 		const TypeTraits& GetTraits() const
@@ -124,9 +154,40 @@ namespace PgE
 			return _fields;
 		}
 
+		std::span<const StaticFieldInfo> GetStaticFields() const
+		{
+			return _staticFields;
+		}
+
+		const StaticFieldInfo* FindStaticFieldByIdentifier(std::string_view identifier) const;
+
 		std::span<const BaseInfo> GetBases() const
 		{
 			return _bases;
+		}
+
+		// The primary template this type was instantiated from, null when it is not an instance. A template
+		// is not a type, so it is named, not referenced: Grid<int> yields Grid.
+		const TemplateInfo* GetTemplate() const
+		{
+			return _template;
+		}
+
+		std::span<const TemplateArgumentInfo> GetTemplateArguments() const
+		{
+			return _templateArguments;
+		}
+
+		// The type this compound type is built from: a pointer's pointee, a reference's referent, an array's
+		// element, a cv-qualified type's unqualified type. Null for a type that decomposes no further, which
+		// is where a walk bottoms out on a name. See docs/ReflectionInternals.md (compound types).
+		bool HasInnerType() const
+		{
+			return _innerType.Resolve != nullptr;
+		}
+		const TypeInfo& GetInnerType() const pre(_innerType.Resolve != nullptr)
+		{
+			return _innerType.Get();
 		}
 
 		std::span<const ConstructorInfo> GetConstructors() const
@@ -238,8 +299,12 @@ namespace PgE
 		std::span<const FacetEntry> _facets;
 		std::span<const FunctionInfo> _functions;
 		std::span<const FieldInfo> _fields;
+		std::span<const StaticFieldInfo> _staticFields;
 		std::span<const BaseInfo> _bases;
 		std::span<const ConstructorInfo> _constructors;
+		const TemplateInfo* _template = nullptr;
+		std::span<const TemplateArgumentInfo> _templateArguments;
+		TypeReference _innerType;
 		void (*_destroyThunk)(void*) = nullptr;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
 	};

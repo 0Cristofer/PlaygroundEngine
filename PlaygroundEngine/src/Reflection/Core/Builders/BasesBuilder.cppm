@@ -17,19 +17,6 @@ import std;
 
 namespace PgE::detail
 {
-	consteval AccessKind AccessOf(const std::meta::info base)
-	{
-		if (std::meta::is_public(base))
-		{
-			return AccessKind::Public;
-		}
-		if (std::meta::is_protected(base))
-		{
-			return AccessKind::Protected;
-		}
-		return AccessKind::Private;
-	}
-
 	template <std::meta::info MetaBase>
 	consteval BaseInfo MakeBase()
 	{

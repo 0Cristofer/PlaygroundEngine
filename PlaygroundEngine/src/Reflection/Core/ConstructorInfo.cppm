@@ -53,9 +53,12 @@ namespace PgE
 								  const ConstructorKind kind,
 								  const bool isExplicit,
 								  const std::string_view displayName,
+								  const std::span<const std::string_view> scopePath,
+								  const AccessKind access,
 								  const Constructor construct,
 								  const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo({}, displayName, annotations), _params(params), _kind(kind), _isExplicit(isExplicit), _construct(construct)
+			: DeclarationInfo({}, displayName, scopePath, annotations), _params(params), _kind(kind), _isExplicit(isExplicit), _access(access),
+			  _construct(construct)
 		{}
 
 		std::span<const ParameterInfo> GetParams() const
@@ -69,6 +72,10 @@ namespace PgE
 		bool IsExplicit() const
 		{
 			return _isExplicit;
+		}
+		AccessKind GetAccess() const
+		{
+			return _access;
 		}
 
 		// A constructor whose erased path is unusable (deleted, inaccessible, or unbindable) reflects as
@@ -121,6 +128,7 @@ namespace PgE
 		std::span<const ParameterInfo> _params;
 		ConstructorKind _kind = ConstructorKind::Other;
 		bool _isExplicit = false;
+		AccessKind _access = AccessKind::Public;
 		Constructor _construct = nullptr;
 	};
 }

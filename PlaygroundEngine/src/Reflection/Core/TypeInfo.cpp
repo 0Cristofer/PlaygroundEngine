@@ -1,6 +1,7 @@
 module PlaygroundEngine.Reflection.Core;
 
 import :FieldInfo;
+import :StaticFieldInfo;
 import :FunctionInfo;
 import :ConstructorInfo;
 import :TypedRef;
@@ -139,6 +140,19 @@ namespace PgE
 		}
 
 		return (*selected)->Construct(args, slot);
+	}
+
+	const StaticFieldInfo* TypeInfo::FindStaticFieldByIdentifier(const std::string_view identifier) const
+	{
+		for (const StaticFieldInfo& field : _staticFields)
+		{
+			if (field.GetIdentifier() == identifier)
+			{
+				return &field;
+			}
+		}
+
+		return nullptr;
 	}
 
 	const FieldInfo* TypeInfo::FindFieldByIdentifier(const std::string_view identifier) const
