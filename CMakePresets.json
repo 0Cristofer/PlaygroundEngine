@@ -65,7 +65,8 @@
       "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_C_COMPILER":   "$penv{HOME}/gcc-16/bin/gcc",
-        "CMAKE_CXX_COMPILER": "$penv{HOME}/gcc-16/bin/g++"
+        "CMAKE_CXX_COMPILER": "$penv{HOME}/gcc-16/bin/g++",
+        "CMAKE_BUILD_RPATH":  "$penv{HOME}/gcc-16/lib64"
       }
     },
 
