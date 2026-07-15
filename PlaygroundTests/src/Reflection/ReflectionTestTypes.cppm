@@ -177,6 +177,35 @@ export namespace ReflectionTestTypes
 		int Plain = 7;
 	};
 
+	// Takes a pointer by value, so the argument object is the pointer itself: a null pointer is a value the
+	// binder must pass through, not an argument that names no object.
+	struct PointerSink
+	{
+		int Owned = 42;
+		int* Received = nullptr;
+		bool Called = false;
+
+		void Aim(int* target)
+		{
+			Received = target;
+			Called = true;
+		}
+
+		// Distinct names, not overloads: all three parameter forms erase to the same int* tag, so an
+		// overload set here would rank binder shapes rather than exercise them one at a time.
+		void Retarget(int*& target)
+		{
+			target = &Owned;
+			Called = true;
+		}
+
+		void Peek(int* const& target)
+		{
+			Received = target;
+			Called = true;
+		}
+	};
+
 	// Tracks whether an instance was moved-from, to observe "invoke"'s opt-in move.
 	struct Tracked
 	{
@@ -452,6 +481,60 @@ export namespace ReflectionTestTypes
 	struct Grandchild : public MultiDerived
 	{
 		int G = 0;
+	};
+
+	// Construction fixtures: a value type with default, two-arg, explicit converting, and the implicit
+	// copy/move constructors.
+	struct Point
+	{
+		int X = 0;
+		int Y = 0;
+		Point() = default;
+		Point(int x, int y) : X(x), Y(y)
+		{}
+		explicit Point(int both) : X(both), Y(both)
+		{}
+	};
+
+	// The classic sink pair: a const-ref and an rvalue-ref overload of the same parameter. Both erase to
+	// the same argument tag, and neither is a copy or move constructor of Sinkable itself. Sunk records
+	// which overload ran, since a moved-from string's state is unspecified.
+	struct Sinkable
+	{
+		std::string Value;
+		bool Sunk = false;
+
+		Sinkable() = default;
+		explicit Sinkable(const std::string& value) : Value(value)
+		{}
+		explicit Sinkable(std::string&& value) : Value(std::move(value)), Sunk(true)
+		{}
+	};
+
+	// Two overloads separated only by the mutability of their reference. Both bind by reference and neither
+	// moves, so nothing an erased argument carries ranks one over the other.
+	struct MutabilityOverloads
+	{
+		int Tag = 0;
+
+		MutabilityOverloads() = default;
+		explicit MutabilityOverloads(int& tag) : Tag(tag)
+		{}
+		explicit MutabilityOverloads(const int& tag) : Tag(tag)
+		{}
+	};
+
+	// Observes destruction through a pointer it sets in its destructor (so it is not trivially destructible).
+	struct Destructible
+	{
+		bool* Flag = nullptr;
+		~Destructible()
+		{
+			if (Flag)
+			{
+				*Flag = true;
+			}
+		}
 	};
 
 	// A struct whose fields are reflected containers: the field walk recurses into each field's facet

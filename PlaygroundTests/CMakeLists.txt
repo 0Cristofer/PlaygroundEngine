@@ -60,6 +60,7 @@ target_sources(
 		src/Reflection/ReflectionFunctionTests.cpp
 		src/Reflection/ReflectionFieldTests.cpp
 		src/Reflection/ReflectionTypeGraphTests.cpp
+		src/Reflection/ReflectionConstructionTests.cpp
 		src/Reflection/ReflectionEnumTests.cpp
 		src/Reflection/ReflectionAnnotationTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp

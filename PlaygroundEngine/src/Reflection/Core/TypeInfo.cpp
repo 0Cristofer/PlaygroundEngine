@@ -2,10 +2,49 @@ module PlaygroundEngine.Reflection.Core;
 
 import :FieldInfo;
 import :FunctionInfo;
+import :ConstructorInfo;
 import :TypedRef;
 import :Facets;
 
 import std;
+
+namespace
+{
+	using namespace PgE;
+
+	bool SuitsArgument(const ParameterInfo& param, const TypedRef& arg)
+	{
+		// A const argument is not offered up however the caller tagged it, so moving out of it is never
+		// what was meant. Everything else the caller may take either way, and prefers to be handed over.
+		const bool offersMove = arg.Movable && !arg.IsConst;
+		return param.BindsByMove() == offersMove;
+	}
+
+	bool BindsBetterThan(const ConstructorInfo& left, const ConstructorInfo& right, const std::span<const TypedRef> args)
+		pre(left.GetParams().size() == args.size()) pre(right.GetParams().size() == args.size())
+	{
+		// Overload resolution's rule, over the one axis the erased arguments carry: better in at least one
+		// parameter and worse in none. The preconditions hold because ranking only ever compares candidates
+		// that cleared MatchesArguments, which is also the only place a same-tag pair gets separated.
+		bool betterSomewhere = false;
+		for (std::size_t index = 0; index < args.size(); ++index)
+		{
+			const bool leftSuits = SuitsArgument(left.GetParams()[index], args[index]);
+			const bool rightSuits = SuitsArgument(right.GetParams()[index], args[index]);
+
+			if (leftSuits && !rightSuits)
+			{
+				betterSomewhere = true;
+			}
+			else if (rightSuits && !leftSuits)
+			{
+				return false;
+			}
+		}
+
+		return betterSomewhere;
+	}
+}
 
 namespace PgE
 {
@@ -28,6 +67,78 @@ namespace PgE
 		}
 
 		return matches;
+	}
+
+	const ConstructorInfo* TypeInfo::FindConstructor(const ConstructorKind kind) const
+	{
+		// Default, copy, and move are unique per type, so the first match is the only one; Converting and
+		// Other are not, and a caller that needs a specific one of those selects by arguments instead.
+		for (const ConstructorInfo& constructor : _constructors)
+		{
+			if (constructor.GetKind() == kind)
+			{
+				return &constructor;
+			}
+		}
+
+		return nullptr;
+	}
+
+	std::expected<const ConstructorInfo*, ConstructError> TypeInfo::SelectConstructor(const std::span<const TypedRef> args) const
+	{
+		// A constructor with no thunk (deleted, inaccessible, consteval) is not a candidate: selection must
+		// never resolve to something the erased path cannot call.
+		std::vector<const ConstructorInfo*> candidates;
+		for (const ConstructorInfo& constructor : _constructors)
+		{
+			if (constructor.CanConstruct() && constructor.MatchesArguments(args))
+			{
+				candidates.push_back(&constructor);
+			}
+		}
+
+		if (candidates.empty())
+		{
+			return std::unexpected(ConstructError{.Reason = ConstructError::NoMatchingConstructor, .ArgumentIndex = 0});
+		}
+
+		const ConstructorInfo* best = candidates.front();
+		for (const ConstructorInfo* candidate : candidates)
+		{
+			if (BindsBetterThan(*candidate, *best, args))
+			{
+				best = candidate;
+			}
+		}
+
+		// Being the best of the pairwise sweep is not the same as beating every other candidate, so confirm
+		// it before committing: a tie means the arguments genuinely do not name one constructor.
+		for (const ConstructorInfo* candidate : candidates)
+		{
+			if (candidate != best && !BindsBetterThan(*best, *candidate, args))
+			{
+				return std::unexpected(ConstructError{.Reason = ConstructError::AmbiguousConstructor, .ArgumentIndex = 0});
+			}
+		}
+
+		return best;
+	}
+
+	const ConstructorInfo* TypeInfo::FindConstructor(const std::span<const TypedRef> args) const
+	{
+		const auto selected = SelectConstructor(args);
+		return selected ? *selected : nullptr;
+	}
+
+	std::expected<void, ConstructError> TypeInfo::Construct(const std::span<const TypedRef> args, const TypedRef& slot) const
+	{
+		const auto selected = SelectConstructor(args);
+		if (!selected)
+		{
+			return std::unexpected(selected.error());
+		}
+
+		return (*selected)->Construct(args, slot);
 	}
 
 	const FieldInfo* TypeInfo::FindFieldByIdentifier(const std::string_view identifier) const

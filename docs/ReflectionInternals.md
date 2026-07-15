@@ -72,9 +72,73 @@ partition.
   expression even when the reflection came from `access_context::unchecked()`, but not to forming a
   pointer from the reflection or calling through it. Routing the call through the pointer is what lets
   reflection invoke **private** member functions, keeping private-member metadata symmetric with fields.
-- **Argument binding:** parameters are bound inline at the call so a by-value parameter is initialized
-  directly from the bound prvalue (guaranteed copy elision), so a type with a deleted move constructor
-  still binds by copy.
+## The argument binder
+
+`:ArgumentBinding` is the shared machinery every erased callable uses: parameter metadata, the
+type-driven per-argument binding, and the neutral validation each caller maps to its own error type. It
+exists so `FunctionInfo` and `ConstructorInfo` agree on what an argument means, rather than each deciding.
+
+- **The parameter's own type drives the call.** `ArgumentBinding<P>::Bind` returns an lvalue for a
+  reference parameter, moves for an rvalue-ref or move-only by-value parameter, and copies otherwise.
+  Parameters are bound **inline at the call**, so a by-value parameter is initialized directly from the
+  bound prvalue (guaranteed copy elision) and a type with a deleted move constructor still binds by copy.
+- **`Movable` is the caller's offer, not a hint.** Wherever `Bind` moves out of the argument, the erased
+  caller must have said the object may be moved from; otherwise the call is refused (`NotMovable`) rather
+  than silently gutting the caller's object. `ArgumentBinding` publishes exactly this as `NeedsMovable`,
+  with `NeedsMutable` its superset (mutable lvalue reference, or anything that moves).
+- **A const argument is never an offer.** `Movable && !IsConst` is the whole condition, so tagging a const
+  argument movable does not make it one.
+- **`Data` is the argument object's address**, so a null one names no object and is refused
+  (`NullArgument`); a null *pointer* argument still has an address. This is unlike a function's **return**
+  slot, where null is the caller discarding the result.
+- **Validation is neutral, mapping is per caller.** `CheckArgument` returns an `ArgumentError`, which
+  `ToInvokeError` / `ToConstructError` map onto the caller's own enum. A new failure kind is one enumerator
+  plus one `case` per caller, not another `else if` in two chains.
+- **GCC 16 gap, contracts on inline free functions in module interfaces:** a `pre`/`post` on an **`inline`
+  or `constexpr` free** function defined in a `.cppm` leaves `undefined reference to __tu_has_violation` in
+  every importing TU. A non-inline free function, a function **template**, and an **in-class member** all
+  link (templates and members are emitted downstream too, so "emitted in the importer" is not the trigger);
+  the type model's own preconditions are all members, which is why they are unaffected. `ToInvokeError` /
+  `ToConstructError` are `constexpr`, hence inline, hence hit it, and they are runtime-only callers so the
+  `constexpr` buys nothing: dropping it would restore the contract but leave a landmine where re-adding
+  `constexpr` breaks the build. They state the invariant in a comment instead.
+
+## Lifetime ops
+
+A constructor has no object pointer and its "return" is the mandatory construction into a caller-owned
+slot, so `ConstructorInfo` is a callable distinct from `FunctionInfo`, sharing only the argument binder.
+
+- **The thunk never splices the constructor.** P2996 forbids a constructor in a splice (GCC 16 included),
+  so the thunk casts the erased arguments to the constructor's **own parameter types** and placement-news;
+  overload resolution then selects exactly that constructor. This is why the engine reflects constructors
+  directly rather than routing construction through an annotated static factory.
+- **No thunk means not callable.** A constructor that is deleted, inaccessible, or whose placement-new is
+  otherwise ill-formed reflects as metadata with `CanConstruct() == false`, the way an rvalue-qualified
+  function reflects with no invoker. A `consteval` constructor is detected by the specifier in its display
+  string: GCC 16 exposes no `is_consteval`, and immediateness is invisible to SFINAE.
+- **The slot protocol is stated once.** `detail::ValueFromSlot` runs a slot-taking call, then launders the
+  object out of the stack slot and destroys it there. A function's return and a constructor's object differ
+  only in the call and the error reported, so both `InvokeAs` and `ConstructAs` go through it.
+
+### Selecting a constructor from erased arguments
+
+`TypeInfo::Construct` / `ConstructAs` pick the constructor themselves, so a caller never has to name one.
+This is overload resolution, restricted to what erased arguments can carry:
+
+- **Match is viability, on the tag alone.** The binder admits no conversions, so a candidate matches when
+  the arity agrees and every parameter's decayed type is the argument's tag. A constructor with no thunk is
+  never a candidate: selection must not resolve to something the erased path cannot call.
+- **Rank on the one axis the arguments carry.** `ParameterInfo` publishes `BindsByMove` because its stored
+  type is **decayed**, so `const T&` and `T&&` are one tag and nothing else could separate them. A
+  parameter suits an argument when `BindsByMove == (Movable && !IsConst)`; the better candidate is better
+  in at least one parameter and worse in none, then confirmed against every other (being best of a pairwise
+  sweep is not the same as beating all).
+- **This subsumes copy/move rather than special-casing it.** The same rule resolves a copy/move pair and a
+  `Foo(const std::string&)` / `Foo(std::string&&)` sink pair; `ConstructorKind` is a query, never a
+  selection input.
+- **Genuine ties are reported, not guessed.** Overloads the arguments cannot rank (`int&` against
+  `const int&`: both bind by reference, neither moves) yield `AmbiguousConstructor`, and the caller falls
+  back to `FindConstructor` plus `ConstructorInfo::ConstructAs` to name one.
 
 ## Type hierarchy
 
@@ -153,7 +217,9 @@ focused demo; the reusable knowledge, including the GCC 16 workarounds, is captu
   `[[=Factory{}]]`-annotated static function whose parameters are tagged `[[=Injected{}]]` (caller-provided)
   or `[[=Serialized{}]]` (from data). `InvokeStaticTyped` splices the reflected return type into the
   invoker's own signature (`[:return_type_of(Fn):]`), returning the real type with no `std::any` round
-  trip. This is the pattern the engine uses instead of constructor reflection.
+  trip. The engine no longer needs this to construct (see Lifetime ops: the thunk casts arguments to the
+  constructor's own parameter types, so nothing is spliced), but the annotated-factory pattern still stands
+  for construction that is genuinely a named operation with injected and serialized parameters.
 - **JSON deserialization** (`serialization.h`): `FromJson<T>` matches JSON keys to member names at compile
   time (`if constexpr` per field type, since a splicer cannot appear in a template argument) and writes
   through `obj.[:member:] = value`. No per-type boilerplate.

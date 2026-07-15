@@ -3,6 +3,7 @@ export module PlaygroundEngine.Reflection.Core:FunctionInfo;
 import :TypedRef;
 import :TypeReference;
 import :DeclarationInfo;
+import :ParameterInfo;
 
 import std;
 
@@ -19,7 +20,9 @@ namespace PgE
 		{
 			ArityMismatch,
 			TypeMismatch,
+			NullArgument,
 			ConstViolation,
+			NotMovable,
 			ReturnTypeMismatch,
 			NotInvocable,
 		};
@@ -32,22 +35,6 @@ namespace PgE
 
 	export template <typename Return>
 	using InvokeResult = std::conditional_t<std::is_reference_v<Return>, std::reference_wrapper<std::remove_reference_t<Return>>, Return>;
-
-	export class ParameterInfo : public DeclarationInfo
-	{
-	public:
-		constexpr ParameterInfo(const TypeReference typeInfo,
-								const std::string_view identifier,
-								const std::string_view displayName,
-								const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo(identifier, displayName, annotations), _typeInfo(typeInfo)
-		{}
-
-		const TypeInfo& GetTypeInfo() const;
-
-	private:
-		TypeReference _typeInfo;
-	};
 
 	export class FunctionInfo : public DeclarationInfo
 	{
@@ -73,10 +60,7 @@ namespace PgE
 		template <typename Return = void, typename Object, typename... Arguments>
 		std::expected<InvokeResult<Return>, InvokeError> InvokeAs(Object* obj, Arguments&&... arguments) const
 		{
-			std::array<TypedRef, sizeof...(Arguments)> args{TypedRef{.Type = &TypeOf<std::remove_cvref_t<Arguments>>(),
-																	 .Data = const_cast<void*>(static_cast<const void*>(std::addressof(arguments))),
-																	 .IsConst = std::is_const_v<std::remove_reference_t<Arguments>>,
-																	 .Movable = !std::is_lvalue_reference_v<Arguments>}...};
+			const auto args = detail::MakeTypedRefs(std::forward<Arguments>(arguments)...);
 
 			if constexpr (std::is_void_v<Return>)
 			{
@@ -96,17 +80,8 @@ namespace PgE
 			}
 			else
 			{
-				alignas(Return) std::byte storage[sizeof(Return)];
-				const auto result = Invoke(obj, args, TypedRef{.Type = &TypeOf<std::remove_cvref_t<Return>>(), .Data = storage, .IsConst = false});
-				if (!result)
-				{
-					return std::unexpected(result.error());
-				}
-
-				Return* pointer = std::launder(reinterpret_cast<Return*>(storage));
-				Return value = std::move(*pointer);
-				std::destroy_at(pointer);
-				return value;
+				return detail::ValueFromSlot<Return, InvokeError>(
+					[this, obj](const std::span<const TypedRef> callArgs, const TypedRef& ret) { return Invoke(obj, callArgs, ret); }, args);
 			}
 		}
 
