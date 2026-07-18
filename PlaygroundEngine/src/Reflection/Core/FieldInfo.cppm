@@ -51,6 +51,14 @@ namespace PgE
 		bool HasDefaultInitializer = false;
 
 		bool IsMutable = false;
+
+		// The cv and reference qualifiers the stored decayed TypeReference loses: what tells an owned value
+		// (serialize inline) from a cross-reference (never inline), int& Alias from const int& ConstAlias from
+		// int Target, which share one tag. Same shape as ParameterTraits, same reason.
+		bool IsConst = false;
+		bool IsVolatile = false;
+		bool IsLvalueReference = false;
+		bool IsRvalueReference = false;
 	};
 
 	export class FieldInfo : public DeclarationInfo
@@ -97,6 +105,22 @@ namespace PgE
 		bool IsMutable() const
 		{
 			return _traits.IsMutable;
+		}
+		bool IsConst() const
+		{
+			return _traits.IsConst;
+		}
+		bool IsVolatile() const
+		{
+			return _traits.IsVolatile;
+		}
+		bool IsLvalueReference() const
+		{
+			return _traits.IsLvalueReference;
+		}
+		bool IsRvalueReference() const
+		{
+			return _traits.IsRvalueReference;
 		}
 
 		const TypeInfo& GetTypeInfo() const;

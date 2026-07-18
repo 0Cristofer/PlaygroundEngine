@@ -282,6 +282,42 @@ TEST_CASE("nested struct and pointer fields")
 	CHECK(PgE::ToString(outer).ends_with(", Plain: 7}"));
 }
 
+TEST_CASE("field qualifiers tell an owned value from a reference and a const member")
+{
+	const PgE::TypeInfo& referencing = PgE::TypeOf<Referencing>();
+
+	const PgE::FieldInfo* target = referencing.FindFieldByIdentifier("Target");
+	const PgE::FieldInfo* alias = referencing.FindFieldByIdentifier("Alias");
+	const PgE::FieldInfo* constAlias = referencing.FindFieldByIdentifier("ConstAlias");
+	REQUIRE(target != nullptr);
+	REQUIRE(alias != nullptr);
+	REQUIRE(constAlias != nullptr);
+
+	// All three share one decayed type tag; without the qualifiers a serializer cannot tell the owned
+	// value (serialize inline) from the cross-references (never inline).
+	CHECK(&target->GetTypeInfo() == &alias->GetTypeInfo());
+	CHECK(&alias->GetTypeInfo() == &constAlias->GetTypeInfo());
+
+	CHECK_FALSE(target->IsLvalueReference());
+	CHECK_FALSE(target->IsConst());
+
+	CHECK(alias->IsLvalueReference());
+	CHECK_FALSE(alias->IsRvalueReference());
+	CHECK_FALSE(alias->IsConst());
+
+	CHECK(constAlias->IsLvalueReference());
+	CHECK(constAlias->IsConst());
+
+	const PgE::TypeInfo& fixed = PgE::TypeOf<Fixed>();
+	CHECK(fixed.FindFieldByIdentifier("Constant")->IsConst());
+	CHECK_FALSE(fixed.FindFieldByIdentifier("Variable")->IsConst());
+
+	const PgE::FieldInfo* moved = PgE::TypeOf<RvalueField>().FindFieldByIdentifier("Moved");
+	REQUIRE(moved != nullptr);
+	CHECK(moved->IsRvalueReference());
+	CHECK_FALSE(moved->IsLvalueReference());
+}
+
 TEST_CASE("union members are reflected and accessible")
 {
 	Scalar scalar{};

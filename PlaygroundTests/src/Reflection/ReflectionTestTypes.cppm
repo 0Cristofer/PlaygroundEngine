@@ -18,6 +18,16 @@ export namespace ReflectionTestTypes
 	// ReSharper disable CppEnumeratorNeverUsed
 	// ReSharper disable CppMemberFunctionMayBeStatic
 	// ReSharper disable CppMemberFunctionMayBeConst
+	// Namespace-scope entities, reflected by being named rather than discovered. FreeMaxSlots is the
+	// constant-readable case whose address must never be taken (it has no out-of-line definition).
+	int FreeSpawn(const int count, const float scale)
+	{
+		return static_cast<int>(count * scale);
+	}
+
+	int FreeCounter = 7;
+	constexpr int FreeMaxSlots = 8;
+
 	// Mirrors the shape the game used to probe at startup: a string leaf and an int.
 	struct Person
 	{
@@ -130,6 +140,17 @@ export namespace ReflectionTestTypes
 		const int& ConstAlias;
 
 		Referencing() : Alias(Target), ConstAlias(Target)
+		{}
+	};
+
+	// An rvalue-reference data member: shares the referent's decayed tag like the lvalue aliases, told apart
+	// only by IsRvalueReference. Bound in the constructor, never rebindable.
+	struct RvalueField
+	{
+		int Owned = 1;
+		int&& Moved;
+
+		RvalueField() : Moved(std::move(Owned))
 		{}
 	};
 
@@ -329,6 +350,99 @@ export namespace ReflectionTestTypes
 		int OnAny() const
 		{
 			return Value;
+		}
+	};
+
+	// Deducing-this members: the explicit object parameter is dropped from the reflected parameters, and the
+	// const-ness / ref-qualification are read off it, not the function. All stay invocable through the object.
+	struct Deducing
+	{
+		int Base = 10;
+
+		int Get(this const Deducing& self, int add)
+		{
+			return self.Base + add;
+		}
+		int Bump(this Deducing& self, int add)
+		{
+			return self.Base += add;
+		}
+
+		// By-value object parameter: copies the object, so it is const-callable like a const-ref one.
+		int Copy(this Deducing self, int add)
+		{
+			return self.Base + add;
+		}
+
+	private:
+		int Secret(this const Deducing& self, int factor)
+		{
+			return self.Base * factor;
+		}
+	};
+
+	// Overloaded operators and user-defined conversions: reflected into their own lists (GetOperators /
+	// GetConversions), each still invocable through the shared function machinery. Copy/move assignment are
+	// special members, so they stay out of the operator list; the converting assignment operator=(int) stays.
+	struct Coord
+	{
+		int Value = 0;
+
+		Coord operator+(const Coord& rhs) const
+		{
+			return Coord{Value + rhs.Value};
+		}
+		bool operator==(const Coord& rhs) const
+		{
+			return Value == rhs.Value;
+		}
+		int operator[](int index) const
+		{
+			return Value + index;
+		}
+		Coord& operator=(int value)
+		{
+			Value = value;
+			return *this;
+		}
+
+		explicit operator int() const
+		{
+			return Value;
+		}
+		operator bool() const
+		{
+			return Value != 0;
+		}
+
+		// A hidden friend: found only by argument-dependent lookup, and not a class member despite being
+		// declared in the class. It takes both operands as arguments, so it is called with no object.
+		friend Coord operator*(const Coord& lhs, const Coord& rhs)
+		{
+			return Coord{lhs.Value * rhs.Value};
+		}
+
+	private:
+		Coord operator-(const Coord& rhs) const
+		{
+			return Coord{Value - rhs.Value};
+		}
+	};
+
+	// A consteval (immediate) member cannot be called from a runtime thunk, so it reflects with no invoker and
+	// IsConsteval() stated, the way a consteval constructor does. Reflecting a type that has one must not break
+	// the build: without the guard the thunk would call the immediate function at runtime, a hard error.
+	struct Immediate
+	{
+		int Seed = 2;
+
+		consteval int Doubled(int x) const
+		{
+			return Seed * x;
+		}
+		int Runtime(int x) const
+		{
+			return Seed + x;
 		}
 	};
 
@@ -752,6 +866,88 @@ export namespace ReflectionTestTypes
 
 	private:
 		int Hidden = 0;
+	};
+
+	// A volatile-qualified data member (a memory-mapped register), told apart from its unqualified tag only by
+	// IsVolatile, the way const and reference members are.
+	struct VolatileHolder
+	{
+		volatile int Register = 0;
+		int Plain = 0;
+	};
+
+	// A volatile class-typed member: no copy constructor binds a volatile lvalue and no assignment operator
+	// takes one, so it reflects with neither getter nor setter rather than emitting a body that cannot compile.
+	// The scalar case above is readable and writable; only the class-typed one loses both.
+	struct VolatileClassHolder
+	{
+		struct Payload
+		{
+			int A = 0;
+		};
+
+		volatile Payload Item;
+		int Plain = 0;
+	};
+
+	// An anonymous nested struct (the shape of `struct { int a; } field;`) is a type member with no identifier,
+	// so it is excluded from GetNestedTypes: nothing can name it, and its field already reaches it.
+	struct AnonymousNested
+	{
+		struct
+		{
+			int A = 0;
+		} Unnamed;
+
+		struct Named
+		{
+			int B = 0;
+		};
+
+		int Plain = 0;
+	};
+
+	// A defaulted operator==: the language generates memberwise comparison, so IsDefaulted() is true on the
+	// reflected operator, unlike Coord's hand-written one.
+	struct Comparable
+	{
+		int Value = 0;
+		bool operator==(const Comparable&) const = default;
+	};
+
+	// A defaulted destructor on a non-trivial type: IsDefaulted() true, IsTrivial() false (the string member
+	// makes destruction non-trivial).
+	struct DefaultedDestructor
+	{
+		std::string Name;
+		~DefaultedDestructor() = default;
+	};
+
+	// A deleted destructor: reflects with no destroy thunk (CanDestroy() false) and IsDeleted() stated.
+	struct DeletedDestructor
+	{
+		int Value = 0;
+		~DeletedDestructor() = delete;
+	};
+
+	// Nested types and member type-aliases, the reflexive structure GetNestedTypes() reports: Config and Season
+	// are real nested definitions, ValueAlias names a fundamental, and SelfAlias names the enclosing type.
+	struct NestedOwner
+	{
+		struct Config
+		{
+			int Width = 0;
+		};
+		enum class Season
+		{
+			Winter,
+			Summer
+		};
+		using ValueAlias = int;
+		using SelfAlias = NestedOwner;
+
+		Config Current;
+		int Plain = 0;
 	};
 
 	// ReSharper restore CppMemberFunctionMayBeConst

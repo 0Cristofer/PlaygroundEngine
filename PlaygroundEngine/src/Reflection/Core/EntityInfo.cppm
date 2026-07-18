@@ -6,6 +6,10 @@ namespace PgE
 {
 	export enum class AccessKind : std::uint8_t
 	{
+		// A namespace-scope entity has no access at all, which is not the same as being private. Reporting
+		// Private for a free function would make a consumer filtering on Public skip every one of them.
+		None,
+
 		Public,
 		Protected,
 		Private,

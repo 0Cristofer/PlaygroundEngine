@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A cross-platform application engine focused on realtime graphics and simulation. Currently in the **exploration phase**: major concepts are validated in isolation before being unified. See [EngineDesign.md](EngineDesign.md) for the full design document, read it before making architectural decisions.
 
-The five target core systems are: application lifecycle, realtime simulation, asset authoring tool, networking, and native/managed (C++/C#) integration. All are at the concept or early groundwork stage; the current active area is the **C++26 reflection system** (`PlaygroundReflection/`), which is a prerequisite for serialization, networking replication, and the C# binding layer. Its design doc (use cases, requirements) is [docs/ReflectionSystem.md](docs/ReflectionSystem.md).
+The five target core systems are: application lifecycle, realtime simulation, asset authoring tool, networking, and native/managed (C++/C#) integration. All are at the concept or early groundwork stage; the current active area is the **C++26 reflection system** (`PlaygroundEngine/src/Reflection/`, *not* the `PlaygroundReflection/` scratch executable), which is a prerequisite for serialization, networking replication, and the C# binding layer. Its design doc (use cases, requirements) is [docs/ReflectionSystem.md](docs/ReflectionSystem.md).
 
 Key design principles relevant to coding decisions:
 - Where the language provides a mechanism, use it, no macro-based annotation systems, no engine-specific idioms where C++ suffices.
@@ -128,7 +128,7 @@ Use `PlaygroundTests` (doctest + CTest) as the working ground for validating eng
 
 - **PlaygroundEngine**, static library; the engine. Depends on spdlog (header-only, fetched via `FetchContent`).
 - **PlaygroundGame**, executable; links `PlaygroundEngine`. The actual game/demo.
-- **PlaygroundReflection**, standalone executable, unrelated to the engine. A scratch pad for `std::meta` (C++26 reflection: `^^T`, `template for`, `[:member:]` splicers). Build-guarded to GCC 16+.
+- **PlaygroundReflection**, standalone executable, unrelated to the engine. A scratch pad for `std::meta` (C++26 reflection: `^^T`, `template for`, `[:member:]` splicers). Build-guarded to GCC 16+. **This is not the engine reflection system** (that lives in `PlaygroundEngine/src/Reflection/`); it is only an isolated language playground.
 - **PlaygroundTests**, executable; links `PlaygroundEngine`. doctest-based test suite, run via CTest. See [docs/TestingSystem.md](docs/TestingSystem.md).
 
 ## Architecture

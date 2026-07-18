@@ -190,6 +190,20 @@ namespace PgE::detail
 							   MakeAnnotations<MetaField>());
 	}
 
+	export template <std::meta::info MetaVariable>
+	constexpr const StaticFieldInfo& VariableOfMeta()
+	{
+		// A static data member here would not be pointer-identical to the one in TypeOf<T>().GetStaticFields(),
+		// breaking the one-instance-per-entity property consumers compare on.
+		static_assert(!std::meta::is_class_member(MetaVariable),
+					  "VariableOfMeta reflects namespace-scope variables; reach a static member through TypeOf<T>().GetStaticFields()");
+
+		// A namespace-scope variable is a static data member without a class: no offset, no instance, and the
+		// same constant-readable/addressable split, so it reuses StaticFieldInfo whole.
+		static constexpr StaticFieldInfo Variable = MakeStaticField<MetaVariable>();
+		return Variable;
+	}
+
 	template <std::meta::info MetaType, std::size_t... I>
 	consteval auto MakeStaticFieldArray(std::index_sequence<I...>)
 	{

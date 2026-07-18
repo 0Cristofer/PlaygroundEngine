@@ -1,3 +1,7 @@
+module;
+
+#include <meta>
+
 export module PlaygroundEngine.Reflection.Core;
 
 export import :TypeInfoTraits;
@@ -9,9 +13,15 @@ export import :ParameterInfo;
 export import :FieldInfo;
 export import :StaticFieldInfo;
 export import :FunctionInfo;
+export import :OperatorInfo;
+export import :ConversionInfo;
 export import :BaseInfo;
 export import :ConstructorInfo;
+export import :DestructorInfo;
+export import :NestedTypeInfo;
 export import :TemplateInfo;
+export import :FunctionSignatureInfo;
+export import :MemberPointerInfo;
 export import :TypeInfo;
 export import :Facets;
 export import :TypeBuilder;

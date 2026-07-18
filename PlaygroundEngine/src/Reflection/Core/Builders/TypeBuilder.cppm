@@ -13,9 +13,15 @@ export import :FacetsBuilder;
 export import :FieldsBuilder;
 export import :StaticFieldsBuilder;
 export import :FunctionsBuilder;
+export import :OperatorsBuilder;
+export import :ConversionsBuilder;
 export import :BasesBuilder;
 export import :ConstructorsBuilder;
+export import :DestructorBuilder;
+export import :NestedTypesBuilder;
 export import :TemplateBuilder;
+export import :FunctionSignatureBuilder;
+export import :MemberPointerBuilder;
 export import :TraitsBuilder;
 import :TypeInfo;
 import :Facets;
@@ -69,8 +75,12 @@ namespace PgE::detail
 		static constexpr auto Fields = MakeFieldsFromType<MetaType>();
 		static constexpr auto StaticFields = MakeStaticFieldsFromType<MetaType>();
 		static constexpr auto Functions = MakeFunctionsFromType<MetaType>();
+		static constexpr auto Operators = MakeOperatorsFromType<MetaType>();
+		static constexpr auto Conversions = MakeConversionsFromType<MetaType>();
 		static constexpr auto Bases = MakeBasesFromType<MetaType>();
 		static constexpr auto Constructors = MakeConstructorsFromType<MetaType>();
+		static constexpr auto Destructor = MakeDestructor<MetaType>();
+		static constexpr auto NestedTypes = MakeNestedTypesFromType<MetaType>();
 
 		static constexpr auto Annotations = MakeAnnotations<MetaType>();
 
@@ -83,15 +93,15 @@ namespace PgE::detail
 		// handle named by a pointer), neither of which StringifyValue can dereference.
 		if constexpr (Fields.empty() && std::is_object_v<T> && std::meta::is_complete_type(MetaType))
 		{
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Fields, StaticFields, Bases,
-							Constructors, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(),
-							MakeDestroyer<MetaType>(), &StringifyValue<T>);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Operators, Conversions, Fields,
+							StaticFields, Bases, Constructors, Destructor, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), &StringifyValue<T>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Fields, StaticFields, Bases,
-							Constructors, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(),
-							MakeDestroyer<MetaType>(), nullptr);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Operators, Conversions, Fields,
+							StaticFields, Bases, Constructors, Destructor, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), nullptr);
 		}
 	}
 

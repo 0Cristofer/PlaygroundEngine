@@ -22,6 +22,27 @@ namespace PgE::detail
 	template <std::meta::info MetaParameter>
 	struct ArgumentBinding;
 
+	export consteval bool HasExplicitObjectParameter(const std::meta::info callable)
+	{
+		// A deducing-this member: its first parameter is the object, which the invoke path binds from the
+		// object rather than the argument list. The one predicate CallParametersOf and the invoke builders
+		// share, so the reflected arity and the invoke binding cannot disagree on which parameters exist.
+		const std::vector<std::meta::info> parameters = std::meta::parameters_of(callable);
+		return !parameters.empty() && std::meta::is_explicit_object_parameter(parameters.front());
+	}
+
+	export consteval std::vector<std::meta::info> CallParametersOf(const std::meta::info callable)
+	{
+		// The parameters a caller supplies as erased arguments: parameters_of minus a leading explicit object
+		// parameter. A no-op for constructors and ordinary functions, which have no explicit object parameter.
+		std::vector<std::meta::info> parameters = std::meta::parameters_of(callable);
+		if (HasExplicitObjectParameter(callable))
+		{
+			parameters.erase(parameters.begin());
+		}
+		return parameters;
+	}
+
 	template <const std::meta::info MetaParameter>
 	consteval ParameterTraits MakeParameterTraits()
 	{
@@ -51,14 +72,14 @@ namespace PgE::detail
 	template <std::meta::info MetaCallable, std::size_t... I>
 	consteval auto MakeParameterArray(std::index_sequence<I...>)
 	{
-		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaCallable));
+		[[maybe_unused]] constexpr auto parameters = std::define_static_array(CallParametersOf(MetaCallable));
 		return std::array<ParameterInfo, sizeof...(I)>{MakeParameter<parameters[I]>()...};
 	}
 
 	template <std::meta::info MetaCallable>
 	constexpr std::span<const ParameterInfo> MakeParameters()
 	{
-		constexpr auto parameterCount = std::meta::parameters_of(MetaCallable).size();
+		constexpr auto parameterCount = CallParametersOf(MetaCallable).size();
 		static constexpr auto Parameters = MakeParameterArray<MetaCallable>(std::make_index_sequence<parameterCount>{});
 		return Parameters;
 	}

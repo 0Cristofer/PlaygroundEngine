@@ -47,6 +47,16 @@ namespace PgE::detail
 		return std::meta::display_string_of(entity);
 	}
 
+	export consteval bool IsImmediateFunction(const std::meta::info function)
+	{
+		// A consteval (immediate) callable cannot be called from a runtime thunk, and GCC 16's std::meta exposes
+		// no is_consteval; immediateness is also invisible to SFINAE (it is well-formed in every unevaluated
+		// context, so a requires-expression accepts it). The specifier before the signature is the only signal.
+		const std::string_view display = std::meta::display_string_of(function);
+		const std::size_t signature = display.find('(');
+		return display.substr(0, signature).contains("consteval");
+	}
+
 	consteval std::string_view FundamentalIdentifierOf(const std::meta::info type)
 	{
 		// A fundamental type has no identifier, so it is named from structure (kind, size, signedness) rather
@@ -160,7 +170,16 @@ namespace PgE::detail
 		{
 			return AccessKind::Protected;
 		}
-		return AccessKind::Private;
+
+		// Only a class member or a base specifier has access; a private one answers false to both predicates
+		// above. Everything else is namespace-scope, which has no access at all. A base specifier is not a
+		// class member, so both predicates are needed. See docs/ReflectionExtraction.md (access).
+		if (std::meta::is_class_member(entity) || std::meta::is_base(entity))
+		{
+			return AccessKind::Private;
+		}
+
+		return AccessKind::None;
 	}
 
 	consteval std::vector<std::meta::info> GetScopeChain(const std::meta::info entity)

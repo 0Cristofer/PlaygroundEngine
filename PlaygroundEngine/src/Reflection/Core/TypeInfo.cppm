@@ -5,11 +5,17 @@ import :TypeInfoTraits;
 import :FieldInfo;
 import :StaticFieldInfo;
 import :FunctionInfo;
+import :OperatorInfo;
+import :ConversionInfo;
 import :TypedRef;
 import :DeclarationInfo;
 import :BaseInfo;
 import :ConstructorInfo;
+import :DestructorInfo;
+import :NestedTypeInfo;
 import :TemplateInfo;
+import :FunctionSignatureInfo;
+import :MemberPointerInfo;
 import :Facets;
 
 import std;
@@ -97,18 +103,25 @@ namespace PgE
 						   const TypeTraits& traits,
 						   const std::span<const FacetEntry> facets,
 						   const std::span<const FunctionInfo> functions,
+						   const std::span<const OperatorInfo> operators,
+						   const std::span<const ConversionInfo> conversions,
 						   const std::span<const FieldInfo> fields,
 						   const std::span<const StaticFieldInfo> staticFields,
 						   const std::span<const BaseInfo> bases,
 						   const std::span<const ConstructorInfo> constructors,
+						   const DestructorInfo& destructor,
+						   const std::span<const NestedTypeInfo> nestedTypes,
 						   const TemplateInfo* templateInfo,
 						   const std::span<const TemplateArgumentInfo> templateArguments,
 						   const TypeReference innerType,
-						   void (*destroyThunk)(void*),
+						   const FunctionSignatureInfo* signature,
+						   const MemberPointerInfo* memberPointer,
 						   std::string (*stringifyThunk)(const void*))
 			: DeclarationInfo(identifier, displayName, scopePath, annotations), _traits(traits), _facets(facets), _functions(functions),
-			  _fields(fields), _staticFields(staticFields), _bases(bases), _constructors(constructors), _template(templateInfo),
-			  _templateArguments(templateArguments), _innerType(innerType), _destroyThunk(destroyThunk), _stringifyThunk(stringifyThunk)
+			  _operators(operators), _conversions(conversions), _fields(fields), _staticFields(staticFields), _bases(bases),
+			  _constructors(constructors), _destructor(destructor), _nestedTypes(nestedTypes), _template(templateInfo),
+			  _templateArguments(templateArguments), _innerType(innerType), _signature(signature), _memberPointer(memberPointer),
+			  _stringifyThunk(stringifyThunk)
 		{}
 
 		const TypeTraits& GetTraits() const
@@ -149,6 +162,19 @@ namespace PgE
 		std::span<const FunctionInfo> GetFunctions() const;
 		std::vector<const FunctionInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
 
+		// Overloaded operators and user-defined conversions, kept out of GetFunctions: an operator is keyed by
+		// its OperatorKind (there may be several overloads of one kind), a conversion by its target type.
+		std::span<const OperatorInfo> GetOperators() const
+		{
+			return _operators;
+		}
+		std::vector<const OperatorInfo*> FindOperators(OperatorKind kind) const;
+
+		std::span<const ConversionInfo> GetConversions() const
+		{
+			return _conversions;
+		}
+
 		std::span<const FieldInfo> GetFields() const
 		{
 			return _fields;
@@ -165,6 +191,14 @@ namespace PgE
 		{
 			return _bases;
 		}
+
+		// The types this type declares inside itself: nested classes, enums, and unions, and member type-aliases.
+		// A member's own name with a reference to the underlying type, so an alias resolves to what it names.
+		std::span<const NestedTypeInfo> GetNestedTypes() const
+		{
+			return _nestedTypes;
+		}
+		const NestedTypeInfo* FindNestedType(std::string_view identifier) const;
 
 		// The primary template this type was instantiated from, null when it is not an instance. A template
 		// is not a type, so it is named, not referenced: Grid<int> yields Grid.
@@ -190,6 +224,20 @@ namespace PgE
 			return _innerType.Get();
 		}
 
+		// The call shape of a function type, null for every other kind. A function type has no inner type:
+		// it decomposes into a return type and a parameter list, which is what this carries.
+		const FunctionSignatureInfo* GetSignature() const
+		{
+			return _signature;
+		}
+
+		// The class and pointee of a pointer-to-member type, null for every other kind. A member function
+		// pointer's pointee is itself a function type, so its signature is reached through GetSignature.
+		const MemberPointerInfo* GetMemberPointer() const
+		{
+			return _memberPointer;
+		}
+
 		std::span<const ConstructorInfo> GetConstructors() const
 		{
 			return _constructors;
@@ -208,13 +256,17 @@ namespace PgE
 				detail::MakeTypedRefs(std::forward<Arguments>(arguments)...));
 		}
 
+		const DestructorInfo& GetDestructor() const
+		{
+			return _destructor;
+		}
 		bool CanDestroy() const
 		{
-			return _destroyThunk;
+			return _destructor.CanDestroy();
 		}
-		void Destroy(void* obj) const pre(_destroyThunk != nullptr) pre(obj != nullptr)
+		void Destroy(void* obj) const pre(_destructor.CanDestroy()) pre(obj != nullptr)
 		{
-			_destroyThunk(obj);
+			_destructor.Destroy(obj);
 		}
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
@@ -298,14 +350,19 @@ namespace PgE
 		TypeTraits _traits;
 		std::span<const FacetEntry> _facets;
 		std::span<const FunctionInfo> _functions;
+		std::span<const OperatorInfo> _operators;
+		std::span<const ConversionInfo> _conversions;
 		std::span<const FieldInfo> _fields;
 		std::span<const StaticFieldInfo> _staticFields;
 		std::span<const BaseInfo> _bases;
 		std::span<const ConstructorInfo> _constructors;
+		DestructorInfo _destructor;
+		std::span<const NestedTypeInfo> _nestedTypes;
 		const TemplateInfo* _template = nullptr;
 		std::span<const TemplateArgumentInfo> _templateArguments;
 		TypeReference _innerType;
-		void (*_destroyThunk)(void*) = nullptr;
+		const FunctionSignatureInfo* _signature = nullptr;
+		const MemberPointerInfo* _memberPointer = nullptr;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
 	};
 }

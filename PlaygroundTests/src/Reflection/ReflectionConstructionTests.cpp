@@ -85,12 +85,30 @@ TEST_CASE("a move-only type reflects a usable move constructor and an unusable c
 	REQUIRE(moved.has_value());
 	CHECK(moved->Tag == 42);
 
-	// The deleted copy constructor, if reflected at all, carries no thunk.
+	// The deleted copy constructor, if reflected at all, carries no thunk and states why: it is deleted and
+	// accessible, so the missing thunk is a deleted one, not an inaccessible or merely unbindable one.
 	const PgE::ConstructorInfo* copyConstructor = moveOnly.FindConstructor(PgE::ConstructorKind::Copy);
 	if (copyConstructor != nullptr)
 	{
 		CHECK_FALSE(copyConstructor->CanConstruct());
+		CHECK(copyConstructor->IsDeleted());
+		CHECK_FALSE(copyConstructor->IsConsteval());
+		CHECK(copyConstructor->GetAccess() == PgE::AccessKind::Public);
 	}
+}
+
+TEST_CASE("a consteval constructor reflects as metadata with no runtime thunk")
+{
+	const PgE::TypeInfo& doc = PgE::TypeOf<Doc>();
+
+	// Doc's converting constructor is consteval, so it cannot be called from a runtime thunk. The null thunk
+	// states its reason: IsConsteval, told apart from a deleted or inaccessible one.
+	const PgE::ConstructorInfo* converting = doc.FindConstructor(PgE::ConstructorKind::Converting);
+	REQUIRE(converting != nullptr);
+	CHECK_FALSE(converting->CanConstruct());
+	CHECK(converting->IsConsteval());
+	CHECK_FALSE(converting->IsDeleted());
+	CHECK(converting->GetAccess() == PgE::AccessKind::Public);
 }
 
 TEST_CASE("a type constructs from arguments without the caller naming a constructor")

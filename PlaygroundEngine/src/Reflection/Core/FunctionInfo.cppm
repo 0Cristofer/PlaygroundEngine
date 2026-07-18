@@ -52,6 +52,11 @@ namespace PgE
 		AccessKind Access = AccessKind::Public;
 
 		bool IsStatic = false;
+
+		// A namespace-scope function, which is not a class member at all. Distinct from IsStatic: a static
+		// member is scoped to its class, and a C# or scripting projection places the two differently.
+		bool IsFreeFunction = false;
+
 		bool IsConst = false;
 		bool IsNoexcept = false;
 
@@ -59,6 +64,19 @@ namespace PgE
 		bool IsPureVirtual = false;
 		bool IsOverride = false;
 		bool IsDeleted = false;
+
+		// A compiler-generated special member (a defaulted operator==, the implicit copy assignment). It tells a
+		// C# generator or serializer that the behaviour is the language's default, not hand-written.
+		bool IsDefaulted = false;
+
+		// A consteval (immediate) function reflects with no invoker: it cannot be called from a runtime thunk.
+		// Storing it turns that silent absence into a stated reason, the way IsDeleted does.
+		bool IsConsteval = false;
+
+		// A deducing-this member: its object parameter is dropped from GetParams (so the reflected arity is
+		// the caller's), and IsConst / RefQual are read off that parameter rather than the function. Stated
+		// so a consumer projecting the object as an argument (a C# generator) does not miscount it.
+		bool HasExplicitObjectParameter = false;
 
 		// An rvalue-reference-qualified function reflects with no invoker; storing the qualifier turns that
 		// silent absence into a stated reason.
@@ -97,6 +115,10 @@ namespace PgE
 		{
 			return _traits.IsStatic;
 		}
+		bool IsFreeFunction() const
+		{
+			return _traits.IsFreeFunction;
+		}
 		bool IsConst() const
 		{
 			return _traits.IsConst;
@@ -121,6 +143,18 @@ namespace PgE
 		{
 			return _traits.IsDeleted;
 		}
+		bool IsDefaulted() const
+		{
+			return _traits.IsDefaulted;
+		}
+		bool IsConsteval() const
+		{
+			return _traits.IsConsteval;
+		}
+		bool HasExplicitObjectParameter() const
+		{
+			return _traits.HasExplicitObjectParameter;
+		}
 		RefQualifier GetRefQualifier() const
 		{
 			return _traits.RefQual;
@@ -130,11 +164,11 @@ namespace PgE
 			return _traits.Access;
 		}
 
-		// Callable on a const object: a static ignores the object pointer entirely, so it qualifies without
-		// being const. Derived rather than stored, so the two language facts stay separate.
+		// Callable on a const object: a static and a free function both ignore the object pointer entirely, so
+		// they qualify without being const. Derived rather than stored, so the language facts stay separate.
 		bool IsConstCallable() const
 		{
-			return _traits.IsConst || _traits.IsStatic;
+			return _traits.IsConst || _traits.IsStatic || _traits.IsFreeFunction;
 		}
 
 		std::expected<void, InvokeError> Invoke(void* obj, std::span<const TypedRef> args, const TypedRef& ret = {}) const;

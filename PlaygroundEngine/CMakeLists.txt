@@ -129,9 +129,15 @@ target_sources(
 				src/Reflection/Core/Builders/StaticFieldsBuilder.cppm
 				src/Reflection/Core/Builders/TemplateBuilder.cppm
 				src/Reflection/Core/Builders/FunctionsBuilder.cppm
+				src/Reflection/Core/Builders/OperatorsBuilder.cppm
+				src/Reflection/Core/Builders/ConversionsBuilder.cppm
 				src/Reflection/Core/Builders/BasesBuilder.cppm
 				src/Reflection/Core/Builders/ArgumentBinding.cppm
 				src/Reflection/Core/Builders/ConstructorsBuilder.cppm
+				src/Reflection/Core/Builders/DestructorBuilder.cppm
+				src/Reflection/Core/Builders/NestedTypesBuilder.cppm
+				src/Reflection/Core/Builders/FunctionSignatureBuilder.cppm
+				src/Reflection/Core/Builders/MemberPointerBuilder.cppm
 				src/Reflection/Core/Builders/TraitsBuilder.cppm
 				src/Reflection/Core/Builders/TypeBuilder.cppm
 				src/Reflection/Core/Builders/FacetsBuilder.cppm
@@ -147,10 +153,16 @@ target_sources(
 				src/Reflection/Core/FieldInfo.cppm
 				src/Reflection/Core/StaticFieldInfo.cppm
 				src/Reflection/Core/TemplateInfo.cppm
+				src/Reflection/Core/FunctionSignatureInfo.cppm
+				src/Reflection/Core/MemberPointerInfo.cppm
 				src/Reflection/Core/FunctionInfo.cppm
+				src/Reflection/Core/OperatorInfo.cppm
+				src/Reflection/Core/ConversionInfo.cppm
 				src/Reflection/Core/BaseInfo.cppm
 				src/Reflection/Core/ParameterInfo.cppm
 				src/Reflection/Core/ConstructorInfo.cppm
+				src/Reflection/Core/DestructorInfo.cppm
+				src/Reflection/Core/NestedTypeInfo.cppm
 				src/Reflection/Reflection.cppm
 				src/Reflection/Contracts.cppm
 				src/Reflection/Core/TypedRef.cppm

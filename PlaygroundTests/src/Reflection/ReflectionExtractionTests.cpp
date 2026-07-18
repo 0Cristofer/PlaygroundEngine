@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <meta>
 
 import std;
 import PlaygroundEngine.Reflection;
@@ -324,6 +325,74 @@ TEST_CASE("a compound type decomposes to the type it is built from")
 	CHECK_FALSE(PgE::TypeOf<int>().HasInnerType());
 }
 
+TEST_CASE("a function type carries its call shape, so a callback is not a dead end")
+{
+	// A function type has no inner type: it decomposes into a return type and a parameter list instead.
+	const PgE::TypeInfo& function = PgE::TypeOf<void(int, float)>();
+	CHECK(function.GetKind() == PgE::TypeKind::Function);
+	CHECK_FALSE(function.HasInnerType());
+
+	const PgE::FunctionSignatureInfo* signature = function.GetSignature();
+	REQUIRE(signature != nullptr);
+	CHECK(&signature->GetReturnType() == &PgE::TypeOf<void>());
+	REQUIRE(signature->GetParameters().size() == 2);
+	CHECK(&signature->GetParameters()[0].Get() == &PgE::TypeOf<int>());
+	CHECK(&signature->GetParameters()[1].Get() == &PgE::TypeOf<float>());
+	CHECK_FALSE(signature->IsNoexcept());
+	CHECK_FALSE(signature->IsVariadic());
+
+	// noexcept is part of the type, so it reaches the signature rather than being erased.
+	const PgE::FunctionSignatureInfo* noexceptSignature = PgE::TypeOf<int(double) noexcept>().GetSignature();
+	REQUIRE(noexceptSignature != nullptr);
+	CHECK(noexceptSignature->IsNoexcept());
+
+	CHECK(PgE::TypeOf<int(const char*, ...)>().GetSignature()->IsVariadic());
+
+	// An abominable function type carries cv and ref qualifiers, which are independent of the ellipsis; a
+	// member-pointer pointee is where one is actually reached.
+	CHECK(PgE::TypeOf<int(const char*, ...) const>().GetSignature()->IsVariadic());
+	CHECK(PgE::TypeOf<int(const char*, ...) const & noexcept>().GetSignature()->IsVariadic());
+	CHECK_FALSE(PgE::TypeOf<int(const char*) const>().GetSignature()->IsVariadic());
+
+	// The signature is reached through a pointer, which is how a callback field is actually spelled.
+	const PgE::TypeInfo& functionPointer = PgE::TypeOf<void (*)(int, float)>();
+	CHECK(functionPointer.GetKind() == PgE::TypeKind::Pointer);
+	CHECK(&functionPointer.GetInnerType() == &function);
+
+	CHECK(PgE::TypeOf<Inner>().GetSignature() == nullptr);
+}
+
+TEST_CASE("a member pointer decomposes into its class and its pointee")
+{
+	const PgE::TypeInfo& memberObject = PgE::TypeOf<int Inner::*>();
+	CHECK(memberObject.GetKind() == PgE::TypeKind::MemberObjectPointer);
+
+	const PgE::MemberPointerInfo* objectParts = memberObject.GetMemberPointer();
+	REQUIRE(objectParts != nullptr);
+	CHECK(&objectParts->GetClassType() == &PgE::TypeOf<Inner>());
+	CHECK(&objectParts->GetPointeeType() == &PgE::TypeOf<int>());
+
+	// A member function pointer's pointee is itself a function type, so the two decompositions compose
+	// rather than the member pointer having to restate the signature.
+	const PgE::TypeInfo& memberFunction = PgE::TypeOf<int (Inner::*)(double) const>();
+	CHECK(memberFunction.GetKind() == PgE::TypeKind::MemberFunctionPointer);
+
+	const PgE::MemberPointerInfo* functionParts = memberFunction.GetMemberPointer();
+	REQUIRE(functionParts != nullptr);
+	CHECK(&functionParts->GetClassType() == &PgE::TypeOf<Inner>());
+
+	const PgE::TypeInfo& pointee = functionParts->GetPointeeType();
+	CHECK(pointee.GetKind() == PgE::TypeKind::Function);
+
+	const PgE::FunctionSignatureInfo* signature = pointee.GetSignature();
+	REQUIRE(signature != nullptr);
+	CHECK(&signature->GetReturnType() == &PgE::TypeOf<int>());
+	REQUIRE(signature->GetParameters().size() == 1);
+	CHECK(&signature->GetParameters()[0].Get() == &PgE::TypeOf<double>());
+
+	CHECK(PgE::TypeOf<Inner*>().GetMemberPointer() == nullptr);
+}
+
 TEST_CASE("a cv-qualified type is a decomposition node, not a second copy of the class")
 {
 	const PgE::TypeInfo& constInner = PgE::TypeOf<const Inner>();
@@ -589,4 +658,220 @@ TEST_CASE("a private member function stays invocable, which is why the pointer r
 	const auto result = doubled.InvokeAs<int>(&object);
 	REQUIRE(result.has_value());
 	CHECK(*result == 42);
+}
+
+TEST_CASE("a volatile field is distinguished from its decayed tag")
+{
+	// volatile rounds out the cv pair alongside const: the stored TypeReference is decayed, so only the flag
+	// separates a volatile-qualified member from an unqualified one that shares the same tag.
+	const PgE::TypeInfo& type = PgE::TypeOf<VolatileHolder>();
+
+	const PgE::FieldInfo& reg = FieldNamed(type, "Register");
+	CHECK(reg.IsVolatile());
+	CHECK_FALSE(reg.IsConst());
+
+	const PgE::FieldInfo& plain = FieldNamed(type, "Plain");
+	CHECK_FALSE(plain.IsVolatile());
+
+	// Both decay to the same int tag; the qualifier flag is the only thing telling them apart.
+	CHECK(&reg.GetTypeInfo() == &plain.GetTypeInfo());
+	CHECK(&reg.GetTypeInfo() == &PgE::TypeOf<int>());
+}
+
+TEST_CASE("a defaulted special member is told apart from a user-provided one")
+{
+	// Constructors: Point() = default is compiler-generated; the explicit converting ctor is hand-written.
+	const PgE::TypeInfo& point = PgE::TypeOf<Point>();
+
+	const PgE::ConstructorInfo* defaulted = point.FindConstructor(PgE::ConstructorKind::Default);
+	REQUIRE(defaulted != nullptr);
+	CHECK(defaulted->IsDefaulted());
+
+	const PgE::ConstructorInfo* converting = point.FindConstructor(PgE::ConstructorKind::Converting);
+	REQUIRE(converting != nullptr);
+	CHECK_FALSE(converting->IsDefaulted());
+
+	// Operators: Comparable's operator== is = default; Coord's is hand-written. The flag reaches both through
+	// the shared FunctionTraits, since an OperatorInfo is a FunctionInfo.
+	const auto generated = PgE::TypeOf<Comparable>().FindOperators(PgE::OperatorKind::Equal);
+	REQUIRE(generated.size() == 1);
+	CHECK(generated.front()->IsDefaulted());
+
+	const auto handWritten = PgE::TypeOf<Coord>().FindOperators(PgE::OperatorKind::Equal);
+	REQUIRE(handWritten.size() == 1);
+	CHECK_FALSE(handWritten.front()->IsDefaulted());
+}
+
+TEST_CASE("a type's destructor is reflected with its lifetime-end facts")
+{
+	// A trivial destructor: compiler-generated, trivial, non-virtual, and destroyable.
+	const PgE::DestructorInfo& trivial = PgE::TypeOf<Widget>().GetDestructor();
+	CHECK(trivial.CanDestroy());
+	CHECK(trivial.IsTrivial());
+	CHECK(trivial.IsDefaulted());
+	CHECK_FALSE(trivial.IsVirtual());
+
+	// A user-written destructor: not trivial, not defaulted.
+	const PgE::DestructorInfo& userWritten = PgE::TypeOf<Destructible>().GetDestructor();
+	CHECK(userWritten.CanDestroy());
+	CHECK_FALSE(userWritten.IsTrivial());
+	CHECK_FALSE(userWritten.IsDefaulted());
+
+	// A defaulted destructor on a non-trivial type: defaulted, but not trivial (the string member decides).
+	const PgE::DestructorInfo& defaulted = PgE::TypeOf<DefaultedDestructor>().GetDestructor();
+	CHECK(defaulted.IsDefaulted());
+	CHECK_FALSE(defaulted.IsTrivial());
+
+	// A virtual destructor reports IsVirtual, which the whole-type HasVirtualDestructor also carries.
+	const PgE::DestructorInfo& virtualDtor = PgE::TypeOf<Base>().GetDestructor();
+	CHECK(virtualDtor.IsVirtual());
+	CHECK(virtualDtor.IsDefaulted());
+
+	// A deleted destructor reflects with no destroy thunk, the reason stated rather than a silent absence.
+	const PgE::DestructorInfo& deleted = PgE::TypeOf<DeletedDestructor>().GetDestructor();
+	CHECK(deleted.IsDeleted());
+	CHECK_FALSE(deleted.CanDestroy());
+}
+
+TEST_CASE("the reflected destructor runs the real destructor")
+{
+	// The metadata did not replace the runtime: destroying through the DestructorInfo still ends the object's
+	// lifetime, observed through the flag the destructor sets.
+	bool destroyed = false;
+	alignas(Destructible) std::byte storage[sizeof(Destructible)];
+	Destructible* object = std::construct_at(reinterpret_cast<Destructible*>(storage), Destructible{.Flag = &destroyed});
+
+	PgE::TypeOf<Destructible>().GetDestructor().Destroy(object);
+	CHECK(destroyed);
+}
+
+TEST_CASE("nested types and member aliases are reflected as declared members")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<NestedOwner>();
+	REQUIRE(type.GetNestedTypes().size() == 4);
+
+	// A real nested definition: not an alias, and its reference resolves to the same TypeInfo TypeOf reaches
+	// directly, so a consumer walking nested types lands on the canonical instance.
+	const PgE::NestedTypeInfo* config = type.FindNestedType("Config");
+	REQUIRE(config != nullptr);
+	CHECK_FALSE(config->IsAlias());
+	CHECK(&config->GetTypeInfo() == &PgE::TypeOf<NestedOwner::Config>());
+
+	// A nested enum is a type member too.
+	const PgE::NestedTypeInfo* season = type.FindNestedType("Season");
+	REQUIRE(season != nullptr);
+	CHECK_FALSE(season->IsAlias());
+	CHECK(season->GetTypeInfo().GetKind() == PgE::TypeKind::Enum);
+
+	// A member type-alias keeps its own name but resolves to the underlying type.
+	const PgE::NestedTypeInfo* valueAlias = type.FindNestedType("ValueAlias");
+	REQUIRE(valueAlias != nullptr);
+	CHECK(valueAlias->IsAlias());
+	CHECK(&valueAlias->GetTypeInfo() == &PgE::TypeOf<int>());
+
+	// A self-alias resolves back to the enclosing type; the lazy reference is what keeps that from recursing
+	// during construction.
+	const PgE::NestedTypeInfo* selfAlias = type.FindNestedType("SelfAlias");
+	REQUIRE(selfAlias != nullptr);
+	CHECK(selfAlias->IsAlias());
+	CHECK(&selfAlias->GetTypeInfo() == &type);
+}
+
+TEST_CASE("a type with no nested types reports none, with no injected class name")
+{
+	// members_of would surface the injected class name if it were not excluded; the empty result is what
+	// confirms a plain is_type filter does not need to guard against it.
+	CHECK(PgE::TypeOf<Widget>().GetNestedTypes().empty());
+}
+
+TEST_CASE("an anonymous nested type is excluded, so no entry is nameless")
+{
+	// `struct { int a; } field;` contributes an unnamed type member. Reflecting it would put a nameless entry
+	// in the list that nothing can name and a lookup by empty identifier would match.
+	const PgE::TypeInfo& type = PgE::TypeOf<AnonymousNested>();
+	REQUIRE(type.GetNestedTypes().size() == 1);
+	CHECK(type.GetNestedTypes().front().GetIdentifier() == "Named");
+	CHECK(type.FindNestedType("") == nullptr);
+
+	// The anonymous type is still reachable the ordinary way, through the field that uses it.
+	const PgE::FieldInfo& unnamed = FieldNamed(type, "Unnamed");
+	CHECK(unnamed.GetTypeInfo().GetIdentifier().empty());
+}
+
+TEST_CASE("a volatile class-typed field reflects with no accessors rather than breaking the build")
+{
+	// The decayed type is copyable and assignable, but the member is not: no copy constructor binds a volatile
+	// lvalue. Guarding on the decayed type emitted thunks whose bodies were ill-formed, failing the whole type.
+	const PgE::TypeInfo& type = PgE::TypeOf<VolatileClassHolder>();
+
+	const PgE::FieldInfo& item = FieldNamed(type, "Item");
+	CHECK(item.IsVolatile());
+
+	VolatileClassHolder holder{};
+	CHECK(item.GetAs<VolatileClassHolder::Payload>(&holder).error().Reason == PgE::FieldError::NotReadable);
+	CHECK(item.SetAs<VolatileClassHolder::Payload>(&holder, {}).error().Reason == PgE::FieldError::NotWritable);
+
+	// The borrow survives, since taking the member's address is unaffected by its volatility.
+	CHECK(item.GetRef(static_cast<void*>(&holder)).has_value());
+
+	// A volatile scalar keeps both accessors: only the class-typed case loses them.
+	const PgE::FieldInfo& scalar = FieldNamed(PgE::TypeOf<VolatileHolder>(), "Register");
+	VolatileHolder scalarHolder{};
+	CHECK(scalar.SetAs<int>(&scalarHolder, 7).has_value());
+	CHECK(*scalar.GetAs<int>(&scalarHolder) == 7);
+}
+
+TEST_CASE("a free function reflects by being named, and reports no access rather than private")
+{
+	const PgE::FunctionInfo& spawn = PgE::detail::FunctionOfMeta<^^FreeSpawn>();
+
+	CHECK(spawn.GetIdentifier() == "FreeSpawn");
+	REQUIRE(spawn.GetScopePath().size() == 1);
+	CHECK(spawn.GetScopePath()[0] == "ReflectionTestTypes");
+
+	// Access is a class-member notion. Reporting Private here would make a consumer that filters on Public
+	// skip every free function, which is the defect AccessKind::None exists to prevent.
+	CHECK(spawn.GetAccess() == PgE::AccessKind::None);
+
+	// A free function is not a static member: it is not scoped to a class, and a projection places the two
+	// differently. Both ignore the object pointer, which is what IsConstCallable reports.
+	CHECK(spawn.IsFreeFunction());
+	CHECK_FALSE(spawn.IsStatic());
+	CHECK(spawn.IsConstCallable());
+
+	REQUIRE(spawn.GetParams().size() == 2);
+	CHECK(&spawn.GetParams()[0].GetTypeInfo() == &PgE::TypeOf<int>());
+	CHECK(&spawn.GetReturnType() == &PgE::TypeOf<int>());
+
+	// The erased call works through the same thunk as a static member, with no object.
+	const auto result = spawn.InvokeAs<int>(static_cast<void*>(nullptr), 4, 2.5F);
+	REQUIRE(result.has_value());
+	CHECK(*result == 10);
+
+	// One instance per function, so a consumer can compare by pointer identity the way it does for types.
+	CHECK(&PgE::detail::FunctionOfMeta<^^FreeSpawn>() == &spawn);
+}
+
+TEST_CASE("a namespace-scope variable reflects as a static field, keeping the constant-readable split")
+{
+	const PgE::StaticFieldInfo& counter = PgE::detail::VariableOfMeta<^^FreeCounter>();
+
+	CHECK(counter.GetIdentifier() == "FreeCounter");
+	CHECK(counter.GetAccess() == PgE::AccessKind::None);
+	CHECK(&counter.GetTypeInfo() == &PgE::TypeOf<int>());
+
+	// An addressable variable is settable, exactly as a static data member is.
+	CHECK_FALSE(counter.IsConstantReadable());
+	REQUIRE(counter.GetAs<int>().has_value());
+	CHECK(counter.SetAs(11).has_value());
+	CHECK(*counter.GetAs<int>() == 11);
+	CHECK(counter.SetAs(7).has_value());
+
+	// A constexpr variable has no out-of-line definition, so its address is never taken: it is captured by
+	// value at consteval and reflects as read-only, which is what keeps it from failing at link time.
+	const PgE::StaticFieldInfo& maxSlots = PgE::detail::VariableOfMeta<^^FreeMaxSlots>();
+	CHECK(maxSlots.IsConstantReadable());
+	CHECK(*maxSlots.GetAs<int>() == 8);
+	CHECK(maxSlots.SetAs(9).error().Reason == PgE::FieldError::NotWritable);
+	CHECK(maxSlots.GetRef().error().Reason == PgE::FieldError::NotAddressable);
 }

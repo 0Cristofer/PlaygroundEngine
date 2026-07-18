@@ -16,9 +16,9 @@ import :DeclarationInfo;
 
 import std;
 
-// Builds the ConstructorInfo list for a type and the type-scoped destroy thunk. A constructor thunk
-// constructs into the caller's slot with placement new, selecting the target constructor by casting the
-// erased arguments to its own parameter types (never splicing the constructor, which P2996 forbids).
+// Builds the ConstructorInfo list for a type. A constructor thunk constructs into the caller's slot with
+// placement new, selecting the target constructor by casting the erased arguments to its own parameter types
+// (never splicing the constructor, which P2996 forbids). The destroy thunk lives in :DestructorBuilder.
 
 namespace PgE::detail
 {
@@ -33,16 +33,6 @@ namespace PgE::detail
 			}
 		}
 		return constructors;
-	}
-
-	consteval bool IsConstevalConstructor(const std::meta::info constructor)
-	{
-		// A consteval (immediate) constructor cannot be called from a runtime thunk, and GCC 16's std::meta
-		// exposes no is_consteval; immediateness is also invisible to SFINAE (it is well-formed in every
-		// unevaluated context). The specifier in the display string, before the signature, is the only signal.
-		const std::string_view display = std::meta::display_string_of(constructor);
-		const std::size_t signature = display.find('(');
-		return display.substr(0, signature).contains("consteval");
 	}
 
 	consteval ConstructorKind ClassifyConstructor(const std::meta::info constructor)
@@ -167,8 +157,8 @@ namespace PgE::detail
 	template <std::meta::info MetaType, std::meta::info MetaConstructor>
 	consteval Constructor MakeConstructorThunk()
 	{
-		if constexpr (!IsConstevalConstructor(MetaConstructor) && IsErasedConstructibleImpl<MetaType, MetaConstructor>(
-																	  std::make_index_sequence<std::meta::parameters_of(MetaConstructor).size()>{}))
+		if constexpr (!IsImmediateFunction(MetaConstructor) && IsErasedConstructibleImpl<MetaType, MetaConstructor>(
+																   std::make_index_sequence<std::meta::parameters_of(MetaConstructor).size()>{}))
 		{
 			return &ConstructThunk<MetaType, MetaConstructor>;
 		}
@@ -178,12 +168,24 @@ namespace PgE::detail
 		}
 	}
 
+	consteval ConstructorTraits MakeConstructorTraits(const std::meta::info constructor)
+	{
+		return ConstructorTraits{
+			.Access = AccessOf(constructor),
+			.Kind = ClassifyConstructor(constructor),
+			.IsExplicit = std::meta::is_explicit(constructor),
+			.IsDeleted = std::meta::is_deleted(constructor),
+			.IsConsteval = IsImmediateFunction(constructor),
+			.IsDefaulted = std::meta::is_defaulted(constructor),
+		};
+	}
+
 	template <std::meta::info MetaType, std::meta::info MetaConstructor>
 	consteval ConstructorInfo MakeConstructor()
 	{
-		return ConstructorInfo(MakeParameters<MetaConstructor>(), ClassifyConstructor(MetaConstructor), std::meta::is_explicit(MetaConstructor),
-							   DisplayStringOf(MetaConstructor), ScopePathOf<MetaConstructor>(), AccessOf(MetaConstructor),
-							   MakeConstructorThunk<MetaType, MetaConstructor>(), MakeAnnotations<MetaConstructor>());
+		return ConstructorInfo(MakeParameters<MetaConstructor>(), DisplayStringOf(MetaConstructor), ScopePathOf<MetaConstructor>(),
+							   MakeConstructorTraits(MetaConstructor), MakeConstructorThunk<MetaType, MetaConstructor>(),
+							   MakeAnnotations<MetaConstructor>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
@@ -210,39 +212,6 @@ namespace PgE::detail
 		else
 		{
 			return std::array<ConstructorInfo, 0>{};
-		}
-	}
-
-	template <typename T>
-	void DestroyThunk(void* obj)
-	{
-		static_cast<T*>(obj)->~T();
-	}
-
-	template <std::meta::info MetaType>
-	consteval auto MakeDestroyer() -> void (*)(void*)
-	{
-		// obj->~T() reaches a real/pseudo destructor only for a scalar or class object; is_destructible excludes
-		// a deleted or inaccessible one, and arrays are excluded because ~T() is ill-formed on them (elements
-		// are destroyed individually). Anything else reflects with no destroy thunk.
-		using T = [:MetaType:];
-
-		// Nested, not one && chain: is_destructible_v requires a complete type, and a variable template is
-		// instantiated even where && would short-circuit its evaluation.
-		if constexpr (std::meta::is_complete_type(MetaType))
-		{
-			if constexpr (std::is_object_v<T> && std::is_destructible_v<T> && !std::is_array_v<T>)
-			{
-				return &DestroyThunk<T>;
-			}
-			else
-			{
-				return nullptr;
-			}
-		}
-		else
-		{
-			return nullptr;
 		}
 	}
 }

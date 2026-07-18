@@ -8,87 +8,83 @@
 import std;
 import PlaygroundEngine.Log;
 import PlaygroundEngine.Reflection;
-import PlaygroundEngine.Window;
 
-// ReSharper disable CppEnumeratorNeverUsed
 namespace
 {
-	// Move-only but move-assignable (like unique_ptr / Poly): copy ctor deleted, move ops defaulted.
-	struct Movable
+	int Spawn(const int count, const float scale)
 	{
-		int Tag = 0;
-		Movable() = default;
-		Movable(const Movable&) = delete;
-		Movable(Movable&&) = default;
-		Movable& operator=(Movable&&) = default;
+		return static_cast<int>(count * scale);
+	}
+
+	int GlobalCounter = 7;
+	constexpr int MaxSlots = 8;
+
+	struct Widget
+	{
+		int Value = 0;
+		int Scale(const double factor) const
+		{
+			return static_cast<int>(Value * factor);
+		}
 	};
 
-	struct Holder
+	struct Callbacks
 	{
-		Movable Item;
-	};
-
-	enum class Colors
-	{
-		Red = 1,
-		Green = 2,
-		Yellow = 3,
-		Blue = 4
+		void (*OnClick)(int, float) = nullptr;
+		int (*Compute)(double) noexcept = nullptr;
+		int Widget::* ValuePointer = nullptr;
+		int (Widget::*ScalePointer)(double) const = nullptr;
 	};
 }
 
-// ReSharper restore CppEnumeratorNeverUsed
-
 TEST_CASE("scratch" * doctest::skip())
 {
-	Holder holder{};
-	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
+	const PgE::FunctionInfo& spawn = PgE::detail::FunctionOfMeta<^^Spawn>();
+	PGE_LOG(Info, "Spawn: id={} free={} static={} access={} constCallable={} params={}", spawn.GetIdentifier(), spawn.IsFreeFunction(),
+			spawn.IsStatic(), PgE::ToString(spawn.GetAccess()), spawn.IsConstCallable(), spawn.GetParams().size());
 
-	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(), valueGet ? "" : PgE::ToString(valueGet.error().Reason));
+	const auto spawned = spawn.InvokeAs<int>(static_cast<void*>(nullptr), 4, 2.5F);
+	PGE_LOG(Info, "  invoked -> has_value={} value={}", spawned.has_value(), spawned ? *spawned : -1);
 
-	Movable source;
-	source.Tag = 5;
-	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
-	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(), valueSet ? "" : PgE::ToString(valueSet.error().Reason));
+	const PgE::StaticFieldInfo& counter = PgE::detail::VariableOfMeta<^^GlobalCounter>();
+	PGE_LOG(Info, "GlobalCounter: id={} access={} constantReadable={} type={}", counter.GetIdentifier(), PgE::ToString(counter.GetAccess()),
+			counter.GetTraits().IsConstantReadable, counter.GetTypeInfo().GetIdentifier());
 
-	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
-	if (borrow)
+	const auto counterValue = counter.GetAs<int>();
+	const auto counterSet = counter.SetAs(11);
+	PGE_LOG(Info, "  read={} wrote={} nowReads={}", counterValue.value_or(-1), counterSet.has_value(), counter.GetAs<int>().value_or(-1));
+
+	const PgE::StaticFieldInfo& maxSlots = PgE::detail::VariableOfMeta<^^MaxSlots>();
+	PGE_LOG(Info, "MaxSlots: constantReadable={} read={} settable={}", maxSlots.IsConstantReadable(), maxSlots.GetAs<int>().value_or(-1),
+			maxSlots.SetAs(9).has_value());
+
+	const PgE::TypeInfo& callbacks = PgE::TypeOf<Callbacks>();
+
+	const PgE::TypeInfo& onClick = callbacks.FindFieldByIdentifier("OnClick")->GetTypeInfo();
+	const PgE::TypeInfo& onClickFunction = onClick.GetInnerType();
+	const PgE::FunctionSignatureInfo* onClickSignature = onClickFunction.GetSignature();
+
+	PGE_LOG(Info, "OnClick: pointerKind={} innerKind={} hasSignature={}", PgE::ToString(onClick.GetKind()), PgE::ToString(onClickFunction.GetKind()),
+			onClickSignature != nullptr);
+	PGE_LOG(Info, "  returns {} takes {} parameter(s), noexcept={}", onClickSignature->GetReturnType().GetIdentifier(),
+			onClickSignature->GetParameters().size(), onClickSignature->IsNoexcept());
+	for (const PgE::TypeReference& parameter : onClickSignature->GetParameters())
 	{
-		Movable replacement;
-		replacement.Tag = 42;
-		borrow->get() = std::move(replacement);
-		PGE_LOG(Info, "borrow move-assigned; Item.Tag={}", holder.Item.Tag);
+		PGE_LOG(Info, "  parameter: {}", parameter.Get().GetIdentifier());
 	}
 
-	const auto& typeOfColors = PgE::TypeOf<Colors>();
-	constexpr auto color = Colors::Blue;
-	PGE_LOG(Info, "color: {}", PgE::ToString(color));
-	for (auto enumeratorInfo : typeOfColors.GetFacet<PgE::EnumerationFacet>()->GetEnumerators())
+	const PgE::FunctionSignatureInfo* computeSignature = callbacks.FindFieldByIdentifier("Compute")->GetTypeInfo().GetInnerType().GetSignature();
+	PGE_LOG(Info, "Compute: returns {} noexcept={}", computeSignature->GetReturnType().GetIdentifier(), computeSignature->IsNoexcept());
+
+	const PgE::MemberPointerInfo* valuePointer = callbacks.FindFieldByIdentifier("ValuePointer")->GetTypeInfo().GetMemberPointer();
+	PGE_LOG(Info, "ValuePointer: class={} pointee={}", valuePointer->GetClassType().GetIdentifier(), valuePointer->GetPointeeType().GetIdentifier());
+
+	const PgE::MemberPointerInfo* scalePointer = callbacks.FindFieldByIdentifier("ScalePointer")->GetTypeInfo().GetMemberPointer();
+	const PgE::TypeInfo& scalePointee = scalePointer->GetPointeeType();
+	PGE_LOG(Info, "ScalePointer: class={} pointeeKind={} pointeeHasSignature={}", scalePointer->GetClassType().GetIdentifier(),
+			PgE::ToString(scalePointee.GetKind()), scalePointee.GetSignature() != nullptr);
+	if (const PgE::FunctionSignatureInfo* scaleSignature = scalePointee.GetSignature())
 	{
-		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
+		PGE_LOG(Info, "  returns {} takes {} parameter(s)", scaleSignature->GetReturnType().GetIdentifier(), scaleSignature->GetParameters().size());
 	}
-
-	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
-	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
-
-	auto window = PgE::Window::Create(PgE::WindowSpecification{.Title = "Playground Window", .Width = 960, .Height = 540});
-
-	if (!window)
-	{
-		PGE_LOG(Error, "Window creation failed: reason={}", static_cast<int>(window.error()));
-		return;
-	}
-
-	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(), (*window)->GetTitle());
-
-	while (!(*window)->ShouldClose())
-	{
-		(*window)->PollEvents();
-		(*window)->SwapBuffers();
-		std::this_thread::sleep_for(std::chrono::milliseconds(16));
-	}
-
-	PGE_LOG(Info, "Window loop finished (shouldClose={})", (*window)->ShouldClose());
 }

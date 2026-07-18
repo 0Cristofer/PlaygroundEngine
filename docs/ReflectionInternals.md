@@ -100,9 +100,26 @@ partition.
   a materialized template argument of `std::string`. Like the static-member address trap below, forming the
   pointer is well-formed during substitution, so `requires` cannot detect it; not taking an address that
   access control does not require is the fix.
-- **A deleted function is excluded by its stated fact, not by SFINAE.** Naming one in `IsInvocable`'s
-  requires-expression is a hard error rather than a substitution failure, so `MakeInvoker` checks
-  `is_deleted` first. The metadata then says why there is no invoker.
+- **Deleted and consteval functions are excluded by a stated fact, not by SFINAE.** Naming a **deleted** one
+  in `IsInvocable`'s requires-expression is a hard error rather than a substitution failure, so `MakeInvoker`
+  checks `is_deleted` first. A **consteval** (immediate) function is the opposite trap: the requires-expression
+  *accepts* it (an immediate call is well-formed in an unevaluated context), so `MakeInvoker` would emit a
+  thunk whose body then calls it at runtime, which is a hard error that breaks the build for the whole type.
+  `IsImmediateFunction` (shared with the constructor path) excludes it up front, and `IsConsteval` states the
+  reason, exactly as for a `consteval` constructor. GCC 16 exposes no `is_consteval`, so both read the
+  specifier from the display string.
+- **A deducing-this member's object parameter is not a call argument.** `parameters_of` counts the explicit
+  object parameter (`int Get(this const Self&, int)` has arity 2), so `CallParametersOf` drops a leading
+  `is_explicit_object_parameter` and every function path (the `ParameterInfo` list, the arity check, the
+  per-argument binding, the invoke call) keys off it, keeping the reflected arity the caller's. Left uncut it
+  is a lie as metadata: a C# generator reading arity 2 emits a two-argument method. The object binds the same
+  way an implicit `this` does, so the public member-splice route is unchanged; the **private** route differs,
+  because `&[:M:]` on a deducing-this member is a plain function pointer (not a pointer-to-member), called
+  free-function style with the object first. `is_const` and the ref-qualifier queries are all **false** on the
+  function itself (the qualification lives on the object parameter), so `MakeFunctionTraits` reads `IsConst`
+  and `RefQual` off the object type. A **by-value** object parameter (`this Self`) is const-callable (a copy
+  leaves the caller's object untouched), so `ObjectIsConstCallable` treats const-ref and by-value alike and a
+  mutable lvalue-ref or rvalue-ref as not.
 ## The argument binder
 
 `:ArgumentBinding` is the shared machinery every erased callable uses: parameter metadata, the
@@ -143,13 +160,33 @@ slot, so `ConstructorInfo` is a callable distinct from `FunctionInfo`, sharing o
   so the thunk casts the erased arguments to the constructor's **own parameter types** and placement-news;
   overload resolution then selects exactly that constructor. This is why the engine reflects constructors
   directly rather than routing construction through an annotated static factory.
-- **No thunk means not callable.** A constructor that is deleted, inaccessible, or whose placement-new is
-  otherwise ill-formed reflects as metadata with `CanConstruct() == false`, the way an rvalue-qualified
-  function reflects with no invoker. A `consteval` constructor is detected by the specifier in its display
-  string: GCC 16 exposes no `is_consteval`, and immediateness is invisible to SFINAE.
+- **No thunk means not callable, and the traits name why.** A constructor that is deleted, inaccessible,
+  `consteval`, or whose placement-new is otherwise ill-formed reflects as metadata with
+  `CanConstruct() == false`, the way an rvalue-qualified function reflects with no invoker. `ConstructorTraits`
+  carries the reasons that are language facts (`IsDeleted`, `IsConsteval`, and `Access` for an inaccessible
+  one), so a residual null thunk means "unbindable" and a deleted copy is told apart from a silent absence.
+  `consteval` is detected by the specifier in the display string: GCC 16 exposes no `is_consteval`, and
+  immediateness is invisible to SFINAE.
 - **The slot protocol is stated once.** `detail::ValueFromSlot` runs a slot-taking call, then launders the
   object out of the stack slot and destroys it there. A function's return and a constructor's object differ
   only in the call and the error reported, so both `InvokeAs` and `ConstructAs` go through it.
+
+### The destructor
+
+A type has exactly one destructor, so it is a single `DestructorInfo` on `TypeInfo` (`GetDestructor()`), not
+a list. It owns the erased destroy thunk that `TypeInfo::CanDestroy` / `Destroy` delegate to, so the runtime
+path and the metadata are one object rather than a bare function pointer beside unrelated traits.
+
+- **The traits are read off the destructor member, the triviality off the type.** `is_virtual`,
+  `is_pure_virtual`, `is_deleted`, `is_defaulted`, and access come from the `is_destructor` member found in
+  `members_of`; `IsTrivial` is the whole-type `is_trivially_destructible_type`. Every class has an implicit
+  destructor member to read, so the split is only needed for non-class types, which have no member at all and
+  keep the defaults (a scalar is trivially destructible and destroyable, but nothing about it is "defaulted").
+- **No thunk means not destroyable, and the traits name why.** A deleted or inaccessible destructor, an
+  incomplete type, an array, and `void` all reflect with `CanDestroy() == false`, the way a constructor
+  reflects with no thunk; `IsDeleted` turns the common case from a silent absence into a stated reason.
+- **`members_of` is guarded, not merely filtered.** It throws on a non-class type, so the destructor-member
+  walk sits behind `IsClassOrUnion` rather than being filtered afterwards.
 
 ### Selecting a constructor from erased arguments
 
@@ -170,6 +207,58 @@ This is overload resolution, restricted to what erased arguments can carry:
 - **Genuine ties are reported, not guessed.** Overloads the arguments cannot rank (`int&` against
   `const int&`: both bind by reference, neither moves) yield `AmbiguousConstructor`, and the caller falls
   back to `FindConstructor` plus `ConstructorInfo::ConstructAs` to name one.
+
+## Operators and conversions
+
+An overloaded operator (`operator+`, `operator==`) and a user-defined conversion (`operator int()`) are
+member functions, so they carry a return type, parameters, traits, and an invoker like any other. They are
+kept in **their own lists** (`GetOperators` / `GetConversions`), not `GetFunctions`, so a consumer keys on a
+fact rather than parsing a name: an operator on its `OperatorKind`, a conversion on its target type. This is
+also what closes two holes: a conversion has **no identifier** and would otherwise sit in `GetFunctions`
+nameless, and operators were excluded from `GetFunctions` entirely and so were unreachable.
+
+- **The whole function machinery is reused.** `OperatorInfo` and `ConversionInfo` derive from `FunctionInfo`;
+  their builders call the same `MakeParameters` / `MakeFunctionTraits` / `MakeInvoker`, so `a + b`, `a == b`,
+  `a[i]`, and `operator int()` all invoke through reflection with no second code path. `OperatorKind` is an
+  engine-owned enum mapped from `std::meta::operator_of`, so the public API does not leak the `std::meta`
+  spelling. A conversion's **target is its return type**: `ConversionInfo::GetTargetType()` is `GetReturnType()`,
+  decayed with the `ReturnIs*` trait flags carrying the qualifiers, exactly as every return type is modelled.
+- **Copy and move assignment are excluded, and this is load-bearing (a GCC 16 ICE).** They are operator
+  functions (`op_equals`) but also **special members**, so `GetOperatorFunctions` excludes
+  `is_special_member_function`, the way `GetMemberFunctions` already does: they belong to the lifetime story,
+  not the value-operator one, and a converting assignment (`operator=(int)`) is not special and stays.
+  Beyond the modelling, building an **invoker** for an implicitly-declared copy/move assignment operator
+  **segfaults cc1plus** in every TU that imports the reflection module and reflects a type carrying one
+  (every class has them, so the whole engine failed to build). The exclusion is narrow: user-defined value
+  operators, private operators, conversions, and member `operator new` / `operator delete` all build invokers
+  without incident.
+- **Nothing about their *shape* is special, which is why the ICE is a compiler bug and not a design limit.**
+  Were the ICE lifted, copy and move assignment would need no specialized invoke at all: they are ordinary
+  member functions (`(const T&) -> T&` and `(T&&) -> T&`), and `ArgumentBinding` already binds both parameter
+  forms (the lvalue-ref branch copies, the rvalue-ref branch moves out). Copy versus move is not a mode the
+  invoker forces, it is the parameter type of two distinct overloads, so a caller picks the overload and the
+  existing binder does the rest. The only genuine work would be classification (grouping them with the
+  copy/move constructors in the lifetime story) rather than mechanism.
+
+## Nested types
+
+`GetNestedTypes()` reports the types a class declares **inside itself**: nested classes, enums, and unions,
+and member type-aliases (`using` / `typedef`). It is the reflexive half of the structure, and it is
+independent of the fields: a nested type with no member of that type was previously unreachable, since the
+only way to a nested type was through some field or return type that happened to use it. The C# binding layer
+is the consumer that needs it, since it mirrors nested types as nested types.
+
+- **`is_type` plus `has_identifier` is the whole of the filter.** GCC 16 does **not** return the injected
+  class name from `members_of`, so no self-exclusion guard is needed (validated: a type with four type
+  members reports exactly four). It *does* return anonymous nested unions and structs, which have no
+  identifier, so those are excluded: nothing can name one, and the field that uses it already reaches it.
+- **An alias is detected by dealiasing, and keeps its own name.** A member is an alias when
+  `dealias(member) != member`, a real nested definition when dealiasing is the identity. The stored
+  `TypeReference` is to the **dealiased** type, so `using ValueType = int` reports the name `ValueType` and
+  resolves to `int`'s `TypeInfo`; the declaration carries the name, the reference carries the type.
+- **A self-alias is safe because the reference is lazy.** `using SelfAlias = Outer` inside `Outer` resolves
+  back to the enclosing type. It cannot recurse during construction, for the same reason a self-referential
+  field cannot: `TypeReference` stores the resolver's address, not a resolved pointer.
 
 ## Naming: scope, structure, and decomposition
 

@@ -62,6 +62,7 @@ target_sources(
 		src/Reflection/ReflectionTypeGraphTests.cpp
 		src/Reflection/ReflectionExtractionTests.cpp
 		src/Reflection/ReflectionConstructionTests.cpp
+		src/Reflection/ReflectionOperatorTests.cpp
 		src/Reflection/ReflectionEnumTests.cpp
 		src/Reflection/ReflectionAnnotationTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp
