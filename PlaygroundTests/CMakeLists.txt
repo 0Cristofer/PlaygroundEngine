@@ -66,6 +66,7 @@ target_sources(
 		src/Reflection/ReflectionEnumTests.cpp
 		src/Reflection/ReflectionAnnotationTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp
+		src/Reflection/ReflectionNamespaceTests.cpp
 		src/LogTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp

@@ -19,12 +19,14 @@ export import :BaseInfo;
 export import :ConstructorInfo;
 export import :DestructorInfo;
 export import :NestedTypeInfo;
+export import :NamespaceInfo;
 export import :TemplateInfo;
 export import :FunctionSignatureInfo;
 export import :MemberPointerInfo;
 export import :TypeInfo;
 export import :Facets;
 export import :TypeBuilder;
+export import :NamespaceBuilder;
 
 import std;
 
@@ -44,6 +46,14 @@ namespace PgE
 	constexpr const TypeInfo& TypeOf(const T&)
 	{
 		return TypeOf<T>();
+	}
+
+	// The one entry point that asks a caller to write ^^, because it has to: a namespace is not a type, a
+	// value, or a template, so it cannot be a template argument in any other form.
+	export template <std::meta::info MetaNamespace>
+	constexpr const NamespaceInfo& NamespaceOf()
+	{
+		return detail::NamespaceOfMeta<MetaNamespace>();
 	}
 
 	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj);

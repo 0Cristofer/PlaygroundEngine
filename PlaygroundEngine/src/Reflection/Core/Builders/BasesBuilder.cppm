@@ -29,7 +29,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeBaseArray(std::index_sequence<I...>)
+	consteval std::array<BaseInfo, sizeof...(I)> MakeBaseArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto bases = std::define_static_array(std::meta::bases_of(MetaType, std::meta::access_context::unchecked()));
 		return std::array<BaseInfo, sizeof...(I)>{MakeBase<bases[I]>()...};

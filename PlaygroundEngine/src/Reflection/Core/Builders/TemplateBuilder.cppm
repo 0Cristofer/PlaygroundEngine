@@ -69,7 +69,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeTemplateArgumentArray(std::index_sequence<I...>)
+	consteval std::array<TemplateArgumentInfo, sizeof...(I)> MakeTemplateArgumentArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto arguments = std::define_static_array(std::meta::template_arguments_of(MetaType));
 		return std::array<TemplateArgumentInfo, sizeof...(I)>{MakeTemplateArgument<arguments[I]>()...};

@@ -70,7 +70,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaCallable, std::size_t... I>
-	consteval auto MakeParameterArray(std::index_sequence<I...>)
+	consteval std::array<ParameterInfo, sizeof...(I)> MakeParameterArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto parameters = std::define_static_array(CallParametersOf(MetaCallable));
 		return std::array<ParameterInfo, sizeof...(I)>{MakeParameter<parameters[I]>()...};

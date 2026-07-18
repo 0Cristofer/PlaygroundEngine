@@ -45,7 +45,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeNestedTypeArray(std::index_sequence<I...>)
+	consteval std::array<NestedTypeInfo, sizeof...(I)> MakeNestedTypeArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members = std::define_static_array(GetNestedTypes(MetaType));
 		return std::array<NestedTypeInfo, sizeof...(I)>{MakeNestedType<members[I]>()...};

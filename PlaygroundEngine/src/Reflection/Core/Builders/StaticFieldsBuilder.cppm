@@ -185,9 +185,19 @@ namespace PgE::detail
 	{
 		return StaticFieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), IdentifierOf(MetaField),
 							   DisplayStringOf(MetaField), ScopePathOf<MetaField>(),
-							   StaticFieldTraits{.Access = AccessOf(MetaField), .IsConstantReadable = ConstantReadable<MetaField>},
+							   StaticFieldTraits{.Access = AccessOf(MetaField),
+												 .IsConstantReadable = ConstantReadable<MetaField>,
+												 .IsThreadLocal = std::meta::has_thread_storage_duration(MetaField)},
 							   MakeStaticFieldGetter<MetaField>(), MakeStaticFieldSetter<MetaField>(), MakeStaticFieldReferencer<MetaField>(),
 							   MakeAnnotations<MetaField>());
+	}
+
+	consteval bool IsReferenceVariable(const std::meta::info variable)
+	{
+		// Used only to omit such a variable from a namespace sweep. Reflecting one is well-formed in principle;
+		// GCC 17 crashes building its metadata, and the crash cannot be intercepted from inside this module.
+		// See docs/ReflectionExtraction.md (namespace-scope entities).
+		return std::meta::is_variable(variable) && std::meta::is_reference_type(std::meta::type_of(variable));
 	}
 
 	export template <std::meta::info MetaVariable>
@@ -205,7 +215,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeStaticFieldArray(std::index_sequence<I...>)
+	consteval std::array<StaticFieldInfo, sizeof...(I)> MakeStaticFieldArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members =
 			std::define_static_array(std::meta::static_data_members_of(MetaType, std::meta::access_context::unchecked()));

@@ -69,7 +69,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeFacetEntryArray(std::index_sequence<I...>)
+	consteval std::array<FacetEntry, sizeof...(I)> MakeFacetEntryArray(std::index_sequence<I...>)
 	{
 		return std::array<FacetEntry, sizeof...(I)>{MakeFacetEntry<MetaType, I>()...};
 	}

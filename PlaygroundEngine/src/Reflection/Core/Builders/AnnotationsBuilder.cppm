@@ -48,7 +48,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info Entity, std::size_t... I>
-	consteval auto MakeAnnotationArray(std::index_sequence<I...>)
+	consteval std::array<AnnotationInfo, sizeof...(I)> MakeAnnotationArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto annotations = std::define_static_array(GetAnnotationList(Entity));
 		return std::array<AnnotationInfo, sizeof...(I)>{MakeAnnotation<annotations[I]>()...};

@@ -201,7 +201,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeFieldArray(std::index_sequence<I...>)
+	consteval std::array<FieldInfo, sizeof...(I)> MakeFieldArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members =
 			std::define_static_array(std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked()));

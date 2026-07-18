@@ -206,8 +206,12 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info Entity, std::size_t... I>
-	consteval auto MakeScopeArray(std::index_sequence<I...>)
+	consteval std::array<std::string_view, sizeof...(I)> MakeScopeArray(std::index_sequence<I...>)
 	{
+		// The return type is spelled out rather than deduced to dodge a GCC bug: with `auto`, reflecting a
+		// reference variable fails with "use of MakeScopeArray before deduction of auto", though nothing here
+		// reads the entity's type. See docs/ReflectionExtraction.md (scope path).
+
 		// The chain is collected as reflections, not string_views: define_static_array needs a structural
 		// element type and string_view is not one, so the identifiers are read per index instead. They need no
 		// freezing of their own: identifier_of already yields static storage, which IdentifierOf relies on too.

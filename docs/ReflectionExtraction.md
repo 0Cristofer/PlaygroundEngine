@@ -4,8 +4,8 @@ What the reflection system pulls out of `std::meta`, where it is stored, and by 
 
 **Status:** implemented. Every fact below was re-validated against **GCC 17.0.0** (2026-07-14) after the
 compiler upgrade, and all of them still hold. Extended 2026-07-18 with access on namespace-scope entities,
-function-type signatures, member-pointer decomposition, and namespace-scope extraction; the Part 3 table
-grew accordingly. The implementation knowledge (the guards, the cv-node rule, the value/address split) lives
+function-type signatures, member-pointer decomposition, namespace-scope extraction, and the namespace sweep
+(`NamespaceOf`, which reverses this document's earlier rejection of one); the Part 3 table grew accordingly. The implementation knowledge (the guards, the cv-node rule, the value/address split) lives
 in [ReflectionInternals.md](ReflectionInternals.md); this document keeps the reasoning about *what* to
 capture and *why*.
 
@@ -311,21 +311,48 @@ PgE::detail::FunctionOfMeta<^^Game::Spawn>()     // -> const FunctionInfo&
 PgE::detail::VariableOfMeta<^^Game::Counter>()   // -> const StaticFieldInfo&
 ```
 
-These are **not** the consumer surface, and are deliberately absent from `Core.cppm`. They take a `std::meta::info`, and no consumer-facing entry point asks a caller to write `^^`. They exist as the mechanism a future `MembersOf<ns>` will name entities through; until that exists, only the tests reach them.
+These are **not** the consumer surface, and are deliberately absent from `Core.cppm`. They take a `std::meta::info`, and they are the mechanism the namespace sweep names entities through.
 
-There is deliberately **no namespace sweep**. `members_of` on a namespace is a question whose answer depends on where it is asked: two `members_of(^^Game)` calls at different points in one translation unit return different sets, and two translation units with different imports both get legitimate, differing answers. As an extraction primitive that is disqualifying, and a registry cannot repair it afterwards because it would be merging answers that disagree by construction. Naming the entity moves visibility to the caller's imports, where it already is for `TypeOf`, and makes the answer deterministic. Deciding *what exists* is a consumer's job.
+### The namespace sweep
 
-The global namespace is the case that settles it: `members_of(^^::)` in a TU including `<string>`, `<vector>` and `<cstdio>` returns **680 members, 445 of them functions**, nearly all of libc. There is no such thing as "my" global namespace, so a reflected free function is required to live in a named one.
+`PgE::NamespaceOf<^^Game>()` returns the `NamespaceInfo` for a namespace: its types, free functions, variables, and directly nested namespaces. It is the **one consumer-facing entry point that asks a caller to write `^^`**, and it has to be: a namespace is not a type, a value, or a template, so it cannot be a template argument in any other form. There is no `NamespaceOf<Game>` to offer, on GCC or on any conforming implementation.
+
+The point-of-query problem is real and is **not** solved here, it is *relocated*. `members_of` on a namespace answers for what the asking TU has seen: two calls at different points in one TU return different sets, and two TUs with different imports both get legitimate, differing answers. The base layer therefore reports members as found and reconciles nothing. A consumer that wants a stable set filters the sweep on something it controls, an annotation on the entities it cares about, and owns the consequence: the union over all TUs is complete even though no single sweep is, provided registration is idempotent, which pointer identity of the cached metadata already provides.
+
+Pointer identity is what makes that work, so a swept entity **is** the object naming it hands out: the `FunctionInfo*` in `GetFunctions()` is `&FunctionOfMeta<^^F>()`, the variable is `&VariableOfMeta<^^V>()`, and a member type resolves to `&TypeOf<T>()`. Sweeping and naming never produce two descriptions of one entity.
+
+The sweep is also the **only** route to an overloaded free function: `^^Game::Spawn` where `Spawn` is overloaded is ill-formed ("cannot take the reflection of an overload set"), so naming cannot reach either overload and the member list can.
+
+Four member kinds are skipped, each because it has nothing to reflect rather than as a policy choice: **templates and concepts** (not an entity until instantiated), **namespace aliases** (the namespace is already reported under its own name; `NamespaceOf` dealiases, so an alias and its target share one instance), **anonymous namespaces and unnamed types** (no identifier to key on, no identity outside the TU), and free **operators** (modelled by kind on the owning type, with no free-standing metadata to point at, see *Gaps*).
+
+The global namespace is **rejected**, by a `static_assert` that gates the instantiation rather than merely diagnosing it. `members_of(^^::)` in a TU including `<string>`, `<vector>` and `<cstdio>` returns 680 members, nearly all of libc; recursing it reaches deprecated `std` entities, which are hard errors under `-Werror`, and then segfaults cc1plus. There is no such thing as "my" global namespace, so a reflected entity is required to live in a named one.
 
 | Information | Query | Field |
 |---|---|---|
 | Free function | named directly; `FunctionInfo` reused whole | `detail::FunctionOfMeta<^^F>()` |
 | Not a class member | `is_class_member` | `FunctionTraits::IsFreeFunction` |
 | Namespace variable | named directly; `StaticFieldInfo` reused whole | `detail::VariableOfMeta<^^V>()` |
+| Thread storage | `has_thread_storage_duration` | `StaticFieldTraits::IsThreadLocal` |
+| Namespace members | `members_of`, sorted by kind | `NamespaceOf<^^Ns>()` |
+| Namespace member type | `NestedTypeInfo` reused whole, alias flag included | `NamespaceInfo::GetTypes()` |
+| Namespace annotation | `annotations_of`; a namespace is an annotatable declaration | `NamespaceInfo::GetAnnotations<A>()` |
 
 Both reuse the existing metadata types rather than adding parallel ones. A namespace-scope variable **is** a static data member without a class: no offset, no instance, every accessor drops the object pointer, and the constant-readable/addressable split applies unchanged, which is what keeps `constexpr int MaxSlots = 8` from failing at link time (Part 2, `StaticFieldInfo`).
 
 `IsFreeFunction` is stored rather than derived because it is distinct from `IsStatic`: a static member is scoped to its class and a projection places the two differently. The invoke path branches on neither directly but on `CallsWithoutObject` (`is_static_member || !is_class_member`), since `is_static_member` is `false` for a free function and would otherwise route it down the member-call path. `IsConstCallable` now reports `IsConst || IsStatic || IsFreeFunction`: all three ignore the object pointer.
+
+### Gaps the sweep exposes
+
+None of these block the current use case (annotation-filtered discovery), and all of them are properties of the sweep rather than bugs in it. They are recorded because a consumer will meet them.
+
+- **Materialization is eager and unfilterable.** `NamespaceOf<^^Ns>()` builds the metadata for *every* reflectable member, then hands the consumer the list to filter. An annotation filter therefore runs too late to save the compile time, and, more sharply, too late to avoid a member that cannot be reflected: one bad entity fails the whole sweep, with no way to opt out. `TypeOf` never had this exposure, because you only ever paid for what you named. If this bites, the fix is a separate `consteval` query returning `std::meta::info` lists that the consumer filters *before* anything is materialized; that returns no cached objects, so it does not threaten pointer identity the way a filtered `NamespaceOf<^^Ns, Filter>` would (two filters, two `NamespaceInfo`s for one namespace).
+- **A TU-local member makes the sweep an ODR violation, not merely a differing answer.** `NamespaceInfo` is a `static constexpr` inside a template, so every TU that sweeps a namespace must agree on its contents. An internal-linkage member (a `static` free function, and note that a namespace-scope `constexpr` variable is internal-linkage too) is a *different entity* in each TU, so two TUs cannot agree even in principle. Such members are still swept, because excluding all internal linkage would drop every `constexpr` namespace constant, which is exactly what a consumer wants to reflect. The anonymous-namespace exclusion is therefore a naming rule (no identifier to key on), not a linkage one, and does not close this. A consumer sweeping from more than one TU should keep its fixtures externally linked, or sweep from a single registration TU.
+- **A deprecated member is a hard error, not metadata.** Reflecting an entity names it, which fires `-Wdeprecated-declarations`, which is an error here. Sweeping any namespace containing a deprecated entity fails the build. Suppressing it belongs in the shared builders (reflecting is not using), not in the sweep, so it is left alone until something needs it.
+- **An `extern` variable that is never defined fails at link.** The reflected accessors take its address. Definedness is not queryable, so this cannot be guarded; the sweep only widens exposure to a hazard `VariableOfMeta` already had.
+- **A reference variable crashes GCC 17, and the crash cannot be intercepted.** `int& Ref = Target;` at namespace scope kills cc1plus in `cgraph_node::verify_node`, in the symbol table, long after the front end has finished, so a `static_assert` in `VariableOfMeta` never gets the chance to fire (verified: it does not). Exporting a `consteval` predicate over such a variable produces a *different* ICE (`import_export_decl`). Nothing here is a language rule; reflecting a reference variable is well-formed in principle. The sweep therefore **omits** them, which is verified and is what stops one declaration from failing a whole namespace, but **naming one directly through `VariableOfMeta` is unguarded** and will crash the compiler. No guard was added rather than shipping one that does not fire.
+- **Inline namespaces read as ordinary nested ones.** `std::meta` has no `is_inline_namespace`, and the members of an inline namespace are not lifted into the parent's `members_of` even though name lookup finds them there. A consumer that mirrors lookup semantics must recurse and flatten itself. Note this disagrees with `ScopePathOf`, which *does* cross the inline namespace.
+- **Free operators are not swept.** `OperatorInfo` is built per owning type and has no free-standing singleton to point at, so a namespace-scope `operator==` is currently invisible. A `OperatorOfMeta<^^F>()` mirroring `FunctionOfMeta` would close it.
+- **`NestedTypeInfo` is reused for a namespace's types**, which reads oddly (nothing is nested in a namespace) but is the identical shape: name, alias flag, type reference, annotations. Reusing beat adding a parallel type; a rename to `MemberTypeInfo` would touch the existing public surface and was left out of scope.
 
 ## Part 3: Validated GCC facts
 
@@ -382,6 +409,18 @@ Everything above rests on these, each from a throwaway compile rather than from 
 | `members_of` on a namespace | Works, but is **point-of-query dependent**: two calls in one TU returned 1 and 3 |
 | Namespace members across modules | Visible when imported, and `display_string_of` tags the owning module (`FromA@NsA`) |
 | `members_of(^^::)` | 680 members (445 functions) from `<string>`/`<vector>`/`<cstdio>` alone; unusable as a sweep |
+| Recursive sweep of `^^::` | `-Werror` on deprecated `std` entities, then **ICE** (cc1plus segfault). Rejected by a gating `if constexpr`, since a `static_assert` alone does not stop the instantiation that crashes |
+| `^^Overloaded` | **Ill-formed**, "cannot take the reflection of an overload set"; the sweep is the only route to an overload |
+| `is_namespace` on a namespace alias | **`true`**, so `is_namespace_alias` must be tested first; `dealias` yields the target |
+| No `is_inline_namespace` | Does not exist. An inline namespace is indistinguishable from a plain nested one |
+| Inline namespace members | **Not lifted** into the enclosing namespace's `members_of`, though name lookup finds them there, and `ScopePathOf` crosses into it. A consumer must recurse |
+| `annotations_of` on a namespace | Works: `[[=Tag{}]] namespace Ns` reflects, which is what a consumer filters a sweep on |
+| A using-declaration in a namespace | **Not** reported by `members_of`, so a swept entity always really lives in the namespace |
+| Reopened namespace | Both halves reported; a namespace is not closed the way a class is |
+| Annotations across reopenings | **All** collected, from every `namespace X { }` block |
+| `consteval auto` returning `std::array<T, sizeof...(I)>` | **GCC bug**: reflecting a reference variable through one fails with "use of ... before deduction of `auto`", though nothing in the body reads the entity's type. All 18 such builders now spell the return type out |
+| Reflecting a reference variable | ICE in `cgraph_node::verify_node` (symbol table), too late for a `static_assert` to intercept |
+| Access at namespace scope | `None` for types, functions and variables alike; no `Private` lie |
 | `source_location_of` | Works and discriminates a project file from `/usr/include/stdio.h`, but see Part 4 |
 
 ## Part 4: Deliberately not extracted
@@ -392,7 +431,7 @@ Everything above rests on these, each from a throwaway compile rather than from 
 - **`symbol_of`.** Operator *spelling* only (it takes an `operators` enum). Operators are now reflected (see Part 2), but keyed on an engine-owned `OperatorKind` mapped from `operator_of`, not on `symbol_of`'s string: a consumer keys on the fact, and the C-style spelling is left to a renderer if one ever wants it.
 - **`type_order`.** Not extracted, but recorded because it is the mechanism for a deterministic registry ordering if ordinals are ever wanted on the wire.
 
-- **A namespace sweep.** `members_of(^^ns)` is point-of-query dependent (Part 3), so it cannot be an extraction primitive. Entities are named instead. A consumer that wants discovery, such as generated registration appended to each module, may sweep and own the consequence: the union over all modules is complete even though no single sweep is, provided registration is idempotent, which pointer identity of the cached metadata already provides.
+- **Reconciling a namespace sweep.** The sweep itself now exists (`NamespaceOf`, Part 2), but nothing in the base layer merges or stabilizes what two sweeps report. That is deliberate: answers that disagree by construction cannot be repaired downstream, only filtered on something the consumer controls.
 
 - **Template parameters.** A `TemplateInfo` names its template and nothing more, because `template_parameters_of` does not exist on GCC. `Grid<int, 4>` is fully described, but `Grid`'s own parameter list, arity, and constraints are unreachable, so a projection can mirror instantiations but never an open generic.
 

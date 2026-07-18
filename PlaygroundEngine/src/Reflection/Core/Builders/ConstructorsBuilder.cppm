@@ -189,7 +189,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeConstructorArray(std::index_sequence<I...>)
+	consteval std::array<ConstructorInfo, sizeof...(I)> MakeConstructorArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto constructors = std::define_static_array(GetConstructors(MetaType));
 		return std::array<ConstructorInfo, sizeof...(I)>{MakeConstructor<MetaType, constructors[I]>()...};

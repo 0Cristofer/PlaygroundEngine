@@ -56,7 +56,7 @@ namespace PgE::detail
 #undef PGE_REFLECT_VARIADIC_FUNCTION_TYPE
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeSignatureParameterArray(std::index_sequence<I...>)
+	consteval std::array<TypeReference, sizeof...(I)> MakeSignatureParameterArray(std::index_sequence<I...>)
 	{
 		// parameters_of on a function TYPE yields the parameter types themselves, unlike on a function
 		// declaration where it yields parameter declarations that type_of must be applied to. Asking type_of

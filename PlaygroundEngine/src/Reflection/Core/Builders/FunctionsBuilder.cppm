@@ -366,7 +366,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeFunctionArray(std::index_sequence<I...>)
+	consteval std::array<FunctionInfo, sizeof...(I)> MakeFunctionArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto functions = std::define_static_array(GetMemberFunctions(MetaType));
 		return std::array<FunctionInfo, sizeof...(I)>{MakeFunction<MetaType, functions[I]>()...};

@@ -148,7 +148,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeOperatorArray(std::index_sequence<I...>)
+	consteval std::array<OperatorInfo, sizeof...(I)> MakeOperatorArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto operators = std::define_static_array(GetOperatorFunctions(MetaType));
 		return std::array<OperatorInfo, sizeof...(I)>{MakeOperator<MetaType, operators[I]>()...};

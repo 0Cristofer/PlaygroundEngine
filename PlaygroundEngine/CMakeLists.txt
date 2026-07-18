@@ -140,6 +140,7 @@ target_sources(
 				src/Reflection/Core/Builders/MemberPointerBuilder.cppm
 				src/Reflection/Core/Builders/TraitsBuilder.cppm
 				src/Reflection/Core/Builders/TypeBuilder.cppm
+				src/Reflection/Core/Builders/NamespaceBuilder.cppm
 				src/Reflection/Core/Builders/FacetsBuilder.cppm
 				src/Reflection/Core/Facets.cppm
 				src/Reflection/Builtins/Builders/EnumerationFacetBuilder.cppm
@@ -163,6 +164,7 @@ target_sources(
 				src/Reflection/Core/ConstructorInfo.cppm
 				src/Reflection/Core/DestructorInfo.cppm
 				src/Reflection/Core/NestedTypeInfo.cppm
+				src/Reflection/Core/NamespaceInfo.cppm
 				src/Reflection/Reflection.cppm
 				src/Reflection/Contracts.cppm
 				src/Reflection/Core/TypedRef.cppm

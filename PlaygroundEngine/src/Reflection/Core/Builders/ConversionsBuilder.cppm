@@ -47,7 +47,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeConversionArray(std::index_sequence<I...>)
+	consteval std::array<ConversionInfo, sizeof...(I)> MakeConversionArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto conversions = std::define_static_array(GetConversionFunctions(MetaType));
 		return std::array<ConversionInfo, sizeof...(I)>{MakeConversion<MetaType, conversions[I]>()...};

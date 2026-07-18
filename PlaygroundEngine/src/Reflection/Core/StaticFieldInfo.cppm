@@ -28,6 +28,11 @@ namespace PgE
 		// keeps a `static const int X = 5;` with no out-of-line definition from failing at link time.
 		// The split is the semantics: constant-readable is read-only, addressable is settable.
 		bool IsConstantReadable = false;
+
+		// Thread storage duration: the accessors read and write the calling thread's instance, not one shared
+		// object. Reported rather than hidden, so a serializer does not put per-thread state on the wire as
+		// though it were global. See docs/ReflectionExtraction.md (namespace-scope entities).
+		bool IsThreadLocal = false;
 	};
 
 	export class StaticFieldInfo : public DeclarationInfo
@@ -62,6 +67,10 @@ namespace PgE
 		bool IsConstantReadable() const
 		{
 			return _traits.IsConstantReadable;
+		}
+		bool IsThreadLocal() const
+		{
+			return _traits.IsThreadLocal;
 		}
 
 		std::expected<void, FieldError> GetValue(const TypedRef& out) const
