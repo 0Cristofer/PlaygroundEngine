@@ -1,3 +1,7 @@
+module;
+
+#include <vulkan/vulkan.h>
+
 module PlaygroundEngine.Window;
 
 import :backend;
@@ -37,6 +41,16 @@ namespace PgE
 	void Window::SwapBuffers() const
 	{
 		_backend->SwapBuffers();
+	}
+
+	std::expected<std::span<const char* const>, VulkanWindowError> Window::GetRequiredVulkanExtensions() const
+	{
+		return _backend->GetRequiredVulkanExtensions();
+	}
+
+	std::expected<VkSurfaceKHR, VulkanWindowError> Window::CreateVulkanSurface(const VkInstance vkInstance) const
+	{
+		return _backend->CreateVulkanSurface(vkInstance);
 	}
 
 	bool Window::ShouldClose() const

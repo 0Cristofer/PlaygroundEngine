@@ -18,11 +18,25 @@ namespace PgE
 		auto window = Window::Create(WindowSpecification{});
 		if (!window)
 		{
-			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", static_cast<int>(window.error()));
+			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
 			return std::unexpected(BootError::Platform);
 		}
 
 		_window = std::move(*window);
+		return {};
+	}
+
+	std::expected<void, BootError> Engine::BootRendering()
+	{
+		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_window);
+
+		if (!renderer)
+		{
+			PGE_LOG(Error, "Rendering bootstrap failed: renderer creation error {}", ToString(renderer.error()));
+			return std::unexpected(BootError::Rendering);
+		}
+
+		_rendererVulkan = std::move(*renderer);
 		return {};
 	}
 
@@ -45,6 +59,14 @@ namespace PgE
 		}
 
 		// TODO L2: systems in explicit dependency order, constructor injection.
+
+		if (capabilities.Rendering)
+		{
+			if (const auto rendering = BootRendering(); !rendering)
+			{
+				return std::unexpected(rendering.error());
+			}
+		}
 		_world = std::make_unique<World>();
 
 		// TODO: WireSignals() once the first signal exists.
@@ -111,6 +133,7 @@ namespace PgE
 
 		_app.reset();
 		_world.reset();
+		_rendererVulkan.reset();
 		_window.reset();
 	}
 }

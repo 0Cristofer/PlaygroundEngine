@@ -1,3 +1,7 @@
+module;
+
+#include <vulkan/vulkan_core.h>
+
 export module PlaygroundEngine.Window;
 
 export import :common;
@@ -7,11 +11,13 @@ import std;
 namespace PgE
 {
 	template <typename Backend>
-	concept WindowBackendInterface = requires(Backend backend, const Backend constBackend, const WindowSpecification& specification) {
+	concept WindowBackendInterface = requires(Backend backend, const Backend constBackend, const WindowSpecification& specification, VkInstance vkInstance) {
 		{ Backend::Create(specification) } -> std::same_as<std::expected<std::unique_ptr<Backend>, WindowError>>;
 		{ backend.PollEvents() } -> std::same_as<void>;
 		{ constBackend.SwapBuffers() } -> std::same_as<void>;
 		{ constBackend.ShouldClose() } -> std::same_as<bool>;
+		{ constBackend.GetRequiredVulkanExtensions() } -> std::same_as<std::expected<std::span<const char* const>, VulkanWindowError>>;
+		{ constBackend.CreateVulkanSurface(vkInstance) } -> std::same_as<std::expected<VkSurfaceKHR, VulkanWindowError>>;
 	};
 
 	export class Window
@@ -41,6 +47,9 @@ namespace PgE
 		{
 			return _specification.Title;
 		}
+
+		[[nodiscard]] std::expected<std::span<const char* const>, VulkanWindowError> GetRequiredVulkanExtensions() const;
+		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance vkInstance) const;
 
 	private:
 		Window(std::unique_ptr<WindowBackend> backend, WindowSpecification specification);

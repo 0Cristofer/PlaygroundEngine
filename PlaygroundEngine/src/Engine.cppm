@@ -5,6 +5,7 @@ export import PlaygroundEngine.GameObject;
 export import PlaygroundEngine.Window;
 
 import PlaygroundEngine.App;
+import PlaygroundEngine.RendererVulkan;
 
 import std;
 
@@ -30,6 +31,7 @@ namespace PgE
 	export enum class BootError : std::uint8_t
 	{
 		Platform = 1,
+		Rendering = 2,
 	};
 
 	export class AppDescriptorBase
@@ -68,6 +70,7 @@ namespace PgE
 
 	private:
 		[[nodiscard]] std::expected<void, BootError> BootPresentation();
+		[[nodiscard]] std::expected<void, BootError> BootRendering();
 
 		void Run();
 		void RunFrame();
@@ -78,6 +81,7 @@ namespace PgE
 		// Members double as the construction-order record: L1 first, then L2,
 		// app last; Shutdown() resets in reverse.
 		std::unique_ptr<Window> _window;
+		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<World> _world;
 		std::unique_ptr<AppBase> _app;
 	};

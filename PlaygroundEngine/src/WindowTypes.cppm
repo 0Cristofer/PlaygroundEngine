@@ -17,6 +17,12 @@ namespace PgE
 		WindowCreationFailed,
 	};
 
+	export enum class VulkanWindowError
+	{
+		ExtensionsUnavailable,
+		SurfaceCreationFailed
+	};
+
 	// The platform backend, forward-declared here so the primary interface can name it for
 	// the window's PIMPL pointer without pulling in a definition. The per-platform :backend
 	// partition completes it; consumers only ever see this incomplete name.
