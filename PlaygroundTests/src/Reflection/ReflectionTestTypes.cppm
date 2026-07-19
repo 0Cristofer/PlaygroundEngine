@@ -597,6 +597,26 @@ export namespace ReflectionTestTypes
 		int G = 0;
 	};
 
+	// A tag base: it holds no state, so it must contribute nothing to a rendering.
+	struct Tag
+	{};
+
+	struct TaggedValue : public Tag
+	{
+		int Value = 5;
+	};
+
+	// Everything this type renders comes from the base walk, so it must not render as a fieldless leaf.
+	struct InheritedOnly : public RootA
+	{};
+
+	// A base that renders itself: the string facet supersedes it, so it stays one named entry rather than
+	// being flattened into the derived type's fields.
+	struct DerivedFromString : public std::string
+	{
+		int Tag = 7;
+	};
+
 	// Construction fixtures: a value type with default, two-arg, explicit converting, and the implicit
 	// copy/move constructors.
 	struct Point
@@ -772,10 +792,10 @@ export namespace ReflectionTestTypes
 	// in-class-initialized static const with no out-of-line definition, whose address cannot be taken.
 	struct Registry
 	{
-		static const int MaxSlots = 8;
+		static constexpr int MaxSlots = 8;
 		static constexpr double Scale = 2.5;
 		static inline int Counter = 0;
-		static inline const std::string Label = "registry";
+		static constexpr std::string Label = "registry";
 
 		int Instance = 1;
 	};

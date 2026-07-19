@@ -120,6 +120,38 @@ partition.
   and `RefQual` off the object type. A **by-value** object parameter (`this Self`) is const-callable (a copy
   leaves the caller's object untouched), so `ObjectIsConstCallable` treats const-ref and by-value alike and a
   mutable lvalue-ref or rvalue-ref as not.
+## Invokers defeat lazy member instantiation
+
+Reflecting a type transitively reflects the type graph of every field, base, signature and operator, which is
+what makes an arbitrary foreign type (a Vulkan struct, a `std` container) describable without any cooperation
+from it. The **metadata** half of that walk is declaration-only and safe. The **invoker** half is not: the
+thunk emits a real call (`:FunctionsBuilder`'s `DoCall`), which odr-uses the function and forces its body to
+be instantiated.
+
+C++ guarantees a member of a class template is instantiated only when used. Reflection uses *every* member, so
+a member whose declaration is fine but whose body is ill-formed for this instantiation, legal and common,
+breaks the build for the whole type. `reverse_iterator::operator-` over a bidirectional iterator and
+`tuple::swap` over a const element are exactly this shape, which is why the failures land in `std` internals
+rather than in the type asked for. Nothing about it is `std`-specific: 
+
+```cpp
+template <typename T> struct Holder { T Value; void Bad() { Value.NoSuchMember(); } };
+```
+
+`TypeOf<Holder<int>>()` fails to compile, and no caller ever names `Bad`.
+
+**It is not SFINAE-detectable.** `IsInvocable`'s requires-expression checks the *call expression*, which needs
+only the declaration; a body error is outside the immediate context, so the check passes and `InvokeThunk`
+then hard-errors. This is the same class of trap as the `consteval` and deleted cases documented above, but
+strictly worse, because those are stated facts readable off the declaration and this one is not readable at
+all. The seam to build on is that `MakeInvoker` already yields a **null invoker** for the cases it can refuse:
+a `FunctionInfo` with no thunk is an established, tested shape, so the fix is to widen what reaches it (a
+depth or opt-in policy separating the type asked for from types reached through it), not to invent a mechanism.
+
+Measured on GCC 16: `std::pair` and `std::variant` reflect; `std::optional` ICEs cc1plus; `std::unique_ptr`,
+`std::tuple` and `std::map` fail to compile. `std::variant` reflects as an opaque leaf (no facet, no fields),
+which is a silent answer rather than an error and the more dangerous shape for a serializer.
+
 ## The argument binder
 
 `:ArgumentBinding` is the shared machinery every erased callable uses: parameter metadata, the
@@ -414,13 +446,41 @@ no facet kind:
 
 `ObjectToString(typeInfo, obj)` is total: every reflected value renders.
 
-- A type **with** a stringify thunk renders through it: a formattable leaf, the type-name placeholder for
-  an unformattable leaf, or a facet that installed its own rendering (a quoted string, a `[...]` sequence,
-  an enumerator name). The renderer names no facet; each facet's rendering lives in the thunk its
-  `TypeInfoTraits` set, and a sequence thunk recurses back into `ObjectToString` for its elements.
-- A type **without** a thunk is a struct, rendered by walking its fields. Field access prefers the borrow
-  (`GetRef`, reads in place at any size); the stack-slot fallback is for a non-addressable field (a
-  bitfield), always a small trivial type that fits the slot.
+Rendering is **debug-focused**, so the policy lives entirely in the renderer. The builder stays minimal:
+`MakeType` hands out a stringify thunk on fields alone (`Fields.empty()`, plus the `is_object` and
+complete-type guards, since `StringifyValue` must be able to dereference). It does not model "should this
+be walked"; the renderer decides which of the two wins.
+
+- A type with **nothing to walk** (no fields, no bases) renders through its thunk: a formattable leaf, the
+  type-name placeholder for an unformattable leaf, or a facet that installed its own rendering (a quoted
+  string, a `[...]` sequence, an enumerator name). The renderer names no facet; each facet's rendering lives
+  in the thunk its `TypeInfoTraits` set, and a sequence thunk recurses back into `ObjectToString`.
+- A type with **members** is walked, bases first, then fields, even when it also has a thunk. Field access
+  prefers the borrow (`GetRef`, reads in place at any size); the stack-slot fallback is for a
+  non-addressable field (a bitfield), always a small trivial type that fits the slot.
+
+`GetFields()` is direct members only, so inherited fields are reached through `GetBases()`. The walk
+recurses into each base through `BaseInfo::Upcast(obj)`, which shifts the object address by the base
+offset: every member thunk is built against its **declaring** type (`static_cast<Owner*>(obj)`), so an
+inherited field handed the derived pointer would read the wrong bytes for any base past the first.
+
+Each base takes one of three paths:
+
+- A base **with members** is flattened: its fields render inline, so an inherited field reads exactly like
+  one declared on the derived type. Access does not filter, a private base renders like a public one,
+  matching the field walk's `access_context::unchecked()`.
+- A base **backed by a facet** (no members but a facet and a thunk, as on a `std::string` base) stays one
+  named entry, labelled with the base's *display name*, since a specialization has no identifier.
+- An **empty base** (no members, no facet: a tag or policy type) contributes nothing. It holds no state, so
+  emitting the type-name placeholder its leaf thunk would produce is noise, and marker bases are common
+  enough that it would appear in most renderings.
+
+Two consequences worth knowing:
+
+- A repeated non-virtual base renders once per subobject, so a diamond yields the same field name twice.
+  Accepted: the output is a debug view, not a serialization format.
+- Walking wins over a thunk whenever a type has members, so a user `std::formatter` is not consulted for a
+  type that has fields *or* bases. This is long-standing behavior for fields; bases now match it.
 
 ## Validated `std::meta` patterns (GCC 16)
 

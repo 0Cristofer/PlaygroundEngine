@@ -37,6 +37,19 @@ namespace PgE
 			return _offset;
 		}
 
+		// The base subobject inside a derived object. Every erased member thunk (a field getter, a function
+		// invoker) is built against its declaring type, so reaching an inherited member means handing it this
+		// pointer rather than the derived one, which only coincides when the base sits at offset 0.
+		[[nodiscard]] void* Upcast(void* derived) const pre(derived != nullptr)
+		{
+			return static_cast<std::byte*>(derived) + _offset;
+		}
+
+		[[nodiscard]] const void* Upcast(const void* derived) const pre(derived != nullptr)
+		{
+			return static_cast<const std::byte*>(derived) + _offset;
+		}
+
 		[[nodiscard]] std::span<const AnnotationInfo> GetAnnotations() const
 		{
 			return _annotations;

@@ -2,7 +2,11 @@
 
 Use cases and requirements for the reflection system: the substrate for serialization, replication, editor tooling, GPU interop, and C#/visual-scripting integration. Engine-wide decisions referenced here live in [CoreConventions.md](CoreConventions.md).
 
-**Status:** use cases defined. Base API (`TypeInfo`, `FieldInfo`, `FuncInfo`, `TypeRegistry`) not yet designed.
+**Status:** the typed core is implemented and tested (`TypeInfo`, `FieldInfo`, `FuncInfo` and the rest of the
+type model, in `PlaygroundEngine/src/Reflection/`). `TypeRegistry` is the one piece of the base API still
+undesigned, and it belongs to the layer above: everything the registry needs from the core exists, since a
+`TypeInfo` stores only non-owning spans and requires no static storage duration. The known core-level
+limitation is invoker-forced instantiation ([ReflectionInternals.md](ReflectionInternals.md#invokers-defeat-lazy-member-instantiation)).
 
 ## Constraints
 
@@ -130,4 +134,8 @@ Overload disambiguation and cross-build function identity are deferred to the st
 
 ## Next Step
 
-Design the base API: `TypeInfo`, `FieldInfo`, `FuncInfo`, `TypeRegistry`, shapes, ownership, the typed and erased surfaces, and how providers populate them.
+Close the invoker-forced-instantiation limitation
+([ReflectionInternals.md](ReflectionInternals.md#invokers-defeat-lazy-member-instantiation)): decide the policy
+that separates the type asked for from the types reached through it, so that reflecting a type can never fail
+to compile because of a member nobody calls. This is the only known gap in the core itself; the registry, the
+provider seam, stable IDs, `Poly<T>` and the erased sugar (`Equals`, `CopyTo`) are all the layer above.
