@@ -1,8 +1,12 @@
 module PlaygroundEngine.Reflection.Core;
 
 import :FieldInfo;
+import :StaticFieldInfo;
 import :FunctionInfo;
+import :OperatorInfo;
+import :ConversionInfo;
 import :ConstructorInfo;
+import :NestedTypeInfo;
 import :TypedRef;
 import :Facets;
 
@@ -63,6 +67,22 @@ namespace PgE
 			if (function.GetIdentifier() == identifier)
 			{
 				matches.push_back(&function);
+			}
+		}
+
+		return matches;
+	}
+
+	std::vector<const OperatorInfo*> TypeInfo::FindOperators(const OperatorKind kind) const
+	{
+		// One operator kind can have several overloads (operator+ on different right-hand types), so this
+		// returns all of them, the way FindFunctionsByIdentifier returns every overload of a name.
+		std::vector<const OperatorInfo*> matches;
+		for (const OperatorInfo& op : _operators)
+		{
+			if (op.GetOperator() == kind)
+			{
+				matches.push_back(&op);
 			}
 		}
 
@@ -139,6 +159,32 @@ namespace PgE
 		}
 
 		return (*selected)->Construct(args, slot);
+	}
+
+	const StaticFieldInfo* TypeInfo::FindStaticFieldByIdentifier(const std::string_view identifier) const
+	{
+		for (const StaticFieldInfo& field : _staticFields)
+		{
+			if (field.GetIdentifier() == identifier)
+			{
+				return &field;
+			}
+		}
+
+		return nullptr;
+	}
+
+	const NestedTypeInfo* TypeInfo::FindNestedType(const std::string_view identifier) const
+	{
+		for (const NestedTypeInfo& nested : _nestedTypes)
+		{
+			if (nested.GetIdentifier() == identifier)
+			{
+				return &nested;
+			}
+		}
+
+		return nullptr;
 	}
 
 	const FieldInfo* TypeInfo::FindFieldByIdentifier(const std::string_view identifier) const

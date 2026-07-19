@@ -60,10 +60,13 @@ target_sources(
 		src/Reflection/ReflectionFunctionTests.cpp
 		src/Reflection/ReflectionFieldTests.cpp
 		src/Reflection/ReflectionTypeGraphTests.cpp
+		src/Reflection/ReflectionExtractionTests.cpp
 		src/Reflection/ReflectionConstructionTests.cpp
+		src/Reflection/ReflectionOperatorTests.cpp
 		src/Reflection/ReflectionEnumTests.cpp
 		src/Reflection/ReflectionAnnotationTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp
+		src/Reflection/ReflectionNamespaceTests.cpp
 		src/LogTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp

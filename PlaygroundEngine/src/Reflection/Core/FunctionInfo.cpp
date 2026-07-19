@@ -17,11 +17,6 @@ namespace PgE
 		return _params;
 	}
 
-	bool FunctionInfo::IsConst() const
-	{
-		return _constCallable;
-	}
-
 	std::expected<void, InvokeError> FunctionInfo::Invoke(void* obj, const std::span<const TypedRef> args, const TypedRef& ret) const
 	{
 		if (!_invoke)
@@ -39,7 +34,7 @@ namespace PgE
 			return std::unexpected(InvokeError{.Reason = InvokeError::NotInvocable, .ArgumentIndex = 0});
 		}
 
-		if (!IsConst())
+		if (!IsConstCallable())
 		{
 			return std::unexpected(InvokeError{InvokeError::ConstViolation, 0});
 		}

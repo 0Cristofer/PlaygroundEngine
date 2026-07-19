@@ -49,10 +49,16 @@ namespace PgE::detail
 
 		Field* source = static_cast<Field*>(in.Data);
 
+		// Assignability is asked of the member itself, not of the decayed type: a volatile class-typed member is
+		// not assignable from a plain value even though its decayed type is. MakeFieldSetter guards on exactly
+		// these two questions, so the emitted body and the guard cannot disagree.
+		constexpr bool copyAssignable = requires(Owner* owner, Field* value) { owner->[:MetaField:] = *value; };
+		constexpr bool moveAssignable = requires(Owner* owner, Field* value) { owner->[:MetaField:] = std::move(*value); };
+
 		// A move-only field is writable only through a move (in.Movable, and only from a mutable source);
 		// a copy-only field only through a copy. A field that supports both picks by the caller's flag.
 		const bool moveAllowed = in.Movable && !in.IsConst;
-		if constexpr (std::is_copy_assignable_v<Field> && std::is_move_assignable_v<Field>)
+		if constexpr (copyAssignable && moveAssignable)
 		{
 			if (moveAllowed)
 			{
@@ -63,7 +69,7 @@ namespace PgE::detail
 				static_cast<Owner*>(obj)->[:MetaField:] = *source;
 			}
 		}
-		else if constexpr (std::is_move_assignable_v<Field>)
+		else if constexpr (moveAssignable)
 		{
 			if (!moveAllowed)
 			{
@@ -82,10 +88,14 @@ namespace PgE::detail
 	template <std::meta::info MetaType, std::meta::info MetaField>
 	consteval FieldGetter MakeFieldGetter()
 	{
-		// A move-only member cannot be copied into the caller slot; it has no value getter (NotReadable).
+		// Mirror FieldGetThunk exactly rather than approximating it with a trait on the decayed type: a
+		// move-only member cannot be copied into the caller slot, and neither can a volatile class-typed one
+		// (no copy constructor binds a volatile lvalue). Both reflect with no value getter (NotReadable).
+		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
-		if constexpr (std::is_copy_constructible_v<Field>)
+
+		if constexpr (requires(const Owner* owner, Field* slot) { std::construct_at(slot, owner->[:MetaField:]); })
 		{
 			return &FieldGetThunk<MetaType, MetaField>;
 		}
@@ -100,10 +110,23 @@ namespace PgE::detail
 	{
 		// const, reference, and non-assignable members have no value setter (NotWritable). A member that
 		// is only move-assignable gets a setter that requires the caller's move flag.
+		using Owner = [:MetaType:];
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
-		if constexpr (!std::is_const_v<std::remove_reference_t<Declared>> && !std::is_reference_v<Declared> &&
-					  (std::is_copy_assignable_v<Field> || std::is_move_assignable_v<Field>))
+
+		// FieldSetThunk's own two questions, asked of the member rather than of the decayed type: a volatile
+		// class-typed member is assignable in its decayed form but not through the member, so guarding on the
+		// decayed type emitted a body that could not compile.
+		constexpr bool copyAssignable = requires(Owner* owner, Field* value) { owner->[:MetaField:] = *value; };
+		constexpr bool moveAssignable = requires(Owner* owner, Field* value) { owner->[:MetaField:] = std::move(*value); };
+
+		// A reference member is excluded by decision, not by assignability: assigning through it would write the
+		// referent, and a reference member is never rebindable.
+		if constexpr (std::is_const_v<std::remove_reference_t<Declared>> || std::is_reference_v<Declared>)
+		{
+			return nullptr;
+		}
+		else if constexpr (copyAssignable || moveAssignable)
 		{
 			return &FieldSetThunk<MetaType, MetaField>;
 		}
@@ -123,7 +146,9 @@ namespace PgE::detail
 		auto&& lvalue = static_cast<Owner*>(obj)->[:MetaField:];
 
 		return TypedRef{.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
-						.Data = const_cast<void*>(static_cast<const void*>(std::addressof(lvalue))),
+						// Cast through const volatile void* so a volatile member (a memory-mapped register) does
+						// not fail the cast; the erased Data is a plain void*, with constness kept on IsConst.
+						.Data = const_cast<void*>(static_cast<const volatile void*>(std::addressof(lvalue))),
 						.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>};
 	}
 
@@ -141,17 +166,42 @@ namespace PgE::detail
 		}
 	}
 
+	template <const std::meta::info MetaField>
+	consteval FieldTraits MakeFieldTraits()
+	{
+		const auto [bytes, bits] = std::meta::offset_of(MetaField);
+		const bool isBitField = std::meta::is_bit_field(MetaField);
+
+		// Read the qualifiers off the undecayed declared type, as MakeParameterTraits does: is_const is asked
+		// of the referenced type so const int& reports const, not the reference's own (never present) constness.
+		constexpr std::meta::info declared = std::meta::type_of(MetaField);
+
+		return FieldTraits{
+			.Access = AccessOf(MetaField),
+			.ByteOffset = static_cast<int>(bytes),
+			.BitOffset = static_cast<int>(bits),
+			.IsBitField = isBitField,
+			// bit_size_of is only defined for a bitfield, so the query is guarded, not merely filtered.
+			.BitSize = isBitField ? static_cast<int>(std::meta::bit_size_of(MetaField)) : 0,
+			.HasDefaultInitializer = std::meta::has_default_member_initializer(MetaField),
+			.IsMutable = std::meta::is_mutable_member(MetaField),
+			.IsConst = std::meta::is_const_type(std::meta::remove_reference(declared)),
+			.IsVolatile = std::meta::is_volatile_type(std::meta::remove_reference(declared)),
+			.IsLvalueReference = std::meta::is_lvalue_reference_type(declared),
+			.IsRvalueReference = std::meta::is_rvalue_reference_type(declared),
+		};
+	}
+
 	template <std::meta::info MetaType, const std::meta::info MetaField>
 	consteval FieldInfo MakeField()
 	{
-		const auto [bytes, bits] = std::meta::offset_of(MetaField);
 		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), IdentifierOf(MetaField),
-						 DisplayStringOf(MetaField), bytes, bits, MakeFieldGetter<MetaType, MetaField>(), MakeFieldSetter<MetaType, MetaField>(),
-						 MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
+						 DisplayStringOf(MetaField), ScopePathOf<MetaField>(), MakeFieldTraits<MetaField>(), MakeFieldGetter<MetaType, MetaField>(),
+						 MakeFieldSetter<MetaType, MetaField>(), MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeFieldArray(std::index_sequence<I...>)
+	consteval std::array<FieldInfo, sizeof...(I)> MakeFieldArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members =
 			std::define_static_array(std::meta::nonstatic_data_members_of(MetaType, std::meta::access_context::unchecked()));

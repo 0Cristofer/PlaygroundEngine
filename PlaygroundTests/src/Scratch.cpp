@@ -1,6 +1,8 @@
 // Development scratchpad, NOT a real test: a hidden, skipped doctest case for running engine code by hand
 // and watching log output (the harness links the engine and inits logging). Run via the "Scratchpad test"
 // IDE config, or: ./build/linux/PlaygroundTests/Debug/PlaygroundTests --test-case=scratch --no-skip
+#include <meta>
+
 #include <doctest/doctest.h>
 
 #include "PlaygroundEngine/Log.h"
@@ -8,87 +10,90 @@
 import std;
 import PlaygroundEngine.Log;
 import PlaygroundEngine.Reflection;
-import PlaygroundEngine.Window;
 
-// ReSharper disable CppEnumeratorNeverUsed
-namespace
+namespace ScratchSweep
 {
-	// Move-only but move-assignable (like unique_ptr / Poly): copy ctor deleted, move ops defaulted.
-	struct Movable
+	struct Widget
 	{
-		int Tag = 0;
-		Movable() = default;
-		Movable(const Movable&) = delete;
-		Movable(Movable&&) = default;
-		Movable& operator=(Movable&&) = default;
+		int Value = 0;
 	};
 
-	struct Holder
+	enum class Color
 	{
-		Movable Item;
+		Red
 	};
 
-	enum class Colors
+	using WidgetAlias = Widget;
+
+	int Spawn(const int count)
 	{
-		Red = 1,
-		Green = 2,
-		Yellow = 3,
-		Blue = 4
-	};
+		return count;
+	}
+
+	void Spawn()
+	{}
+
+	void Unique()
+	{}
+
+	int Counter = 7;
+	constexpr int MaxSlots = 8;
+
+	template <typename T>
+	struct Grid
+	{};
+
+	template <typename T>
+	void Generic(T)
+	{}
+
+	namespace Inner
+	{
+		struct Deep
+		{};
+	}
+
+	inline namespace V1
+	{
+		struct InInline
+		{};
+	}
+
+	namespace Alias = Inner;
 }
-
-// ReSharper restore CppEnumeratorNeverUsed
 
 TEST_CASE("scratch" * doctest::skip())
 {
-	Holder holder{};
-	const PgE::TypeInfo& type = PgE::TypeOf<Holder>();
+	const PgE::NamespaceInfo& sweep = PgE::NamespaceOf<^^ScratchSweep>();
 
-	const auto valueGet = type.GetFieldAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "value get: has_value={} reason={}", valueGet.has_value(), valueGet ? "" : PgE::ToString(valueGet.error().Reason));
+	PGE_LOG(Info, "namespace {}: types={} functions={} variables={} namespaces={}", sweep.GetIdentifier(), sweep.GetTypes().size(),
+			sweep.GetFunctions().size(), sweep.GetVariables().size(), sweep.GetNamespaces().size());
 
-	Movable source;
-	source.Tag = 5;
-	const auto valueSet = type.SetFieldAs(&holder, "Item", source);
-	PGE_LOG(Info, "value set: has_value={} reason={}", valueSet.has_value(), valueSet ? "" : PgE::ToString(valueSet.error().Reason));
-
-	auto borrow = type.GetFieldRefAs<Movable>(&holder, "Item");
-	PGE_LOG(Info, "borrow: has_value={}", borrow.has_value());
-	if (borrow)
+	for (const PgE::NestedTypeInfo& type : sweep.GetTypes())
 	{
-		Movable replacement;
-		replacement.Tag = 42;
-		borrow->get() = std::move(replacement);
-		PGE_LOG(Info, "borrow move-assigned; Item.Tag={}", holder.Item.Tag);
+		PGE_LOG(Info, "  type {} alias={} resolves to {}", type.GetIdentifier(), type.IsAlias(), type.GetTypeInfo().GetIdentifier());
 	}
 
-	const auto& typeOfColors = PgE::TypeOf<Colors>();
-	constexpr auto color = Colors::Blue;
-	PGE_LOG(Info, "color: {}", PgE::ToString(color));
-	for (auto enumeratorInfo : typeOfColors.GetFacet<PgE::EnumerationFacet>()->GetEnumerators())
+	for (const PgE::FunctionInfo* function : sweep.GetFunctions())
 	{
-		PGE_LOG(Info, "enumerator info name: {}", enumeratorInfo.GetIdentifier());
+		PGE_LOG(Info, "  function {} free={} params={} deleted={}", function->GetIdentifier(), function->IsFreeFunction(),
+				function->GetParams().size(), function->IsDeleted());
 	}
 
-	const auto& typeOfTypeInfo = PgE::TypeOf<PgE::TypeInfo>();
-	PGE_LOG(Info, "type of typeOfTypeInfo: {}", PgE::ToString(typeOfTypeInfo));
-
-	auto window = PgE::Window::Create(PgE::WindowSpecification{.Title = "Playground Window", .Width = 960, .Height = 540});
-
-	if (!window)
+	for (const PgE::StaticFieldInfo* variable : sweep.GetVariables())
 	{
-		PGE_LOG(Error, "Window creation failed: reason={}", static_cast<int>(window.error()));
-		return;
+		PGE_LOG(Info, "  variable {} type={} constantReadable={} read={}", variable->GetIdentifier(), variable->GetTypeInfo().GetIdentifier(),
+				variable->IsConstantReadable(), variable->GetAs<int>().value_or(-1));
 	}
 
-	PGE_LOG(Info, "Window up: {}x{} \"{}\"", (*window)->GetWidth(), (*window)->GetHeight(), (*window)->GetTitle());
-
-	while (!(*window)->ShouldClose())
+	for (const PgE::NamespaceInfo* nested : sweep.GetNamespaces())
 	{
-		(*window)->PollEvents();
-		(*window)->SwapBuffers();
-		std::this_thread::sleep_for(std::chrono::milliseconds(16));
+		PGE_LOG(Info, "  namespace {} types={} functions={}", nested->GetIdentifier(), nested->GetTypes().size(), nested->GetFunctions().size());
 	}
 
-	PGE_LOG(Info, "Window loop finished (shouldClose={})", (*window)->ShouldClose());
+	const auto unique =
+		std::ranges::find_if(sweep.GetFunctions(), [](const PgE::FunctionInfo* function) { return function->GetIdentifier() == "Unique"; });
+	PGE_LOG(Info, "identity: swept function == named function: {}", *unique == &PgE::detail::FunctionOfMeta<^^ScratchSweep::Unique>());
+	PGE_LOG(Info, "identity: namespace alias == namespace: {}",
+			&PgE::NamespaceOf<^^ScratchSweep::Alias>() == &PgE::NamespaceOf<^^ScratchSweep::Inner>());
 }

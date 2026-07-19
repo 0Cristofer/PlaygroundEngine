@@ -9,7 +9,7 @@ namespace PgE
 {
 	int FieldInfo::GetByteOffset() const
 	{
-		return _byteOffset;
+		return _traits.ByteOffset;
 	}
 
 	const TypeInfo& FieldInfo::GetTypeInfo() const

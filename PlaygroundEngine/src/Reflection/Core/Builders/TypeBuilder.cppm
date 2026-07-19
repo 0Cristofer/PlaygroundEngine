@@ -11,9 +11,17 @@ export import :AnnotationsBuilder;
 export import :ArgumentBinding;
 export import :FacetsBuilder;
 export import :FieldsBuilder;
+export import :StaticFieldsBuilder;
 export import :FunctionsBuilder;
+export import :OperatorsBuilder;
+export import :ConversionsBuilder;
 export import :BasesBuilder;
 export import :ConstructorsBuilder;
+export import :DestructorBuilder;
+export import :NestedTypesBuilder;
+export import :TemplateBuilder;
+export import :FunctionSignatureBuilder;
+export import :MemberPointerBuilder;
 export import :TraitsBuilder;
 import :TypeInfo;
 import :Facets;
@@ -27,16 +35,52 @@ import std;
 namespace PgE::detail
 {
 	template <std::meta::info MetaType>
+	consteval TypeReference MakeInnerType()
+	{
+		// Peel exactly one shape, so a walk chains: const Foo* yields const Foo, which yields Foo. cv is
+		// peeled before the others, since a const pointer is a cv node whose inner is the pointer.
+		if constexpr (std::meta::is_const_type(MetaType))
+		{
+			return TypeReferenceTo<std::meta::remove_const(MetaType)>();
+		}
+		else if constexpr (std::meta::is_volatile_type(MetaType))
+		{
+			return TypeReferenceTo<std::meta::remove_volatile(MetaType)>();
+		}
+		else if constexpr (std::meta::is_pointer_type(MetaType))
+		{
+			return TypeReferenceTo<std::meta::remove_pointer(MetaType)>();
+		}
+		else if constexpr (std::meta::is_reference_type(MetaType))
+		{
+			return TypeReferenceTo<std::meta::remove_reference(MetaType)>();
+		}
+		else if constexpr (std::meta::is_array_type(MetaType))
+		{
+			return TypeReferenceTo<std::meta::remove_extent(MetaType)>();
+		}
+		else
+		{
+			return TypeReference{};
+		}
+	}
+
+	template <std::meta::info MetaType>
 	consteval TypeInfo MakeType()
 	{
 		using T = [:MetaType:];
-		constexpr std::string_view identifier = IdentifierOf(MetaType);
+		constexpr std::string_view identifier = TypeIdentifierOf(MetaType);
 		constexpr std::string_view displayName = DisplayStringOf(MetaType);
 
 		static constexpr auto Fields = MakeFieldsFromType<MetaType>();
+		static constexpr auto StaticFields = MakeStaticFieldsFromType<MetaType>();
 		static constexpr auto Functions = MakeFunctionsFromType<MetaType>();
+		static constexpr auto Operators = MakeOperatorsFromType<MetaType>();
+		static constexpr auto Conversions = MakeConversionsFromType<MetaType>();
 		static constexpr auto Bases = MakeBasesFromType<MetaType>();
 		static constexpr auto Constructors = MakeConstructorsFromType<MetaType>();
+		static constexpr auto Destructor = MakeDestructor<MetaType>();
+		static constexpr auto NestedTypes = MakeNestedTypesFromType<MetaType>();
 
 		static constexpr auto Annotations = MakeAnnotations<MetaType>();
 
@@ -45,17 +89,19 @@ namespace PgE::detail
 		static constexpr auto Facets = MakeFacetsFromType<MetaType>();
 
 		// A fieldless object is a leaf: it stringifies through its (total) trait, so it always gets a thunk.
-		// is_object_v excludes void (a function return type reached here), where StringifyValue can't form a
-		// const T*. A type with fields has no thunk and is rendered structurally by ObjectToString instead.
-		if constexpr (Fields.empty() && std::is_object_v<T>)
+		// The guard excludes void (a function return type reached here) and an incomplete type (an opaque
+		// handle named by a pointer), neither of which StringifyValue can dereference.
+		if constexpr (Fields.empty() && std::is_object_v<T> && std::meta::is_complete_type(MetaType))
 		{
-			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, Bases, Constructors, MakeDestroyer<MetaType>(),
-							&StringifyValue<T>);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Operators, Conversions, Fields,
+							StaticFields, Bases, Constructors, Destructor, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), &StringifyValue<T>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, Annotations, traits, Facets, Functions, Fields, Bases, Constructors, MakeDestroyer<MetaType>(),
-							nullptr);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, Functions, Operators, Conversions, Fields,
+							StaticFields, Bases, Constructors, Destructor, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), nullptr);
 		}
 	}
 

@@ -8,6 +8,7 @@ import :TypeInfoTraits;
 
 import :TypeInfo;
 import :TypeReference;
+import :DeclarationInfo;
 
 import std;
 
@@ -16,8 +17,8 @@ import std;
 
 namespace PgE::detail
 {
-	// TypeOfMeta, TypeReferenceTo, IdentifierOf, DisplayStringOf are the exported facet-authoring toolkit;
-	// StringifyValue and IsClassOrUnion stay module-internal. See docs/ReflectionInternals.md (Facets).
+	// TypeOfMeta, TypeReferenceTo, IdentifierOf, TypeIdentifierOf, DisplayStringOf, and ScopePathOf are the
+	// exported facet-authoring toolkit; the rest stay module-internal. See docs/ReflectionInternals.md (Facets).
 
 	export template <std::meta::info MetaType>
 	constexpr const TypeInfo& TypeOfMeta();
@@ -46,10 +47,203 @@ namespace PgE::detail
 		return std::meta::display_string_of(entity);
 	}
 
+	export consteval bool IsImmediateFunction(const std::meta::info function)
+	{
+		// A consteval (immediate) callable cannot be called from a runtime thunk, and GCC 16's std::meta exposes
+		// no is_consteval; immediateness is also invisible to SFINAE (it is well-formed in every unevaluated
+		// context, so a requires-expression accepts it). The specifier before the signature is the only signal.
+		const std::string_view display = std::meta::display_string_of(function);
+		const std::size_t signature = display.find('(');
+		return display.substr(0, signature).contains("consteval");
+	}
+
+	consteval std::string_view FundamentalIdentifierOf(const std::meta::info type)
+	{
+		// A fundamental type has no identifier, so it is named from structure (kind, size, signedness) rather
+		// than spelling: stdlib-neutral, and a non-native provider can describe the same type with no C++ name.
+		// See docs/ReflectionInternals.md (structural naming) for the char and long double caveats.
+		if (type == ^^void)
+		{
+			return "void";
+		}
+		if (type == ^^decltype(nullptr))
+		{
+			return "nullptr_t";
+		}
+		if (type == ^^bool)
+		{
+			return "bool";
+		}
+
+		// Named by spelling: size and signedness alone collapse char, signed char, and int8_t, which are
+		// distinct types, and char is the string element type StringFacet keys on.
+		if (type == ^^char)
+		{
+			return "char";
+		}
+		if (type == ^^wchar_t)
+		{
+			return "wchar_t";
+		}
+		if (type == ^^char8_t)
+		{
+			return "char8_t";
+		}
+		if (type == ^^char16_t)
+		{
+			return "char16_t";
+		}
+		if (type == ^^char32_t)
+		{
+			return "char32_t";
+		}
+
+		// Not named by size: x86 stores an 80-bit extended long double in 16 bytes, so a width would
+		// claim a binary128 it is not, and would collide with a real one.
+		if (type == ^^long double)
+		{
+			return "longdouble";
+		}
+
+		if (std::meta::is_integral_type(type))
+		{
+			const bool isSigned = std::meta::is_signed_type(type);
+			switch (std::meta::size_of(type))
+			{
+			case 1:
+				return isSigned ? "int8" : "uint8";
+			case 2:
+				return isSigned ? "int16" : "uint16";
+			case 4:
+				return isSigned ? "int32" : "uint32";
+			case 8:
+				return isSigned ? "int64" : "uint64";
+			case 16:
+				return isSigned ? "int128" : "uint128";
+			default:
+				return {};
+			}
+		}
+
+		if (std::meta::is_floating_point_type(type))
+		{
+			switch (std::meta::size_of(type))
+			{
+			case 2:
+				return "float16";
+			case 4:
+				return "float32";
+			case 8:
+				return "float64";
+			default:
+				return {};
+			}
+		}
+
+		return {};
+	}
+
+	export consteval std::string_view TypeIdentifierOf(const std::meta::info type)
+	{
+		// A cv-qualified type is a decomposition node, not a named one: the consumer renders it as const<inner>,
+		// so naming it here would report "int32" for both int and const int.
+		if (std::meta::has_identifier(type))
+		{
+			return std::meta::identifier_of(type);
+		}
+
+		if (std::meta::is_const_type(type) || std::meta::is_volatile_type(type))
+		{
+			return {};
+		}
+
+		return FundamentalIdentifierOf(type);
+	}
+
+	consteval AccessKind AccessOf(const std::meta::info entity)
+	{
+		if (std::meta::is_public(entity))
+		{
+			return AccessKind::Public;
+		}
+		if (std::meta::is_protected(entity))
+		{
+			return AccessKind::Protected;
+		}
+
+		// Only a class member or a base specifier has access; a private one answers false to both predicates
+		// above. Everything else is namespace-scope, which has no access at all. A base specifier is not a
+		// class member, so both predicates are needed. See docs/ReflectionExtraction.md (access).
+		if (std::meta::is_class_member(entity) || std::meta::is_base(entity))
+		{
+			return AccessKind::Private;
+		}
+
+		return AccessKind::None;
+	}
+
+	consteval std::vector<std::meta::info> GetScopeChain(const std::meta::info entity)
+	{
+		// has_parent is the guard, not an optimization: parent_of throws for an entity that has no parent
+		// (a fundamental type, void, a pointer), which would abort the whole build. The walk stops at the
+		// first unnamed scope, which is the global namespace.
+		std::vector<std::meta::info> parts;
+
+		std::meta::info current = entity;
+		while (std::meta::has_parent(current))
+		{
+			current = std::meta::parent_of(current);
+			if (!std::meta::has_identifier(current))
+			{
+				break;
+			}
+
+			parts.push_back(current);
+		}
+
+		std::ranges::reverse(parts);
+		return parts;
+	}
+
+	template <std::meta::info Entity, std::size_t... I>
+	consteval std::array<std::string_view, sizeof...(I)> MakeScopeArray(std::index_sequence<I...>)
+	{
+		// The return type is spelled out rather than deduced to dodge a GCC bug: with `auto`, reflecting a
+		// reference variable fails with "use of MakeScopeArray before deduction of auto", though nothing here
+		// reads the entity's type. See docs/ReflectionExtraction.md (scope path).
+
+		// The chain is collected as reflections, not string_views: define_static_array needs a structural
+		// element type and string_view is not one, so the identifiers are read per index instead. They need no
+		// freezing of their own: identifier_of already yields static storage, which IdentifierOf relies on too.
+		[[maybe_unused]] constexpr auto scopes = std::define_static_array(GetScopeChain(Entity));
+		return std::array<std::string_view, sizeof...(I)>{std::meta::identifier_of(scopes[I])...};
+	}
+
+	export template <std::meta::info Entity>
+	constexpr std::span<const std::string_view> ScopePathOf()
+	{
+		constexpr auto scopeCount = GetScopeChain(Entity).size();
+		static constexpr auto Path = MakeScopeArray<Entity>(std::make_index_sequence<scopeCount>{});
+		return Path;
+	}
+
 	consteval bool IsClassOrUnion(const std::meta::info type)
 	{
 		// Both carry reflectable data members and member functions, but is_class_type is false for a
-		// union, so the member-walking builders must admit both.
+		// union, so the member-walking builders must admit both. A cv-qualified class is excluded: it is a
+		// decomposition node. See docs/ReflectionInternals.md (compound types, incomplete types).
+		if (std::meta::is_const_type(type) || std::meta::is_volatile_type(type))
+		{
+			return false;
+		}
+
+		// An incomplete type has no members to walk, and every walk throws on one. It is reachable now that a
+		// pointer names its pointee, which is the whole point of an opaque handle or a PIMPL.
+		if (!std::meta::is_complete_type(type))
+		{
+			return false;
+		}
+
 		return std::meta::is_class_type(type) || std::meta::is_union_type(type);
 	}
 }

@@ -46,33 +46,71 @@ namespace PgE
 	// from FunctionInfo, sharing only the argument binder. See docs/ReflectionInternals.md (lifetime ops).
 	export using Constructor = std::expected<void, ConstructError> (*)(std::span<const TypedRef> args, const TypedRef& slot);
 
+	export struct ConstructorTraits
+	{
+		// The language facts of one constructor, the shape FunctionTraits uses. IsDeleted and IsConsteval
+		// name the reasons a constructor reflects with no thunk that are language facts, so a null thunk is a
+		// stated absence: with Access telling apart an inaccessible one, a residual null means "unbindable".
+		AccessKind Access = AccessKind::Public;
+		ConstructorKind Kind = ConstructorKind::Other;
+		bool IsExplicit = false;
+
+		bool IsDeleted = false;
+		bool IsConsteval = false;
+
+		// A compiler-generated constructor (an implicit or = default copy/move/default ctor), as opposed to a
+		// user-written one. What tells a serializer the copy is memberwise, not custom.
+		bool IsDefaulted = false;
+	};
+
 	export class ConstructorInfo : public DeclarationInfo
 	{
 	public:
 		constexpr ConstructorInfo(const std::span<const ParameterInfo> params,
-								  const ConstructorKind kind,
-								  const bool isExplicit,
 								  const std::string_view displayName,
+								  const std::span<const std::string_view> scopePath,
+								  const ConstructorTraits& traits,
 								  const Constructor construct,
 								  const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo({}, displayName, annotations), _params(params), _kind(kind), _isExplicit(isExplicit), _construct(construct)
+			: DeclarationInfo({}, displayName, scopePath, annotations), _params(params), _traits(traits), _construct(construct)
 		{}
 
 		std::span<const ParameterInfo> GetParams() const
 		{
 			return _params;
 		}
+		const ConstructorTraits& GetTraits() const
+		{
+			return _traits;
+		}
 		ConstructorKind GetKind() const
 		{
-			return _kind;
+			return _traits.Kind;
 		}
 		bool IsExplicit() const
 		{
-			return _isExplicit;
+			return _traits.IsExplicit;
+		}
+		AccessKind GetAccess() const
+		{
+			return _traits.Access;
+		}
+		bool IsDeleted() const
+		{
+			return _traits.IsDeleted;
+		}
+		bool IsConsteval() const
+		{
+			return _traits.IsConsteval;
+		}
+		bool IsDefaulted() const
+		{
+			return _traits.IsDefaulted;
 		}
 
-		// A constructor whose erased path is unusable (deleted, inaccessible, or unbindable) reflects as
-		// metadata with no thunk, the way an rvalue-qualified function reflects with no invoker.
+		// A constructor whose erased path is unusable (deleted, inaccessible, consteval, or unbindable)
+		// reflects as metadata with no thunk; the traits name which, the way FunctionTraits does for a
+		// function with no invoker.
 		bool CanConstruct() const
 		{
 			return _construct != nullptr;
@@ -119,8 +157,7 @@ namespace PgE
 
 	private:
 		std::span<const ParameterInfo> _params;
-		ConstructorKind _kind = ConstructorKind::Other;
-		bool _isExplicit = false;
+		ConstructorTraits _traits;
 		Constructor _construct = nullptr;
 	};
 }

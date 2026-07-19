@@ -9,13 +9,6 @@ namespace PgE
 {
 	export class TypeInfo;
 
-	export enum class AccessKind : std::uint8_t
-	{
-		Public,
-		Protected,
-		Private,
-	};
-
 	export class BaseInfo
 	{
 		// A direct base class of a reflected type. Offset is a true layout constant (virtual inheritance is

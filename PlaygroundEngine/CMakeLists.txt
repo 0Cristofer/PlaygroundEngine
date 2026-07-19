@@ -126,12 +126,21 @@ target_sources(
 				src/Reflection/Core/Builders/MetaCommon.cppm
 				src/Reflection/Core/Builders/AnnotationsBuilder.cppm
 				src/Reflection/Core/Builders/FieldsBuilder.cppm
+				src/Reflection/Core/Builders/StaticFieldsBuilder.cppm
+				src/Reflection/Core/Builders/TemplateBuilder.cppm
 				src/Reflection/Core/Builders/FunctionsBuilder.cppm
+				src/Reflection/Core/Builders/OperatorsBuilder.cppm
+				src/Reflection/Core/Builders/ConversionsBuilder.cppm
 				src/Reflection/Core/Builders/BasesBuilder.cppm
 				src/Reflection/Core/Builders/ArgumentBinding.cppm
 				src/Reflection/Core/Builders/ConstructorsBuilder.cppm
+				src/Reflection/Core/Builders/DestructorBuilder.cppm
+				src/Reflection/Core/Builders/NestedTypesBuilder.cppm
+				src/Reflection/Core/Builders/FunctionSignatureBuilder.cppm
+				src/Reflection/Core/Builders/MemberPointerBuilder.cppm
 				src/Reflection/Core/Builders/TraitsBuilder.cppm
 				src/Reflection/Core/Builders/TypeBuilder.cppm
+				src/Reflection/Core/Builders/NamespaceBuilder.cppm
 				src/Reflection/Core/Builders/FacetsBuilder.cppm
 				src/Reflection/Core/Facets.cppm
 				src/Reflection/Builtins/Builders/EnumerationFacetBuilder.cppm
@@ -143,15 +152,25 @@ target_sources(
 				src/Reflection/Builtins/SequenceFacet.cppm
 				src/Reflection/Builtins/Builtins.cppm
 				src/Reflection/Core/FieldInfo.cppm
+				src/Reflection/Core/StaticFieldInfo.cppm
+				src/Reflection/Core/TemplateInfo.cppm
+				src/Reflection/Core/FunctionSignatureInfo.cppm
+				src/Reflection/Core/MemberPointerInfo.cppm
 				src/Reflection/Core/FunctionInfo.cppm
+				src/Reflection/Core/OperatorInfo.cppm
+				src/Reflection/Core/ConversionInfo.cppm
 				src/Reflection/Core/BaseInfo.cppm
 				src/Reflection/Core/ParameterInfo.cppm
 				src/Reflection/Core/ConstructorInfo.cppm
+				src/Reflection/Core/DestructorInfo.cppm
+				src/Reflection/Core/NestedTypeInfo.cppm
+				src/Reflection/Core/NamespaceInfo.cppm
 				src/Reflection/Reflection.cppm
 				src/Reflection/Contracts.cppm
 				src/Reflection/Core/TypedRef.cppm
 				src/Reflection/Core/TypeInfo.cppm
 				src/Reflection/Core/TypeReference.cppm
+				src/Reflection/Core/EntityInfo.cppm
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm

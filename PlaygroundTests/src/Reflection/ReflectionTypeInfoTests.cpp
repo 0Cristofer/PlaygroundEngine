@@ -27,14 +27,25 @@ TEST_CASE("identifier and display name are exposed separately on every declarati
 	// ("@PlaygroundTests.ReflectionTestTypes"); the identifier stays the plain source spelling.
 	CHECK(type.GetDisplayName() == "ReflectionTestTypes::Gadget@PlaygroundTests.ReflectionTestTypes");
 
-	// Fundamental types and template specializations have no identifier, only a display
-	// name: their names are keywords or template-ids, not identifiers. Aliases like
-	// std::string dissolve during template deduction, so TypeOf sees the specialization.
-	CHECK(PgE::TypeOf<int>().GetIdentifier().empty());
+	// A fundamental type has no identifier in the language (has_identifier(^^int) is false), so it is named
+	// from structure instead: the identifier is the query key, and it would otherwise be a hole on the most
+	// common types there are.
+	CHECK(PgE::TypeOf<int>().GetIdentifier() == "int32");
 	CHECK(PgE::TypeOf<int>().GetDisplayName() == "int");
+	CHECK(PgE::TypeOf<unsigned long long>().GetIdentifier() == "uint64");
+	CHECK(PgE::TypeOf<double>().GetIdentifier() == "float64");
+
+	// char is named by spelling, not by size and signedness, which would collapse it with signed char and
+	// int8_t: it is the string element type, and StringFacet must stay distinguishable from a byte buffer.
+	CHECK(PgE::TypeOf<char>().GetIdentifier() == "char");
+	CHECK(PgE::TypeOf<signed char>().GetIdentifier() == "int8");
+	CHECK(PgE::TypeOf<unsigned char>().GetIdentifier() == "uint8");
+
+	// A template specialization has no identifier: it is named by its template plus its arguments. Aliases
+	// like std::string dissolve during template deduction, so TypeOf sees the specialization.
 	CHECK(PgE::TypeOf<std::string>().GetIdentifier().empty());
 
-	// Compound types have no identifier either.
+	// A compound type has no identifier either: it is named by decomposition.
 	CHECK(PgE::TypeOf<int*>().GetIdentifier().empty());
 	CHECK(PgE::TypeOf<int*>().GetDisplayName() == "int*");
 	CHECK(PgE::TypeOf<int[4]>().GetIdentifier().empty());

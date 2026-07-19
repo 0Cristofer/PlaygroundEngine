@@ -22,25 +22,64 @@ namespace PgE::detail
 	template <std::meta::info MetaParameter>
 	struct ArgumentBinding;
 
+	export consteval bool HasExplicitObjectParameter(const std::meta::info callable)
+	{
+		// A deducing-this member: its first parameter is the object, which the invoke path binds from the
+		// object rather than the argument list. The one predicate CallParametersOf and the invoke builders
+		// share, so the reflected arity and the invoke binding cannot disagree on which parameters exist.
+		const std::vector<std::meta::info> parameters = std::meta::parameters_of(callable);
+		return !parameters.empty() && std::meta::is_explicit_object_parameter(parameters.front());
+	}
+
+	export consteval std::vector<std::meta::info> CallParametersOf(const std::meta::info callable)
+	{
+		// The parameters a caller supplies as erased arguments: parameters_of minus a leading explicit object
+		// parameter. A no-op for constructors and ordinary functions, which have no explicit object parameter.
+		std::vector<std::meta::info> parameters = std::meta::parameters_of(callable);
+		if (HasExplicitObjectParameter(callable))
+		{
+			parameters.erase(parameters.begin());
+		}
+		return parameters;
+	}
+
+	template <const std::meta::info MetaParameter>
+	consteval ParameterTraits MakeParameterTraits()
+	{
+		// Read the qualifiers off the undecayed type: the language's own spelling, which the stored decayed
+		// TypeReference loses. is_const is asked of the referenced type so const T& reports const, not the
+		// reference's own (never present) constness.
+		constexpr std::meta::info declared = std::meta::type_of(MetaParameter);
+
+		return ParameterTraits{
+			.IsConst = std::meta::is_const_type(std::meta::remove_reference(declared)),
+			.IsLvalueReference = std::meta::is_lvalue_reference_type(declared),
+			.IsRvalueReference = std::meta::is_rvalue_reference_type(declared),
+			.HasDefaultArgument = std::meta::has_default_argument(MetaParameter),
+			.BindsByMove = ArgumentBinding<MetaParameter>::NeedsMovable,
+			.RequiresMutable = ArgumentBinding<MetaParameter>::NeedsMutable,
+		};
+	}
+
 	template <const std::meta::info MetaParameter>
 	consteval ParameterInfo MakeParameter()
 	{
 		return ParameterInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>(), IdentifierOf(MetaParameter),
-							 DisplayStringOf(MetaParameter), ArgumentBinding<MetaParameter>::NeedsMovable,
-							 ArgumentBinding<MetaParameter>::NeedsMutable, MakeAnnotations<MetaParameter>());
+							 DisplayStringOf(MetaParameter), ScopePathOf<MetaParameter>(), MakeParameterTraits<MetaParameter>(),
+							 MakeAnnotations<MetaParameter>());
 	}
 
 	template <std::meta::info MetaCallable, std::size_t... I>
-	consteval auto MakeParameterArray(std::index_sequence<I...>)
+	consteval std::array<ParameterInfo, sizeof...(I)> MakeParameterArray(std::index_sequence<I...>)
 	{
-		[[maybe_unused]] constexpr auto parameters = std::define_static_array(std::meta::parameters_of(MetaCallable));
+		[[maybe_unused]] constexpr auto parameters = std::define_static_array(CallParametersOf(MetaCallable));
 		return std::array<ParameterInfo, sizeof...(I)>{MakeParameter<parameters[I]>()...};
 	}
 
 	template <std::meta::info MetaCallable>
 	constexpr std::span<const ParameterInfo> MakeParameters()
 	{
-		constexpr auto parameterCount = std::meta::parameters_of(MetaCallable).size();
+		constexpr auto parameterCount = CallParametersOf(MetaCallable).size();
 		static constexpr auto Parameters = MakeParameterArray<MetaCallable>(std::make_index_sequence<parameterCount>{});
 		return Parameters;
 	}

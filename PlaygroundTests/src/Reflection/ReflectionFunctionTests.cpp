@@ -213,6 +213,79 @@ TEST_CASE("a function the thunk cannot call reflects as metadata but is not invo
 	CHECK(type.FindFunctionsByIdentifier("OnAny").front()->InvokeAs<int>(&obj).value() == 7);
 }
 
+TEST_CASE("a deducing-this member drops the object parameter and reads its qualifiers off it")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Deducing>();
+	Deducing obj{.Base = 100};
+
+	const PgE::FunctionInfo* get = type.FindFunctionsByIdentifier("Get").front();
+
+	// The explicit object parameter is not a caller argument, so the reflected arity is 1 (add), not 2,
+	// and the fact is stated rather than left to be inferred from a miscount.
+	CHECK(get->HasExplicitObjectParameter());
+	CHECK(get->GetParams().size() == 1);
+	CHECK_FALSE(get->IsStatic());
+
+	// const-ness is read off the object parameter (const Deducing&), not the function, so it is const-callable.
+	CHECK(get->IsConst());
+	CHECK(get->IsConstCallable());
+	CHECK(get->InvokeAs<int>(&obj, 5).value() == 105);
+
+	const Deducing& readOnly = obj;
+	CHECK(get->InvokeAs<int>(&readOnly, 5).value() == 105);
+
+	// A mutable object parameter (Deducing&) is not const-callable: invoking through a const object is
+	// rejected, exactly as an ordinary non-const member would be.
+	const PgE::FunctionInfo* bump = type.FindFunctionsByIdentifier("Bump").front();
+	CHECK_FALSE(bump->IsConst());
+	CHECK(bump->HasExplicitObjectParameter());
+	CHECK(bump->InvokeAs<int>(&obj, 3).value() == 103);
+
+	const auto onConst = bump->InvokeAs<int>(&readOnly, 1);
+	REQUIRE_FALSE(onConst.has_value());
+	CHECK(onConst.error().Reason == PgE::InvokeError::ConstViolation);
+
+	// A by-value object parameter copies the object, so the call cannot mutate the caller's object: it is
+	// const-callable, matching what the language allows (calling it on a const object is well-formed).
+	const PgE::FunctionInfo* copy = type.FindFunctionsByIdentifier("Copy").front();
+	CHECK(copy->IsConst());
+	CHECK(copy->IsConstCallable());
+	CHECK(copy->GetRefQualifier() == PgE::RefQualifier::None);
+
+	// Bump above mutated Base to 103, and readOnly views the same object; Copy leaves it untouched.
+	CHECK(copy->InvokeAs<int>(&readOnly, 4).value() == 107);
+}
+
+TEST_CASE("a consteval member function reflects as metadata but is not invocable")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Immediate>();
+	Immediate obj{5};
+
+	// The immediate function cannot be called from a runtime thunk, so it has no invoker; the metadata states
+	// why (IsConsteval), and reflecting the type does not break the build.
+	const PgE::FunctionInfo* doubled = type.FindFunctionsByIdentifier("Doubled").front();
+	CHECK(doubled->IsConsteval());
+	const auto rejected = doubled->InvokeAs<int>(&obj, 3);
+	REQUIRE_FALSE(rejected.has_value());
+	CHECK(rejected.error().Reason == PgE::InvokeError::NotInvocable);
+
+	// A normal member on the same type still invokes and is not marked consteval.
+	const PgE::FunctionInfo* runtime = type.FindFunctionsByIdentifier("Runtime").front();
+	CHECK_FALSE(runtime->IsConsteval());
+	CHECK(runtime->InvokeAs<int>(&obj, 3).value() == 8);
+}
+
+TEST_CASE("a private deducing-this member invokes through the pointer route")
+{
+	const PgE::TypeInfo& type = PgE::TypeOf<Deducing>();
+	Deducing obj{.Base = 6};
+
+	const PgE::FunctionInfo* secret = type.FindFunctionsByIdentifier("Secret").front();
+	CHECK(secret->HasExplicitObjectParameter());
+	CHECK(secret->GetAccess() == PgE::AccessKind::Private);
+	CHECK(secret->InvokeAs<int>(&obj, 4).value() == 24);
+}
+
 TEST_CASE("invoking through a base type calls the overwritten function")
 {
 	Child child{};

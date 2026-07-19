@@ -32,12 +32,12 @@ namespace PgE::detail
 	template <std::meta::info Enumerator>
 	consteval EnumeratorInfo MakeEnumerator()
 	{
-		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator), EnumeratorValueOf<Enumerator>::Value,
+		return EnumeratorInfo(IdentifierOf(Enumerator), DisplayStringOf(Enumerator), ScopePathOf<Enumerator>(), EnumeratorValueOf<Enumerator>::Value,
 							  MakeAnnotations<Enumerator>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
-	consteval auto MakeEnumeratorArray(std::index_sequence<I...>)
+	consteval std::array<EnumeratorInfo, sizeof...(I)> MakeEnumeratorArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto enumerators = std::define_static_array(std::meta::enumerators_of(MetaType));
 		return std::array<EnumeratorInfo, sizeof...(I)>{MakeEnumerator<enumerators[I]>()...};

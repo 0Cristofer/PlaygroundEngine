@@ -7,6 +7,27 @@ workarounds) that the engine and the `PlaygroundReflection` scratchpad rely on. 
 [ReflectionSystem.md](ReflectionSystem.md); this document is the "how" and the "why it is shaped this
 way", the detail that would otherwise sit in long inline comments.
 
+## EntityInfo and DeclarationInfo
+
+The type model's root is split in two, and the language draws the line, not us:
+
+- **`EntityInfo`** is what every named entity has: identifier, display name, and scope path. *Entity* is the
+  language's own term ([basic.pre]/3), and it is what admits a **template** alongside a type, a member, and a
+  function.
+- **`DeclarationInfo : EntityInfo`** adds annotations. Its set is exactly what `annotations_of` accepts: a
+  type, type alias, variable, function, function parameter, namespace, enumerator, direct base class
+  relationship, or non-static data member. Every `...Info` except `TemplateInfo` is one.
+
+**A template is an entity but not an annotatable declaration**, so `TemplateInfo` derives from `EntityInfo`.
+This is not a technicality: `annotations_of` **throws** on a template, so a `TemplateInfo` inheriting the
+annotation API could only ever answer "empty", which reads as *no annotations here* rather than the truth,
+*that cannot be asked*. Nothing is lost by the split, because an annotation written on a class template lands
+on each **instance** (`annotations_of(^^Grid<int>)` finds it), and an instance is a type, hence already a
+`DeclarationInfo`.
+
+The identifier is the structural query key; the display name is implementation-defined diagnostic text,
+always present, never a key.
+
 ## Module layering
 
 Three modules: `PlaygroundEngine.Reflection.Core`, `PlaygroundEngine.Reflection.Builtins`, and the
@@ -67,11 +88,38 @@ partition.
 - **Stringify thunk assignment:** a fieldless object is a leaf and gets a stringify thunk (it renders
   through its total trait); `std::is_object_v` excludes `void` (a function return type reached here),
   where a `const T*` cannot be formed. A type with fields gets no thunk and is rendered structurally.
-- **Function invocation through a pointer:** the invoker calls through `&[:MetaFunction:]` rather than a
-  direct member splice `obj->[:M:](...)`. GCC applies member access control to a spliced **call**
-  expression even when the reflection came from `access_context::unchecked()`, but not to forming a
-  pointer from the reflection or calling through it. Routing the call through the pointer is what lets
-  reflection invoke **private** member functions, keeping private-member metadata symmetric with fields.
+- **Function invocation, and why the route depends on access:** the invoker calls a **public** function
+  through a direct member splice (`obj->[:M:](...)`) and a non-public one through `&[:MetaFunction:]`. GCC
+  applies member access control to a spliced **call** expression even when the reflection came from
+  `access_context::unchecked()`, but not to forming a pointer from the reflection or calling through it, so
+  the pointer is what lets reflection invoke **private** member functions, keeping private-member metadata
+  symmetric with fields. The address is taken *only* there because **some functions have no address at all**:
+  an `always_inline` member of a class with an explicit instantiation **declaration** is emitted nowhere, so
+  taking its address fails at link. `extern template class allocator<char>;` plus
+  `[[__gnu__::__always_inline__]] allocate` is exactly that pair, and `std::allocator<char>` is reachable as
+  a materialized template argument of `std::string`. Like the static-member address trap below, forming the
+  pointer is well-formed during substitution, so `requires` cannot detect it; not taking an address that
+  access control does not require is the fix.
+- **Deleted and consteval functions are excluded by a stated fact, not by SFINAE.** Naming a **deleted** one
+  in `IsInvocable`'s requires-expression is a hard error rather than a substitution failure, so `MakeInvoker`
+  checks `is_deleted` first. A **consteval** (immediate) function is the opposite trap: the requires-expression
+  *accepts* it (an immediate call is well-formed in an unevaluated context), so `MakeInvoker` would emit a
+  thunk whose body then calls it at runtime, which is a hard error that breaks the build for the whole type.
+  `IsImmediateFunction` (shared with the constructor path) excludes it up front, and `IsConsteval` states the
+  reason, exactly as for a `consteval` constructor. GCC 16 exposes no `is_consteval`, so both read the
+  specifier from the display string.
+- **A deducing-this member's object parameter is not a call argument.** `parameters_of` counts the explicit
+  object parameter (`int Get(this const Self&, int)` has arity 2), so `CallParametersOf` drops a leading
+  `is_explicit_object_parameter` and every function path (the `ParameterInfo` list, the arity check, the
+  per-argument binding, the invoke call) keys off it, keeping the reflected arity the caller's. Left uncut it
+  is a lie as metadata: a C# generator reading arity 2 emits a two-argument method. The object binds the same
+  way an implicit `this` does, so the public member-splice route is unchanged; the **private** route differs,
+  because `&[:M:]` on a deducing-this member is a plain function pointer (not a pointer-to-member), called
+  free-function style with the object first. `is_const` and the ref-qualifier queries are all **false** on the
+  function itself (the qualification lives on the object parameter), so `MakeFunctionTraits` reads `IsConst`
+  and `RefQual` off the object type. A **by-value** object parameter (`this Self`) is const-callable (a copy
+  leaves the caller's object untouched), so `ObjectIsConstCallable` treats const-ref and by-value alike and a
+  mutable lvalue-ref or rvalue-ref as not.
 ## The argument binder
 
 `:ArgumentBinding` is the shared machinery every erased callable uses: parameter metadata, the
@@ -112,13 +160,33 @@ slot, so `ConstructorInfo` is a callable distinct from `FunctionInfo`, sharing o
   so the thunk casts the erased arguments to the constructor's **own parameter types** and placement-news;
   overload resolution then selects exactly that constructor. This is why the engine reflects constructors
   directly rather than routing construction through an annotated static factory.
-- **No thunk means not callable.** A constructor that is deleted, inaccessible, or whose placement-new is
-  otherwise ill-formed reflects as metadata with `CanConstruct() == false`, the way an rvalue-qualified
-  function reflects with no invoker. A `consteval` constructor is detected by the specifier in its display
-  string: GCC 16 exposes no `is_consteval`, and immediateness is invisible to SFINAE.
+- **No thunk means not callable, and the traits name why.** A constructor that is deleted, inaccessible,
+  `consteval`, or whose placement-new is otherwise ill-formed reflects as metadata with
+  `CanConstruct() == false`, the way an rvalue-qualified function reflects with no invoker. `ConstructorTraits`
+  carries the reasons that are language facts (`IsDeleted`, `IsConsteval`, and `Access` for an inaccessible
+  one), so a residual null thunk means "unbindable" and a deleted copy is told apart from a silent absence.
+  `consteval` is detected by the specifier in the display string: GCC 16 exposes no `is_consteval`, and
+  immediateness is invisible to SFINAE.
 - **The slot protocol is stated once.** `detail::ValueFromSlot` runs a slot-taking call, then launders the
   object out of the stack slot and destroys it there. A function's return and a constructor's object differ
   only in the call and the error reported, so both `InvokeAs` and `ConstructAs` go through it.
+
+### The destructor
+
+A type has exactly one destructor, so it is a single `DestructorInfo` on `TypeInfo` (`GetDestructor()`), not
+a list. It owns the erased destroy thunk that `TypeInfo::CanDestroy` / `Destroy` delegate to, so the runtime
+path and the metadata are one object rather than a bare function pointer beside unrelated traits.
+
+- **The traits are read off the destructor member, the triviality off the type.** `is_virtual`,
+  `is_pure_virtual`, `is_deleted`, `is_defaulted`, and access come from the `is_destructor` member found in
+  `members_of`; `IsTrivial` is the whole-type `is_trivially_destructible_type`. Every class has an implicit
+  destructor member to read, so the split is only needed for non-class types, which have no member at all and
+  keep the defaults (a scalar is trivially destructible and destroyable, but nothing about it is "defaulted").
+- **No thunk means not destroyable, and the traits name why.** A deleted or inaccessible destructor, an
+  incomplete type, an array, and `void` all reflect with `CanDestroy() == false`, the way a constructor
+  reflects with no thunk; `IsDeleted` turns the common case from a silent absence into a stated reason.
+- **`members_of` is guarded, not merely filtered.** It throws on a non-class type, so the destructor-member
+  walk sits behind `IsClassOrUnion` rather than being filtered afterwards.
 
 ### Selecting a constructor from erased arguments
 
@@ -139,6 +207,167 @@ This is overload resolution, restricted to what erased arguments can carry:
 - **Genuine ties are reported, not guessed.** Overloads the arguments cannot rank (`int&` against
   `const int&`: both bind by reference, neither moves) yield `AmbiguousConstructor`, and the caller falls
   back to `FindConstructor` plus `ConstructorInfo::ConstructAs` to name one.
+
+## Operators and conversions
+
+An overloaded operator (`operator+`, `operator==`) and a user-defined conversion (`operator int()`) are
+member functions, so they carry a return type, parameters, traits, and an invoker like any other. They are
+kept in **their own lists** (`GetOperators` / `GetConversions`), not `GetFunctions`, so a consumer keys on a
+fact rather than parsing a name: an operator on its `OperatorKind`, a conversion on its target type. This is
+also what closes two holes: a conversion has **no identifier** and would otherwise sit in `GetFunctions`
+nameless, and operators were excluded from `GetFunctions` entirely and so were unreachable.
+
+- **The whole function machinery is reused.** `OperatorInfo` and `ConversionInfo` derive from `FunctionInfo`;
+  their builders call the same `MakeParameters` / `MakeFunctionTraits` / `MakeInvoker`, so `a + b`, `a == b`,
+  `a[i]`, and `operator int()` all invoke through reflection with no second code path. `OperatorKind` is an
+  engine-owned enum mapped from `std::meta::operator_of`, so the public API does not leak the `std::meta`
+  spelling. A conversion's **target is its return type**: `ConversionInfo::GetTargetType()` is `GetReturnType()`,
+  decayed with the `ReturnIs*` trait flags carrying the qualifiers, exactly as every return type is modelled.
+- **Copy and move assignment are excluded, and this is load-bearing (a GCC 16 ICE).** They are operator
+  functions (`op_equals`) but also **special members**, so `GetOperatorFunctions` excludes
+  `is_special_member_function`, the way `GetMemberFunctions` already does: they belong to the lifetime story,
+  not the value-operator one, and a converting assignment (`operator=(int)`) is not special and stays.
+  Beyond the modelling, building an **invoker** for an implicitly-declared copy/move assignment operator
+  **segfaults cc1plus** in every TU that imports the reflection module and reflects a type carrying one
+  (every class has them, so the whole engine failed to build). The exclusion is narrow: user-defined value
+  operators, private operators, conversions, and member `operator new` / `operator delete` all build invokers
+  without incident.
+- **Nothing about their *shape* is special, which is why the ICE is a compiler bug and not a design limit.**
+  Were the ICE lifted, copy and move assignment would need no specialized invoke at all: they are ordinary
+  member functions (`(const T&) -> T&` and `(T&&) -> T&`), and `ArgumentBinding` already binds both parameter
+  forms (the lvalue-ref branch copies, the rvalue-ref branch moves out). Copy versus move is not a mode the
+  invoker forces, it is the parameter type of two distinct overloads, so a caller picks the overload and the
+  existing binder does the rest. The only genuine work would be classification (grouping them with the
+  copy/move constructors in the lifetime story) rather than mechanism.
+
+## Nested types
+
+`GetNestedTypes()` reports the types a class declares **inside itself**: nested classes, enums, and unions,
+and member type-aliases (`using` / `typedef`). It is the reflexive half of the structure, and it is
+independent of the fields: a nested type with no member of that type was previously unreachable, since the
+only way to a nested type was through some field or return type that happened to use it. The C# binding layer
+is the consumer that needs it, since it mirrors nested types as nested types.
+
+- **`is_type` plus `has_identifier` is the whole of the filter.** GCC 16 does **not** return the injected
+  class name from `members_of`, so no self-exclusion guard is needed (validated: a type with four type
+  members reports exactly four). It *does* return anonymous nested unions and structs, which have no
+  identifier, so those are excluded: nothing can name one, and the field that uses it already reaches it.
+- **An alias is detected by dealiasing, and keeps its own name.** A member is an alias when
+  `dealias(member) != member`, a real nested definition when dealiasing is the identity. The stored
+  `TypeReference` is to the **dealiased** type, so `using ValueType = int` reports the name `ValueType` and
+  resolves to `int`'s `TypeInfo`; the declaration carries the name, the reference carries the type.
+- **A self-alias is safe because the reference is lazy.** `using SelfAlias = Outer` inside `Outer` resolves
+  back to the enclosing type. It cannot recurse during construction, for the same reason a self-referential
+  field cannot: `TypeReference` stores the resolver's address, not a resolved pointer.
+
+## Naming: scope, structure, and decomposition
+
+What the extraction stores so that **a type is nameable from facts alone**, with no spelling anywhere. The
+end-to-end claim (`const PgE::Foo*` renders as `pointer<const<PgE.Foo>>`, `std::vector<Foo>` as
+`std.vector<PgE.Foo, std.allocator<PgE.Foo>>`) is pinned by a renderer in `ReflectionExtractionTests.cpp`
+that reads no display string. The scope of the extraction and its rationale live in
+[ReflectionExtraction.md](ReflectionExtraction.md); this section is the implementation knowledge.
+
+- **Scope path.** `DeclarationInfo::GetScopePath()` is the chain of enclosing named scopes, outermost first,
+  not a rendered string, so the separator stays the consumer's choice. It is what distinguishes `A::Foo` from
+  `B::Foo`, which is a structural fact about the language, not an identifier concern. There is no
+  `qualified_name_of`; the `parent_of` walk is the only route. **`has_parent` is the guard, not an
+  optimization:** `parent_of` *throws* for an entity with no parent (a fundamental type, `void`, a pointer),
+  which would abort the build. The walk crosses inline namespaces (`std::string` yields `["std", "__cxx11"]`),
+  which is the correct structural answer and the reason a consumer must not build a durable identifier from a
+  `std` type's path.
+- **The chain is collected as reflections, not `string_view`s.** `define_static_array` needs a **structural**
+  element type and `std::string_view` is not one (`std::meta::info` is), so the identifiers are frozen
+  per-index with `define_static_string` instead. Same shape as `MakeAnnotations`.
+- **Fundamentals are named from structure.** `has_identifier(^^int)` is `false`, so an identifier derived from
+  `TypeKind` + `size_of` + `is_signed_type` (`int32`, `uint64`, `float64`) fills `_identifier`. It is
+  stdlib-neutral, and a non-native provider can describe the same type with no C++ name. Two exceptions are
+  named by spelling because size and signedness **collapse** them: the **character types** (`char`,
+  `signed char`, and `int8_t` are distinct, and `char` is the string element type `StringFacet` keys on), and
+  **`long double`** (x86 stores 80-bit extended in 16 bytes, so a width would claim a `binary128` it is not,
+  and would collide with a real one).
+
+## Compound types
+
+`template_of` alone does not bottom out: pointers, references, arrays, and fundamentals have **no**
+identifier, so recursion through a template's arguments terminates on entities that cannot be named.
+`TypeInfo::GetInnerType()` peels exactly **one** shape, so a walk chains (`const Foo*` yields `const Foo`,
+which yields `Foo`), with `TypeTraits::Extent` carrying an array's length.
+
+- **A cv-qualified type is a decomposition node, and this is load-bearing.** `is_class_type(^^const Foo)` is
+  **true** and `nonstatic_data_members_of` enumerates its members, so walking it would duplicate `Foo`'s entire
+  structure under a second identity. `IsClassOrUnion` therefore excludes cv-qualified types: it is the single
+  gate every member-walking builder already shares, so the rule is stated once. The cv node keeps only
+  `IsConst`/`IsVolatile` plus its inner type; the structure lives on the unqualified type alone.
+- **cv is peeled before the other shapes**, since a `const` pointer is a cv node whose inner is the pointer.
+- **Why not canonicalize `const` away** the way aliases are: then `const Foo*` and `Foo*` would have the same
+  pointee, losing a fact the language spells.
+- Unbounded arrays (`int[]`) are object types but **incomplete**, so `size_of`/`alignment_of` are ill-formed
+  for them and the traits builder guards on the zero extent.
+
+## Templates
+
+`TypeInfo::GetTemplate()` names the primary template and `GetTemplateArguments()` lists what it was
+instantiated with, so `Grid<int>` keeps a recoverable relationship to `Grid` and to `int`.
+
+- **A template is not a type**, so it cannot be a `TypeReference`; `TemplateInfo` names it (identifier plus
+  scope) and that is all that is possible. One program-lifetime instance per template, so templates compare by
+  pointer identity the way types do. It is an `EntityInfo`, not a `DeclarationInfo`, because a template cannot
+  be annotated (see the taxonomy section above).
+- **`template_of` / `template_arguments_of` throw** for a type that is not an instance, so
+  `has_template_arguments` is a guard, not a filter.
+- **Three argument kinds, not two.** `is_type` and `is_value` are both false for a template template argument
+  (`Holder<Grid, Foo>`), which is neither.
+- **A reference parameter's argument is an object, not a value.** `template <int& R>` instantiated with a
+  global reflects with `is_object == true`, `is_value == false`, and `type_of == int` (the *referenced* type).
+  There is nothing to materialize: the argument **is** that object, so the erasure is its address. Reading it
+  as a value is not a constant expression, so conflating it with the value case fails to compile. A **pointer**
+  parameter is the opposite (`is_value == true`, `type_of == int*`): its value really is the pointer.
+- **A partial specialization reports the primary template** (`Spec<int*>` yields `Spec`), which is the wanted
+  behavior. **Alias templates dealias away entirely** (`Ptr<Foo>` yields `Foo*`).
+- **Defaulted arguments are materialized and cannot be identified as defaults.** `Stream<Foo>` reflects with
+  **two** arguments and no query distinguishes the written one from the defaulted one. This is correct, since
+  `Stream<Foo>` and `Stream<Foo, DefaultPolicy>` are the same type and must reflect identically; it matters
+  only to a consumer building a durable identifier, where adding a defaulted parameter later changes rendering.
+- The allocator of a `std` container is **exposed** as a materialized argument. That is the correct structural
+  answer, and it is what drags `std::allocator<char>` into the graph (see the invocation note above).
+
+## Incomplete types
+
+A pointer names its pointee, so an **incomplete** type is now reachable: `struct Opaque;` behind an
+`Opaque*` member is the opaque-handle / PIMPL shape, and it must not break the build. Every member walk
+(`nonstatic_data_members_of`, `bases_of`, `members_of`) **throws** on an incomplete type, and `size_of`,
+`alignment_of`, and the whole `<type_traits>` family have a complete-type precondition.
+
+- **`is_complete_type` is the guard, and it is stated in the shared gates**, not per builder: `IsClassOrUnion`
+  (which every member walk already goes through) and the traits builder's `SizeOf`/`AlignmentOf`. It subsumes
+  the other sizeless cases for free: `void` and an **unbounded array** (`int[]`) are both incomplete.
+- **Nest the `if constexpr`, do not `&&` it.** A variable template such as `std::is_destructible_v<T>` is
+  *instantiated* even where `&&` would short-circuit its evaluation, so `is_complete_type(T) && is_destructible_v<T>`
+  still hard-errors on an incomplete `T`. The completeness check has to be its own enclosing `if constexpr`.
+- The result is honest rather than degraded: an opaque type reflects with its **identifier and scope** and
+  nothing else. Its definition is what decides size, layout, and the trait predicates, so they stay unset
+  instead of being guessed.
+
+## Static data members
+
+`static_data_members_of` gets its own metadata type and its own span on `TypeInfo`, not an entry in `_fields`:
+a static has no offset and no instance, so every accessor signature differs (no object pointer).
+
+**The address of a static data member cannot be taken unconditionally.** A `static const` member of integral or
+enumeration type may be initialized in-class and never defined out of line, which is legal and is exactly the
+editor-helper pattern (`static const int MaxSlots = 8;`). Taking its address is an odr-use that fails at
+**link**. `requires` does not save us: forming the address is well-formed during substitution, so nothing at
+compile time detects it. The rule that resolves it:
+
+- **Constant-readable members are captured by value** at `consteval` and never odr-used; the thunk holds the
+  value, not a pointer. Detection is a constant read (binding the splice to a non-type template parameter),
+  which **is** a substitution failure and therefore detectable, unlike the address case.
+- **Everything else takes an address**, which is safe because any static member that is not constant-readable
+  is required to have a definition anyway.
+
+This maps onto the capability rather than dodging it: a constant-readable static is **read-only** (a value, so
+no setter and no borrow), and an addressable one is **settable** (a reference). The split is the semantics.
 
 ## Type hierarchy
 

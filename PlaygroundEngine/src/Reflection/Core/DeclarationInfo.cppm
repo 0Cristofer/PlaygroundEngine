@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection.Core:DeclarationInfo;
 
 import :TypeReference;
+import :EntityInfo;
 
 import std;
 
@@ -17,28 +18,19 @@ namespace PgE
 		const void* Value = nullptr;
 	};
 
-	export class DeclarationInfo
+	export class DeclarationInfo : public EntityInfo
 	{
-		// The metadata every reflected declaration (type, field, function, parameter) shares: its names and
-		// annotations. The identifier is what the author wrote and is the query key, empty for unnamed
-		// entities; the display name is implementation-defined diagnostic text, always present, never a key.
+		// A named entity the language lets you annotate: a type, type alias, variable, function, function
+		// parameter, namespace, enumerator, base class, or non-static data member. That list is the language's,
+		// not ours, which is why a template is an EntityInfo and not this. See docs/ReflectionInternals.md.
 
 	public:
 		constexpr DeclarationInfo(const std::string_view identifier,
 								  const std::string_view displayName,
+								  const std::span<const std::string_view> scopePath,
 								  const std::span<const AnnotationInfo> annotations)
-			: _identifier(identifier), _displayName(displayName), _annotations(annotations)
+			: EntityInfo(identifier, displayName, scopePath), _annotations(annotations)
 		{}
-
-		std::string_view GetIdentifier() const
-		{
-			return _identifier;
-		}
-
-		std::string_view GetDisplayName() const
-		{
-			return _displayName;
-		}
 
 		std::span<const AnnotationInfo> GetAnnotations() const
 		{
@@ -75,8 +67,6 @@ namespace PgE
 		}
 
 	private:
-		std::string_view _identifier;
-		std::string_view _displayName;
 		std::span<const AnnotationInfo> _annotations;
 	};
 }
