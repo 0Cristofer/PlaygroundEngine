@@ -23,7 +23,7 @@ import std;
 namespace PgE
 {
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export enum class TypeKind : std::uint8_t
 	{
@@ -109,14 +109,14 @@ namespace PgE
 						   const std::span<const StaticFieldInfo> staticFields,
 						   const std::span<const BaseInfo> bases,
 						   const std::span<const ConstructorInfo> constructors,
-						   const DestructorInfo& destructor,
+						   const DestructorInfo* destructor,
 						   const std::span<const NestedTypeInfo> nestedTypes,
 						   const TemplateInfo* templateInfo,
 						   const std::span<const TemplateArgumentInfo> templateArguments,
 						   const TypeReference innerType,
 						   const FunctionSignatureInfo* signature,
 						   const MemberPointerInfo* memberPointer,
-						   std::string (*stringifyThunk)(const void*))
+						   std::string (*stringifyThunk)(const void*)) pre(destructor)
 			: DeclarationInfo(identifier, displayName, scopePath, annotations), _traits(traits), _facets(facets), _functions(functions),
 			  _operators(operators), _conversions(conversions), _fields(fields), _staticFields(staticFields), _bases(bases),
 			  _constructors(constructors), _destructor(destructor), _nestedTypes(nestedTypes), _template(templateInfo),
@@ -151,7 +151,7 @@ namespace PgE
 			// Linear scan for now, this should be a small array
 			for (const FacetEntry& entry : _facets)
 			{
-				if (&entry.Type.Get() == &TypeOf<Facet>())
+				if (&entry.Type.Get() == &TypeMetaOf<Facet>())
 				{
 					return static_cast<const Facet*>(entry.Data);
 				}
@@ -258,15 +258,15 @@ namespace PgE
 
 		const DestructorInfo& GetDestructor() const
 		{
-			return _destructor;
+			return *_destructor;
 		}
 		bool CanDestroy() const
 		{
-			return _destructor.CanDestroy();
+			return _destructor->CanDestroy();
 		}
-		void Destroy(void* obj) const pre(_destructor.CanDestroy()) pre(obj != nullptr)
+		void Destroy(void* obj) const pre(_destructor->CanDestroy()) pre(obj != nullptr)
 		{
-			_destructor.Destroy(obj);
+			_destructor->Destroy(obj);
 		}
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
@@ -356,7 +356,7 @@ namespace PgE
 		std::span<const StaticFieldInfo> _staticFields;
 		std::span<const BaseInfo> _bases;
 		std::span<const ConstructorInfo> _constructors;
-		DestructorInfo _destructor;
+		const DestructorInfo* _destructor = nullptr;
 		std::span<const NestedTypeInfo> _nestedTypes;
 		const TemplateInfo* _template = nullptr;
 		std::span<const TemplateArgumentInfo> _templateArguments;

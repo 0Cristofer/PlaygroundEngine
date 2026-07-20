@@ -25,12 +25,12 @@ namespace PgE
 
 		// The element reflection is a template parameter, not `^^Element` in the body (consteval-only, cannot
 		// appear in a runtime thunk). The tag is resolved into a local before the TypedRef literal, since GCC
-		// flags a TypeOfMeta call inside a designated-initializer list as consteval-only in a runtime context.
+		// flags a TypeMetaOf call inside a designated-initializer list as consteval-only in a runtime context.
 		template <typename Container, std::meta::info ElementMeta>
 		TypedRef SequenceElementRefThunk(void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeOfMeta<ElementMeta>();
+			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			Element& element = (*static_cast<Container*>(obj))[index];
 			return TypedRef{.Type = tag, .Data = std::addressof(element), .IsConst = false};
 		}
@@ -39,7 +39,7 @@ namespace PgE
 		TypedRef SequenceElementRefConstThunk(const void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeOfMeta<ElementMeta>();
+			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			const Element& element = (*static_cast<const Container*>(obj))[index];
 			return TypedRef{
 				.Type = tag,
@@ -58,7 +58,7 @@ namespace PgE
 		TypedRef CArrayElementRefThunk(void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeOfMeta<ElementMeta>();
+			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			Element* base = static_cast<Element*>(obj);
 			return TypedRef{.Type = tag, .Data = std::addressof(base[index]), .IsConst = false};
 		}
@@ -67,7 +67,7 @@ namespace PgE
 		TypedRef CArrayElementRefConstThunk(const void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeOfMeta<ElementMeta>();
+			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			const Element* base = static_cast<const Element*>(obj);
 			return TypedRef{
 				.Type = tag,
@@ -92,7 +92,7 @@ namespace PgE
 		std::expected<void, FacetError> SequenceAppendThunk(void* obj, const TypedRef& in)
 		{
 			using Element = [:ElementMeta:];
-			if (in.Type != &TypeOfMeta<ElementMeta>())
+			if (in.Type != &TypeMetaOf<ElementMeta>())
 			{
 				return std::unexpected(FacetError{FacetError::TypeMismatch});
 			}

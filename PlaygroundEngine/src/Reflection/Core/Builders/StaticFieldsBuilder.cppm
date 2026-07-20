@@ -44,7 +44,7 @@ namespace PgE::detail
 	{
 		using Field = typename StaticFieldValue<MetaField>::Field;
 
-		if (out.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		if (out.Type != &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
 		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
 		}
@@ -59,7 +59,7 @@ namespace PgE::detail
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
 
-		if (out.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		if (out.Type != &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
 		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
 		}
@@ -74,7 +74,7 @@ namespace PgE::detail
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
 
-		if (in.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		if (in.Type != &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
 		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
 		}
@@ -116,7 +116,7 @@ namespace PgE::detail
 	{
 		auto&& lvalue = [:MetaField:];
 
-		return TypedRef{.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
+		return TypedRef{.Type = &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
 						.Data = const_cast<void*>(static_cast<const void*>(std::addressof(lvalue))),
 						.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>};
 	}
@@ -201,12 +201,12 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaVariable>
-	constexpr const StaticFieldInfo& VariableOfMeta()
+	constexpr const StaticFieldInfo& VariableMetaOf()
 	{
 		// A static data member here would not be pointer-identical to the one in TypeOf<T>().GetStaticFields(),
 		// breaking the one-instance-per-entity property consumers compare on.
 		static_assert(!std::meta::is_class_member(MetaVariable),
-					  "VariableOfMeta reflects namespace-scope variables; reach a static member through TypeOf<T>().GetStaticFields()");
+					  "VariableMetaOf reflects namespace-scope variables; reach a static member through TypeOf<T>().GetStaticFields()");
 
 		// A namespace-scope variable is a static data member without a class: no offset, no instance, and the
 		// same constant-readable/addressable split, so it reuses StaticFieldInfo whole.

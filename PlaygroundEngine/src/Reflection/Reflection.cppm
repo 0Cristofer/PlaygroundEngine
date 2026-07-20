@@ -20,7 +20,7 @@ namespace PgE
 	requires std::is_enum_v<Enum>
 	std::optional<std::string_view> EnumToName(const Enum value)
 	{
-		const TypeInfo& type = TypeOf<Enum>();
+		const TypeInfo& type = TypeMetaOf<Enum>();
 
 		if (const EnumeratorInfo* enumerator = type.GetFacet<EnumerationFacet>()->FindByValue(static_cast<std::uint64_t>(value)))
 		{
@@ -34,7 +34,7 @@ namespace PgE
 	requires std::is_enum_v<Enum>
 	std::optional<Enum> EnumFromName(const std::string_view identifier)
 	{
-		const TypeInfo& type = TypeOf<Enum>();
+		const TypeInfo& type = TypeMetaOf<Enum>();
 
 		if (const EnumeratorInfo* enumerator = type.GetFacet<EnumerationFacet>()->FindByIdentifier(identifier))
 		{

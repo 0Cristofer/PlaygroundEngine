@@ -169,12 +169,12 @@ TEST_CASE("a swept entity is the same object as the one reached by naming it")
 	const auto unique =
 		std::ranges::find_if(fixture.GetFunctions(), [](const PgE::FunctionInfo* function) { return function->GetIdentifier() == "Unique"; });
 	REQUIRE(unique != fixture.GetFunctions().end());
-	CHECK(*unique == &PgE::detail::FunctionOfMeta<^^SweepFixture::Unique>());
+	CHECK(*unique == &PgE::detail::FunctionMetaOf<^^SweepFixture::Unique>());
 
 	const auto counter =
 		std::ranges::find_if(fixture.GetVariables(), [](const PgE::StaticFieldInfo* variable) { return variable->GetIdentifier() == "Counter"; });
 	REQUIRE(counter != fixture.GetVariables().end());
-	CHECK(*counter == &PgE::detail::VariableOfMeta<^^SweepFixture::Counter>());
+	CHECK(*counter == &PgE::detail::VariableMetaOf<^^SweepFixture::Counter>());
 
 	const auto widget = std::ranges::find_if(fixture.GetTypes(), [](const PgE::NestedTypeInfo& type) { return type.GetIdentifier() == "Widget"; });
 	REQUIRE(widget != fixture.GetTypes().end());
@@ -227,7 +227,7 @@ TEST_CASE("overloads are all reported, which is the only way to reach them")
 TEST_CASE("a reference variable is omitted, so one declaration cannot fail a whole namespace")
 {
 	// The rejection has to live in the sweep: the crash happens in the compiler's symbol table, too late for
-	// a static_assert in VariableOfMeta to intercept, so naming one directly is still unguarded.
+	// a static_assert in VariableMetaOf to intercept, so naming one directly is still unguarded.
 	const PgE::NamespaceInfo& fixture = PgE::NamespaceOf<^^SweepFixture>();
 
 	CHECK_FALSE(Contains(IdentifiersOf(fixture.GetVariables()), "ReferenceVariable"));

@@ -16,7 +16,7 @@ import std;
 namespace PgE::detail
 {
 	template <std::meta::info MetaTemplate>
-	constexpr const TemplateInfo& TemplateOfMeta()
+	constexpr const TemplateInfo& TemplateMetaOf()
 	{
 		// One program-lifetime TemplateInfo per template, so a consumer can compare templates by pointer
 		// identity the way it compares types.
@@ -64,7 +64,7 @@ namespace PgE::detail
 		{
 			// Neither a type nor a value: a template template argument, the third kind.
 			return TemplateArgumentInfo{
-				.Kind = TemplateArgumentKind::Template, .Type = {}, .Value = nullptr, .Template = &TemplateOfMeta<MetaArgument>()};
+				.Kind = TemplateArgumentKind::Template, .Type = {}, .Value = nullptr, .Template = &TemplateMetaOf<MetaArgument>()};
 		}
 	}
 
@@ -99,7 +99,7 @@ namespace PgE::detail
 		{
 			// A partial specialization reports the primary template, which is the wanted behavior: Spec<int*>
 			// yields Spec.
-			return &TemplateOfMeta<std::meta::template_of(MetaType)>();
+			return &TemplateMetaOf<std::meta::template_of(MetaType)>();
 		}
 		else
 		{

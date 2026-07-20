@@ -35,7 +35,7 @@ namespace PgE
 			return _types;
 		}
 
-		// Pointers, not values: these are the objects FunctionOfMeta and VariableOfMeta hand out, so an entity
+		// Pointers, not values: these are the objects FunctionMetaOf and VariableMetaOf hand out, so an entity
 		// reached by naming it compares equal to the one found by sweeping.
 		std::span<const FunctionInfo* const> GetFunctions() const
 		{

@@ -60,7 +60,7 @@ Findings against the current builders, each confirmed by a throwaway compile.
 
 ### Correct, and worth recording as settled
 
-- **The `dealias` calls are right, and they are load-bearing.** GCC 16 is *inconsistent* about aliases: `type_of` on a member or a parameter silently strips the alias, but `return_type_of` retains it. Concretely, for `using Health = int;`, a field declared `Health hp` reports `is_type_alias == false`, while a function returning `Health` reports `is_type_alias == true` and displays `Health {aka int}`. Without the `dealias` in `TypeOfMeta` and `TypeReferenceTo`, the return type of that function would resolve to a *different* `TypeInfo` than the field, splitting type identity on nothing but spelling. The dealias normalizes an inconsistency the compiler hands us.
+- **The `dealias` calls are right, and they are load-bearing.** GCC 16 is *inconsistent* about aliases: `type_of` on a member or a parameter silently strips the alias, but `return_type_of` retains it. Concretely, for `using Health = int;`, a field declared `Health hp` reports `is_type_alias == false`, while a function returning `Health` reports `is_type_alias == true` and displays `Health {aka int}`. Without the `dealias` in `TypeMetaOf` and `TypeReferenceTo`, the return type of that function would resolve to a *different* `TypeInfo` than the field, splitting type identity on nothing but spelling. The dealias normalizes an inconsistency the compiler hands us.
 
   The consequence for consumers is worth stating plainly: **the alias spelling cannot be exposed, because it is not uniformly available.** Presenting "Health" for a return type and "int" for a field of the same type would be worse than presenting "int" everywhere.
 
@@ -307,8 +307,8 @@ The two decompositions **compose** rather than duplicating: `int (Foo::*)(double
 Free functions and namespace-scope variables are reflected by **being named**, exactly as `TypeOf` names a type:
 
 ```cpp
-PgE::detail::FunctionOfMeta<^^Game::Spawn>()     // -> const FunctionInfo&
-PgE::detail::VariableOfMeta<^^Game::Counter>()   // -> const StaticFieldInfo&
+PgE::detail::FunctionMetaOf<^^Game::Spawn>()     // -> const FunctionInfo&
+PgE::detail::VariableMetaOf<^^Game::Counter>()   // -> const StaticFieldInfo&
 ```
 
 These are **not** the consumer surface, and are deliberately absent from `Core.cppm`. They take a `std::meta::info`, and they are the mechanism the namespace sweep names entities through.
@@ -319,7 +319,7 @@ These are **not** the consumer surface, and are deliberately absent from `Core.c
 
 The point-of-query problem is real and is **not** solved here, it is *relocated*. `members_of` on a namespace answers for what the asking TU has seen: two calls at different points in one TU return different sets, and two TUs with different imports both get legitimate, differing answers. The base layer therefore reports members as found and reconciles nothing. A consumer that wants a stable set filters the sweep on something it controls, an annotation on the entities it cares about, and owns the consequence: the union over all TUs is complete even though no single sweep is, provided registration is idempotent, which pointer identity of the cached metadata already provides.
 
-Pointer identity is what makes that work, so a swept entity **is** the object naming it hands out: the `FunctionInfo*` in `GetFunctions()` is `&FunctionOfMeta<^^F>()`, the variable is `&VariableOfMeta<^^V>()`, and a member type resolves to `&TypeOf<T>()`. Sweeping and naming never produce two descriptions of one entity.
+Pointer identity is what makes that work, so a swept entity **is** the object naming it hands out: the `FunctionInfo*` in `GetFunctions()` is `&FunctionMetaOf<^^F>()`, the variable is `&VariableMetaOf<^^V>()`, and a member type resolves to `&TypeOf<T>()`. Sweeping and naming never produce two descriptions of one entity.
 
 The sweep is also the **only** route to an overloaded free function: `^^Game::Spawn` where `Spawn` is overloaded is ill-formed ("cannot take the reflection of an overload set"), so naming cannot reach either overload and the member list can.
 
@@ -329,9 +329,9 @@ The global namespace is **rejected**, by a `static_assert` that gates the instan
 
 | Information | Query | Field |
 |---|---|---|
-| Free function | named directly; `FunctionInfo` reused whole | `detail::FunctionOfMeta<^^F>()` |
+| Free function | named directly; `FunctionInfo` reused whole | `detail::FunctionMetaOf<^^F>()` |
 | Not a class member | `is_class_member` | `FunctionTraits::IsFreeFunction` |
-| Namespace variable | named directly; `StaticFieldInfo` reused whole | `detail::VariableOfMeta<^^V>()` |
+| Namespace variable | named directly; `StaticFieldInfo` reused whole | `detail::VariableMetaOf<^^V>()` |
 | Thread storage | `has_thread_storage_duration` | `StaticFieldTraits::IsThreadLocal` |
 | Namespace members | `members_of`, sorted by kind | `NamespaceOf<^^Ns>()` |
 | Namespace member type | `NestedTypeInfo` reused whole, alias flag included | `NamespaceInfo::GetTypes()` |
@@ -348,10 +348,10 @@ None of these block the current use case (annotation-filtered discovery), and al
 - **Materialization is eager and unfilterable.** `NamespaceOf<^^Ns>()` builds the metadata for *every* reflectable member, then hands the consumer the list to filter. An annotation filter therefore runs too late to save the compile time, and, more sharply, too late to avoid a member that cannot be reflected: one bad entity fails the whole sweep, with no way to opt out. `TypeOf` never had this exposure, because you only ever paid for what you named. If this bites, the fix is a separate `consteval` query returning `std::meta::info` lists that the consumer filters *before* anything is materialized; that returns no cached objects, so it does not threaten pointer identity the way a filtered `NamespaceOf<^^Ns, Filter>` would (two filters, two `NamespaceInfo`s for one namespace).
 - **A TU-local member makes the sweep an ODR violation, not merely a differing answer.** `NamespaceInfo` is a `static constexpr` inside a template, so every TU that sweeps a namespace must agree on its contents. An internal-linkage member (a `static` free function, and note that a namespace-scope `constexpr` variable is internal-linkage too) is a *different entity* in each TU, so two TUs cannot agree even in principle. Such members are still swept, because excluding all internal linkage would drop every `constexpr` namespace constant, which is exactly what a consumer wants to reflect. The anonymous-namespace exclusion is therefore a naming rule (no identifier to key on), not a linkage one, and does not close this. A consumer sweeping from more than one TU should keep its fixtures externally linked, or sweep from a single registration TU.
 - **A deprecated member is a hard error, not metadata.** Reflecting an entity names it, which fires `-Wdeprecated-declarations`, which is an error here. Sweeping any namespace containing a deprecated entity fails the build. Suppressing it belongs in the shared builders (reflecting is not using), not in the sweep, so it is left alone until something needs it.
-- **An `extern` variable that is never defined fails at link.** The reflected accessors take its address. Definedness is not queryable, so this cannot be guarded; the sweep only widens exposure to a hazard `VariableOfMeta` already had.
-- **A reference variable crashes GCC 17, and the crash cannot be intercepted.** `int& Ref = Target;` at namespace scope kills cc1plus in `cgraph_node::verify_node`, in the symbol table, long after the front end has finished, so a `static_assert` in `VariableOfMeta` never gets the chance to fire (verified: it does not). Exporting a `consteval` predicate over such a variable produces a *different* ICE (`import_export_decl`). Nothing here is a language rule; reflecting a reference variable is well-formed in principle. The sweep therefore **omits** them, which is verified and is what stops one declaration from failing a whole namespace, but **naming one directly through `VariableOfMeta` is unguarded** and will crash the compiler. No guard was added rather than shipping one that does not fire.
+- **An `extern` variable that is never defined fails at link.** The reflected accessors take its address. Definedness is not queryable, so this cannot be guarded; the sweep only widens exposure to a hazard `VariableMetaOf` already had.
+- **A reference variable crashes GCC 17, and the crash cannot be intercepted.** `int& Ref = Target;` at namespace scope kills cc1plus in `cgraph_node::verify_node`, in the symbol table, long after the front end has finished, so a `static_assert` in `VariableMetaOf` never gets the chance to fire (verified: it does not). Exporting a `consteval` predicate over such a variable produces a *different* ICE (`import_export_decl`). Nothing here is a language rule; reflecting a reference variable is well-formed in principle. The sweep therefore **omits** them, which is verified and is what stops one declaration from failing a whole namespace, but **naming one directly through `VariableMetaOf` is unguarded** and will crash the compiler. No guard was added rather than shipping one that does not fire.
 - **Inline namespaces read as ordinary nested ones.** `std::meta` has no `is_inline_namespace`, and the members of an inline namespace are not lifted into the parent's `members_of` even though name lookup finds them there. A consumer that mirrors lookup semantics must recurse and flatten itself. Note this disagrees with `ScopePathOf`, which *does* cross the inline namespace.
-- **Free operators are not swept.** `OperatorInfo` is built per owning type and has no free-standing singleton to point at, so a namespace-scope `operator==` is currently invisible. A `OperatorOfMeta<^^F>()` mirroring `FunctionOfMeta` would close it.
+- **Free operators are not swept.** `OperatorInfo` is built per owning type and has no free-standing singleton to point at, so a namespace-scope `operator==` is currently invisible. A `OperatorMetaOf<^^F>()` mirroring `FunctionMetaOf` would close it.
 - **`NestedTypeInfo` is reused for a namespace's types**, which reads oddly (nothing is nested in a namespace) but is the identical shape: name, alias flag, type reference, annotations. Reusing beat adding a parallel type; a rename to `MemberTypeInfo` would touch the existing public surface and was left out of scope.
 
 ## Part 3: Validated GCC facts

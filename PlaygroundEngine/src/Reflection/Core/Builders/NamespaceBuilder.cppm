@@ -82,7 +82,7 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaNamespace>
-	constexpr const NamespaceInfo& NamespaceOfMeta();
+	constexpr const NamespaceInfo& NamespaceMetaOf();
 
 	template <std::meta::info MetaNamespace, std::size_t... I>
 	consteval std::array<NestedTypeInfo, sizeof...(I)> MakeNamespaceTypeArray(std::index_sequence<I...>)
@@ -95,21 +95,21 @@ namespace PgE::detail
 	consteval std::array<const FunctionInfo*, sizeof...(I)> MakeNamespaceFunctionArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members = std::define_static_array(GetNamespaceMembers(MetaNamespace, &IsReflectableNamespaceFunction));
-		return std::array<const FunctionInfo*, sizeof...(I)>{&FunctionOfMeta<members[I]>()...};
+		return std::array<const FunctionInfo*, sizeof...(I)>{&FunctionMetaOf<members[I]>()...};
 	}
 
 	template <std::meta::info MetaNamespace, std::size_t... I>
 	consteval std::array<const StaticFieldInfo*, sizeof...(I)> MakeNamespaceVariableArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members = std::define_static_array(GetNamespaceMembers(MetaNamespace, &IsReflectableNamespaceVariable));
-		return std::array<const StaticFieldInfo*, sizeof...(I)>{&VariableOfMeta<members[I]>()...};
+		return std::array<const StaticFieldInfo*, sizeof...(I)>{&VariableMetaOf<members[I]>()...};
 	}
 
 	template <std::meta::info MetaNamespace, std::size_t... I>
 	consteval std::array<const NamespaceInfo*, sizeof...(I)> MakeNamespaceScopeArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto members = std::define_static_array(GetNamespaceMembers(MetaNamespace, &IsReflectableNamespaceScope));
-		return std::array<const NamespaceInfo*, sizeof...(I)>{&NamespaceOfMeta<members[I]>()...};
+		return std::array<const NamespaceInfo*, sizeof...(I)>{&NamespaceMetaOf<members[I]>()...};
 	}
 
 	template <std::meta::info MetaNamespace>
@@ -132,7 +132,7 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaNamespace>
-	constexpr const NamespaceInfo& NamespaceOfMeta()
+	constexpr const NamespaceInfo& NamespaceMetaOf()
 	{
 		// The rejections must gate the instantiation, not merely diagnose it: a static_assert does not stop the
 		// build from going on to instantiate MakeNamespace, and sweeping the global namespace reaches deprecated
@@ -152,7 +152,7 @@ namespace PgE::detail
 		// pointer identity holds, exactly as it does for a type alias.
 		else if constexpr (std::meta::dealias(MetaNamespace) != MetaNamespace)
 		{
-			return NamespaceOfMeta<std::meta::dealias(MetaNamespace)>();
+			return NamespaceMetaOf<std::meta::dealias(MetaNamespace)>();
 		}
 		else
 		{

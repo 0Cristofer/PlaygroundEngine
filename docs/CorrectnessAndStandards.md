@@ -326,7 +326,7 @@ No comment is longer than **3 lines**. Anything that needs more explanation belo
 document, not inline. This reinforces the existing minimal-comments stance (comments only where logic
 is genuinely complex) and is enforced by `scripts/lint.sh`. Enforcing it across the existing tree
 surfaced the knowledge-dense reflection comments; rather than delete them, the load-bearing material
-(the `TypeOfMeta` recursion knot, lazy `TypeReference`, the GCC-16 mangling-collision workaround, the
+(the `TypeMetaOf` recursion knot, lazy `TypeReference`, the GCC-16 mangling-collision workaround, the
 validated `std::meta` patterns) was migrated to [ReflectionInternals.md](ReflectionInternals.md), and
 the inline comments now point there. Migrating outsized comments to a doc, not condensing away the
 reasoning, is the intended response when this cap bites.

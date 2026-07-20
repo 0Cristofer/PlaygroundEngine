@@ -78,6 +78,16 @@ namespace PgE
 
 	private:
 		DestructorTraits _traits;
+
+		// A trivial destructor is set at the metadata build (its ~T has no body to splice); a non-trivial one is
+		// set on demand, when the type is named through TypeOf<T>. Null for a type with no reachable destructor.
 		Destroyer _destroy = nullptr;
+
+		// Sets the thunk in place: a trivial one at the metadata build, a non-trivial one on demand. A hidden
+		// friend rather than a public setter, so the thunk stays builder-written (reached only through ADL).
+		friend void SetDestroyer(DestructorInfo& destructor, const Destroyer destroy)
+		{
+			destructor._destroy = destroy;
+		}
 	};
 }

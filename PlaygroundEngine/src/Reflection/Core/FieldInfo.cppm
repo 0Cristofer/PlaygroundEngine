@@ -11,7 +11,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export struct FieldError
 	{
@@ -135,7 +135,7 @@ namespace PgE
 		std::expected<T, FieldError> GetAs(const void* obj) const
 		{
 			alignas(T) std::byte storage[sizeof(T)];
-			if (const auto result = GetValue(obj, TypedRef{.Type = &TypeOf<T>(), .Data = storage, .IsConst = false}); !result)
+			if (const auto result = GetValue(obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = storage, .IsConst = false}); !result)
 			{
 				return std::unexpected(result.error());
 			}
@@ -150,13 +150,13 @@ namespace PgE
 		std::expected<void, FieldError> SetAs(void* obj, const T& value) const
 		{
 			return SetValue(
-				obj, TypedRef{.Type = &TypeOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
+				obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
 		}
 
 		template <typename T>
 		std::expected<void, FieldError> MoveAs(void* obj, T& value) const
 		{
-			return SetValue(obj, TypedRef{.Type = &TypeOf<T>(), .Data = std::addressof(value), .IsConst = false, .Movable = true});
+			return SetValue(obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = std::addressof(value), .IsConst = false, .Movable = true});
 		}
 
 		template <typename T>
@@ -167,7 +167,7 @@ namespace PgE
 			{
 				return std::unexpected(ref.error());
 			}
-			if (ref->Type != &TypeOf<T>())
+			if (ref->Type != &TypeMetaOf<T>())
 			{
 				return std::unexpected(FieldError{FieldError::TypeMismatch});
 			}
@@ -187,7 +187,7 @@ namespace PgE
 			{
 				return std::unexpected(ref.error());
 			}
-			if (ref->Type != &TypeOf<T>())
+			if (ref->Type != &TypeMetaOf<T>())
 			{
 				return std::unexpected(FieldError{FieldError::TypeMismatch});
 			}
