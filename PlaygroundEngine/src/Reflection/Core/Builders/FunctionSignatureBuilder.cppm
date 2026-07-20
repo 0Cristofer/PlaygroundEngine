@@ -74,7 +74,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType>
-	constexpr const FunctionSignatureInfo& FunctionSignatureOfMeta()
+	constexpr const FunctionSignatureInfo& FunctionSignatureMetaOf()
 	{
 		using Function = [:MetaType:];
 
@@ -88,7 +88,7 @@ namespace PgE::detail
 	{
 		if constexpr (std::meta::is_function_type(MetaType))
 		{
-			return &FunctionSignatureOfMeta<MetaType>();
+			return &FunctionSignatureMetaOf<MetaType>();
 		}
 		else
 		{

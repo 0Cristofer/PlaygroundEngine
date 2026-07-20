@@ -102,7 +102,7 @@ namespace PgE::detail
 
 		static const TypeInfo* ExpectedTag()
 		{
-			return &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>();
+			return &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaParameter))>();
 		}
 
 		static decltype(auto) Bind(const TypedRef& arg)

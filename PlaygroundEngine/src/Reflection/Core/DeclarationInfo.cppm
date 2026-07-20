@@ -10,7 +10,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export struct AnnotationInfo
 	{
@@ -45,7 +45,7 @@ namespace PgE
 			std::vector<const AnnotationType*> annotations;
 			for (const auto& [Type, Value] : _annotations)
 			{
-				if (&Type.Get() == &TypeOf<AnnotationType>())
+				if (&Type.Get() == &TypeMetaOf<AnnotationType>())
 				{
 					annotations.push_back(static_cast<const AnnotationType*>(Value));
 				}
@@ -58,7 +58,7 @@ namespace PgE
 		{
 			for (const auto& [Type, Value] : _annotations)
 			{
-				if (&Type.Get() == &TypeOf<std::remove_cvref_t<A>>())
+				if (&Type.Get() == &TypeMetaOf<std::remove_cvref_t<A>>())
 				{
 					return true;
 				}

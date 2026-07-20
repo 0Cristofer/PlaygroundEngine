@@ -26,7 +26,7 @@ namespace PgE::detail
 	};
 
 	template <std::meta::info MetaType>
-	constexpr const MemberPointerInfo& MemberPointerOfMeta()
+	constexpr const MemberPointerInfo& MemberPointerMetaOf()
 	{
 		// The aliases keep a spliced type and a dependent name out of the template arguments below, neither of
 		// which GCC accepts there (-Wtemplate-body).
@@ -44,7 +44,7 @@ namespace PgE::detail
 	{
 		if constexpr (std::meta::is_member_object_pointer_type(MetaType) || std::meta::is_member_function_pointer_type(MetaType))
 		{
-			return &MemberPointerOfMeta<MetaType>();
+			return &MemberPointerMetaOf<MetaType>();
 		}
 		else
 		{

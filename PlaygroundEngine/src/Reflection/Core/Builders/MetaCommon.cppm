@@ -12,23 +12,23 @@ import :DeclarationInfo;
 
 import std;
 
-// Shared foundation for the reflection builders, and the declaration of the TypeOfMeta recursion knot.
+// Shared foundation for the reflection builders, and the declaration of the TypeMetaOf recursion knot.
 // See docs/ReflectionInternals.md (the recursion knot, the facet-authoring toolkit).
 
 namespace PgE::detail
 {
-	// TypeOfMeta, TypeReferenceTo, IdentifierOf, TypeIdentifierOf, DisplayStringOf, and ScopePathOf are the
+	// TypeMetaOf, TypeReferenceTo, IdentifierOf, TypeIdentifierOf, DisplayStringOf, and ScopePathOf are the
 	// exported facet-authoring toolkit; the rest stay module-internal. See docs/ReflectionInternals.md (Facets).
 
 	export template <std::meta::info MetaType>
-	constexpr const TypeInfo& TypeOfMeta();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export template <std::meta::info MetaType>
 	consteval TypeReference TypeReferenceTo()
 	{
-		// Bind to the address of TypeOfMeta on the dealiased type, not a call. See docs/ReflectionInternals.md
+		// Bind to the address of TypeMetaOf on the dealiased type, not a call. See docs/ReflectionInternals.md
 		// (TypeReference lazy cross-references, and the GCC 16 mangling-collision workaround the dealias dodges).
-		return TypeReference{.Resolve = &TypeOfMeta<std::meta::dealias(MetaType)>};
+		return TypeReference{.Resolve = &TypeMetaOf<std::meta::dealias(MetaType)>};
 	}
 
 	template <typename T>

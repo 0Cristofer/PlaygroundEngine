@@ -36,14 +36,32 @@ import std;
 
 namespace PgE
 {
+	// The metadata handle: the whole TypeInfo minus its invokers, total for any type and constexpr. Reach for it
+	// to inspect, compare identity, or render; it materializes no thunk, so it splices no member and cannot fail
+	// on a deprecated one. Contrast TypeOf.
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf()
+	constexpr const TypeInfo& TypeMetaOf()
 	{
-		return detail::TypeOfMeta<^^T>();
+		return detail::TypeMetaOf<^^T>();
 	}
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf(const T&)
+	constexpr const TypeInfo& TypeMetaOf(const T&)
+	{
+		return TypeMetaOf<T>();
+	}
+
+	// The invoke-intent handle: the same TypeInfo, but naming a type here materializes its ops (invokers,
+	// constructors, destructor). Reach for it to invoke, construct, or destroy; it is the one entry that splices
+	// the type's own members, so a deprecated member can make it fail. Contrast TypeMetaOf.
+	export template <typename T>
+	const TypeInfo& TypeOf()
+	{
+		return detail::MaterializedTypeOf<^^T>();
+	}
+
+	export template <typename T>
+	const TypeInfo& TypeOf(const T&)
 	{
 		return TypeOf<T>();
 	}
@@ -53,7 +71,7 @@ namespace PgE
 	export template <std::meta::info MetaNamespace>
 	constexpr const NamespaceInfo& NamespaceOf()
 	{
-		return detail::NamespaceOfMeta<MetaNamespace>();
+		return detail::NamespaceMetaOf<MetaNamespace>();
 	}
 
 	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj);
@@ -61,6 +79,8 @@ namespace PgE
 	export template <typename T>
 	std::string ToString(const T& value)
 	{
-		return ObjectToString(TypeOf(value), &value);
+		// Rendering is metadata only (it walks fields and facets, never invokes), so it takes the identity handle
+		// and never triggers invoker materialization: ToString of a foreign type cannot fail on a deprecated one.
+		return ObjectToString(TypeMetaOf(value), &value);
 	}
 }

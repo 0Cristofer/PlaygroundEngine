@@ -823,7 +823,7 @@ TEST_CASE("a volatile class-typed field reflects with no accessors rather than b
 
 TEST_CASE("a free function reflects by being named, and reports no access rather than private")
 {
-	const PgE::FunctionInfo& spawn = PgE::detail::FunctionOfMeta<^^FreeSpawn>();
+	const PgE::FunctionInfo& spawn = PgE::detail::FunctionMetaOf<^^FreeSpawn>();
 
 	CHECK(spawn.GetIdentifier() == "FreeSpawn");
 	REQUIRE(spawn.GetScopePath().size() == 1);
@@ -849,12 +849,12 @@ TEST_CASE("a free function reflects by being named, and reports no access rather
 	CHECK(*result == 10);
 
 	// One instance per function, so a consumer can compare by pointer identity the way it does for types.
-	CHECK(&PgE::detail::FunctionOfMeta<^^FreeSpawn>() == &spawn);
+	CHECK(&PgE::detail::FunctionMetaOf<^^FreeSpawn>() == &spawn);
 }
 
 TEST_CASE("a namespace-scope variable reflects as a static field, keeping the constant-readable split")
 {
-	const PgE::StaticFieldInfo& counter = PgE::detail::VariableOfMeta<^^FreeCounter>();
+	const PgE::StaticFieldInfo& counter = PgE::detail::VariableMetaOf<^^FreeCounter>();
 
 	CHECK(counter.GetIdentifier() == "FreeCounter");
 	CHECK(counter.GetAccess() == PgE::AccessKind::None);
@@ -869,7 +869,7 @@ TEST_CASE("a namespace-scope variable reflects as a static field, keeping the co
 
 	// A constexpr variable has no out-of-line definition, so its address is never taken: it is captured by
 	// value at consteval and reflects as read-only, which is what keeps it from failing at link time.
-	const PgE::StaticFieldInfo& maxSlots = PgE::detail::VariableOfMeta<^^FreeMaxSlots>();
+	const PgE::StaticFieldInfo& maxSlots = PgE::detail::VariableMetaOf<^^FreeMaxSlots>();
 	CHECK(maxSlots.IsConstantReadable());
 	CHECK(*maxSlots.GetAs<int>() == 8);
 	CHECK(maxSlots.SetAs(9).error().Reason == PgE::FieldError::NotWritable);

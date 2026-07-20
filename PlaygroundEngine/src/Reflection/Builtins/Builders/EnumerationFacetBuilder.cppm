@@ -31,7 +31,7 @@ namespace PgE
 	{
 		static std::string Stringify(const T value)
 		{
-			const TypeInfo& typeInfo = TypeOf<T>();
+			const TypeInfo& typeInfo = TypeMetaOf<T>();
 			const EnumerationFacet& facet = *typeInfo.GetFacet<EnumerationFacet>();
 			const auto underlying = static_cast<std::underlying_type_t<T>>(value);
 

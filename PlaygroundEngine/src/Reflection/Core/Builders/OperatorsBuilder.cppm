@@ -137,21 +137,21 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaOperator>
-	consteval OperatorInfo MakeOperator()
+	consteval OperatorInfo MakeOperator(const Invoker invoke)
 	{
-		using T = [:MetaType:];
-
 		return OperatorInfo(MapOperatorKind(std::meta::operator_of(MetaOperator)),
 							TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaOperator))>(), IdentifierOf(MetaOperator),
 							DisplayStringOf(MetaOperator), ScopePathOf<MetaOperator>(), MakeParameters<MetaOperator>(),
-							MakeFunctionTraits<MetaOperator>(), MakeInvoker<T, MetaOperator>(), MakeAnnotations<MetaOperator>());
+							MakeFunctionTraits<MetaOperator>(), invoke, MakeAnnotations<MetaOperator>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
 	consteval std::array<OperatorInfo, sizeof...(I)> MakeOperatorArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto operators = std::define_static_array(GetOperatorFunctions(MetaType));
-		return std::array<OperatorInfo, sizeof...(I)>{MakeOperator<MetaType, operators[I]>()...};
+
+		// Invokers left null, set in place on demand (FillOperatorInvokers), so the metadata build never splices.
+		return std::array<OperatorInfo, sizeof...(I)>{MakeOperator<MetaType, operators[I]>(nullptr)...};
 	}
 
 	template <std::meta::info MetaType>
@@ -170,5 +170,25 @@ namespace PgE::detail
 		{
 			return std::array<OperatorInfo, 0>{};
 		}
+	}
+
+	// One mutable array per type; TypeInfo's GetOperators span points here, and the demand upgrade sets each
+	// invoker in place. An OperatorInfo is a FunctionInfo, so SetInvoker fills its inherited invoker.
+	template <std::meta::info MetaType>
+	inline constinit auto GOperators = MakeOperatorsFromType<MetaType>();
+
+	template <std::meta::info MetaType, std::size_t... I>
+	void FillOperatorInvokersImpl(std::index_sequence<I...>)
+	{
+		using T = [:MetaType:];
+		[[maybe_unused]] constexpr auto operators = std::define_static_array(GetOperatorFunctions(MetaType));
+		((SetInvoker(GOperators<MetaType>[I], MakeInvoker<T, operators[I]>())), ...);
+	}
+
+	export template <std::meta::info MetaType>
+	void FillOperatorInvokers()
+	{
+		constexpr auto count = std::define_static_array(GetOperatorFunctions(MetaType)).size();
+		FillOperatorInvokersImpl<MetaType>(std::make_index_sequence<count>{});
 	}
 }

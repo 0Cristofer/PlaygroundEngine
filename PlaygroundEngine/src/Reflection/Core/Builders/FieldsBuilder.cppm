@@ -26,7 +26,7 @@ namespace PgE::detail
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
 
-		if (out.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		if (out.Type != &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
 		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
 		}
@@ -42,7 +42,7 @@ namespace PgE::detail
 		using Declared = [:std::meta::type_of(MetaField):];
 		using Field = std::remove_cvref_t<Declared>;
 
-		if (in.Type != &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
+		if (in.Type != &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>())
 		{
 			return std::unexpected(FieldError{FieldError::TypeMismatch});
 		}
@@ -139,17 +139,29 @@ namespace PgE::detail
 	template <std::meta::info MetaType, std::meta::info MetaField>
 	TypedRef FieldRefThunk(void* obj)
 	{
-		using Owner = [:MetaType:];
+		// Offset arithmetic, never a member splice, so the borrow is total: naming a deprecated member would
+		// fire -Wdeprecated-declarations at build time, and it odr-uses no copy constructor a value get would.
+		// See docs/ReflectionInternals.md (field access).
+		constexpr std::meta::info declared = std::meta::type_of(MetaField);
+		constexpr std::size_t byteOffset = std::meta::offset_of(MetaField).bytes;
 
-		// Bind the member access to a reference first: keeps the spliced member out of a template
-		// argument and exposes the in-place const-ness via decltype (GCC -Wtemplate-body).
-		auto&& lvalue = static_cast<Owner*>(obj)->[:MetaField:];
+		std::byte* storage = static_cast<std::byte*>(obj) + byteOffset;
 
-		return TypedRef{.Type = &TypeOfMeta<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
-						// Cast through const volatile void* so a volatile member (a memory-mapped register) does
-						// not fail the cast; the erased Data is a plain void*, with constness kept on IsConst.
-						.Data = const_cast<void*>(static_cast<const volatile void*>(std::addressof(lvalue))),
-						.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>};
+		void* data;
+		if constexpr (std::meta::is_reference_type(declared))
+		{
+			// A reference member stores a pointer to its referent; the borrow is the referent's address, the
+			// same lvalue the old member splice yielded, so a reference field reads through one indirection.
+			data = *reinterpret_cast<void**>(storage);
+		}
+		else
+		{
+			data = storage;
+		}
+
+		return TypedRef{.Type = &TypeMetaOf<std::meta::remove_cvref(declared)>(),
+						.Data = data,
+						.IsConst = std::meta::is_const_type(std::meta::remove_reference(declared))};
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaField>

@@ -29,7 +29,7 @@ namespace PgE::detail
 	template <std::meta::info Annotation>
 	consteval AnnotationInfo MakeAnnotation()
 	{
-		// The type tag is &TypeOfMeta<...>(), the same instance a caller reaches through
+		// The type tag is &TypeMetaOf<...>(), the same instance a caller reaches through
 		// &TypeOf<A>(), so a runtime GetAnnotation<A>() matches by pointer identity.
 		return AnnotationInfo{
 			.Type = TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(Annotation))>(),

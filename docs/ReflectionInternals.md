@@ -41,14 +41,14 @@ umbrella `PlaygroundEngine.Reflection` that re-exports both plus `PlaygroundEngi
 - Rendering (`ObjectToString` / `ToString`) is Core too: it names no facet, so it belongs with the type
   model, not with any facet that renders through it.
 
-## The `TypeOfMeta` recursion knot
+## The `TypeMetaOf` recursion knot
 
-`TypeOfMeta<MetaType>()` returns the one program-lifetime `TypeInfo&` for a type. Building it recurses:
+`TypeMetaOf<MetaType>()` returns the one program-lifetime `TypeInfo&` for a type. Building it recurses:
 a type's fields and function signatures are themselves types that need their own `TypeInfo`. The knot is
 resolved by **partition structure**, not runtime indirection:
 
-- `TypeOfMeta` is **declared** in the `:MetaCommon` partition and **defined** only in `:TypeBuilder`.
-- The per-kind sub-builders (`:FieldsBuilder`, `:FunctionsBuilder`, ...) reference `&TypeOfMeta<memberType>`
+- `TypeMetaOf` is **declared** in the `:MetaCommon` partition and **defined** only in `:TypeBuilder`.
+- The per-kind sub-builders (`:FieldsBuilder`, `:FunctionsBuilder`, ...) reference `&TypeMetaOf<memberType>`
   (its address, from the declaration) without instantiating it, so they depend on the **declaration
   alone**.
 - `:TypeBuilder` is the only unit that imports the sub-builders and holds the definition. That keeps the
@@ -56,24 +56,24 @@ resolved by **partition structure**, not runtime indirection:
 
 ## Canonical caching and dealiasing
 
-`TypeOfMeta` keys its cached `TypeInfo` on the **canonical (dealiased) type**, not the spelling. Every
+`TypeMetaOf` keys its cached `TypeInfo` on the **canonical (dealiased) type**, not the spelling. Every
 alias of a type (`std::uint16_t`, `std::underlying_type_t<E>`, `unsigned short`) must resolve to one
 instance, because pointer identity (`&TypeOf<T>()`) is what annotation matching, serialization, and the
-C# dedup layer compare by. `TypeOfMeta` first tail-calls itself on `std::meta::dealias(MetaType)` when the
+C# dedup layer compare by. `TypeMetaOf` first tail-calls itself on `std::meta::dealias(MetaType)` when the
 spelling is an alias, then caches the canonical instance.
 
 ## `TypeReference`: lazy cross-references
 
 A field's type, a parameter or return type, an annotation's type, an enum's underlying type: every
 cross-reference stored in the metadata is a `TypeReference`, which holds the **resolver's address**
-(`&TypeOfMeta<...>`), not a `TypeInfo` pointer and not a call.
+(`&TypeMetaOf<...>`), not a `TypeInfo` pointer and not a call.
 
 - Storing the address, resolved on first read, is what lets a type name **itself** (a factory method
   returning the type by value) or two types name **each other**, without the consteval construction of
   one depending on the completion of the other.
 - `&Get()` still yields the same pointer identity `&TypeOf<T>()` does, so all the pointer-comparison
   consumers are unaffected.
-- Bind to the **dealiased** type. `TypeOfMeta` dealiases internally anyway, so binding an alias would only
+- Bind to the **dealiased** type. `TypeMetaOf` dealiases internally anyway, so binding an alias would only
   tail-call the canonical one, and skipping it dodges a **GCC 16 reflection mangling collision**: the
   alias's template argument is dropped from the mangled symbol, so two distinct alias instantiations (for
   example `underlying_type_t` of two different enums) would resolve to one duplicately-defined symbol.
@@ -144,13 +144,61 @@ template <typename T> struct Holder { T Value; void Bad() { Value.NoSuchMember()
 only the declaration; a body error is outside the immediate context, so the check passes and `InvokeThunk`
 then hard-errors. This is the same class of trap as the `consteval` and deleted cases documented above, but
 strictly worse, because those are stated facts readable off the declaration and this one is not readable at
-all. The seam to build on is that `MakeInvoker` already yields a **null invoker** for the cases it can refuse:
-a `FunctionInfo` with no thunk is an established, tested shape, so the fix is to widen what reaches it (a
-depth or opt-in policy separating the type asked for from types reached through it), not to invent a mechanism.
+all. Deprecation is a second, distinct trap on the same splice: naming a `[[deprecated]]` member fires
+`-Werror=deprecated-declarations`, and GCC 16 exposes no `std::meta::is_deprecated`, so it is not even a
+readable fact. Both fire only when the entity is **spliced**, never from a metadata query.
 
-Measured on GCC 16: `std::pair` and `std::variant` reflect; `std::optional` ICEs cc1plus; `std::unique_ptr`,
-`std::tuple` and `std::map` fail to compile. `std::variant` reflects as an opaque leaf (no facet, no fields),
-which is a silent answer rather than an error and the more dangerous shape for a serializer.
+## The two tiers: metadata is total, ops are demanded
+
+The resolution splits reflection by *what odr-uses a fallible member body*, not by "field vs function":
+
+- **Transitive-safe tier**, always built on the metadata walk, splices nothing: names, types, offsets, traits,
+  and annotations; **offset-based field access** (`(char*)obj + byteOffset`, no member splice, so a deprecated
+  or move-only field still borrows); and **trivial** construct/destroy (a trivial `~T` has no body to be
+  ill-formed, gated on `is_trivially_destructible`). This tier is total: it describes `std::optional`,
+  `std::unique_ptr`, a deprecated-laced `Vk*CreateInfo`, and `Holder<int>` above, all without a hard error.
+- **Demand-or-curated tier**, everything that odr-uses a member body: function / operator / conversion
+  **invokers**, the **constructor** thunks, and a **non-trivial** destructor. These are not built during the
+  metadata walk. Each op lives **on its own metadata object** (`FunctionInfo::_invoke`,
+  `ConstructorInfo::_construct`, `DestructorInfo::_destroy`), null until filled. The op-bearing lists are held
+  in mutable globals (`GFunctions<T>`, `GOperators<T>`, `GConversions<T>`, `GConstructors<T>`, and a single
+  `GDestructor<T>`) that the metadata build populates with null ops; `TypeInfo` holds a `const` span or pointer
+  into each, and the demand upgrade sets the ops in place through a **hidden-friend** setter
+  (`SetInvoker` / `SetConstructor` / `SetDestroyer`), reachable only by ADL on the metadata object it mutates,
+  so it is the sole writer and never surfaces to ordinary lookup or the public API. `SetInvoker` is declared on
+  `FunctionInfo`; `OperatorInfo` and `ConversionInfo` derive from it, so ADL finds the same setter for them.
+
+`TypeMetaOf<T>()` returns the metadata handle and never fills a slot. `TypeOf<T>()` returns the same `TypeInfo`
+but first forces `TypeOpsUpgrader<T>` (an `inline` variable whose constructor runs at static init, before
+`main`, emitted only for a type actually named), which calls `MaterializeTypeOps<T>` to fill the slots. So the
+splices happen once, at static init, and **only for a type named through `TypeOf<T>`**; a type reached only
+through a `TypeReference` (a field type, a base, a return type) stays metadata alone. `ToString`, and every
+internal type tag, use `TypeMetaOf`, so rendering a type that transitively contains a deprecated member is
+total. A superseded type (`std::string`) is skipped entirely: its 150-odd members are the facet's business,
+not slots to fill.
+
+**Constructors and the destructor launder deprecation through `<memory>`.** The lifetime slots route through
+`std::construct_at` / `std::destroy_at`, which name the special member lexically inside a system header, where
+GCC suppresses `-Wdeprecated-declarations`. So a type with a deprecated (but well-formed) constructor or
+destructor is still constructible on demand. This rests on GCC 16 diagnostic-attribution behaviour (and on the
+build never passing `-Wsystem-headers`, which spdlog and vulkan already forbid), so it is recorded as
+compiler-version-fragile, not a standard guarantee, and it is never the sole safety mechanism for anything
+transitive.
+
+**Opting out a single member of a type you *do* name.** Naming a type through `TypeOf<T>` still fills *all* its
+invoker slots, so a foreign type with one un-splice-able member (a deprecated non-template `vk` setter) would
+still break if named for invocation. The opt-out for that belongs in `TypeInfoTraits<T>` (the same seam facets
+use, the only one available for a type you cannot annotate), keyed by member **identifier string** rather than
+a pointer-to-member, which would re-splice the member it means to exclude. It is deferred until a consumer
+actually names a foreign type for invocation: the metadata/`ToString` path never does, so nothing needs it
+yet.
+
+Measured on GCC 16 before the split, `TypeOf<T>` built invokers eagerly: `std::pair` and `std::variant`
+reflected; `std::optional` ICEd cc1plus; `std::unique_ptr`, `std::tuple` and `std::map` failed to compile.
+All now reflect as metadata. `std::variant` still reflects as an opaque leaf (no facet, no fields), a silent
+answer rather than an error: metadata-only reflection turns "fails to build" into "reflects successfully", so
+a serializer must treat a reached type with no facet and non-serializable structure (raw pointers) as an
+error rather than walk it. The build failure was a crude safety net; the facet seam is the real one.
 
 ## The argument binder
 
@@ -199,6 +247,10 @@ slot, so `ConstructorInfo` is a callable distinct from `FunctionInfo`, sharing o
   one), so a residual null thunk means "unbindable" and a deleted copy is told apart from a silent absence.
   `consteval` is detected by the specifier in the display string: GCC 16 exposes no `is_consteval`, and
   immediateness is invisible to SFINAE.
+- **The thunk is demand-filled, not eager.** Forming `&ConstructThunk` odr-uses the constructor, so it is
+  materialized only when the type is named through `TypeOf<T>` (set in place on the `ConstructorInfo` via
+  `SetConstructor`), never on the metadata walk that reaches the type as a field or argument. See the two-tier
+  model above.
 - **The slot protocol is stated once.** `detail::ValueFromSlot` runs a slot-taking call, then launders the
   object out of the stack slot and destroys it there. A function's return and a constructor's object differ
   only in the call and the error reported, so both `InvokeAs` and `ConstructAs` go through it.
@@ -219,6 +271,11 @@ path and the metadata are one object rather than a bare function pointer beside 
   reflects with no thunk; `IsDeleted` turns the common case from a silent absence into a stated reason.
 - **`members_of` is guarded, not merely filtered.** It throws on a non-class type, so the destructor-member
   walk sits behind `IsClassOrUnion` rather than being filtered afterwards.
+- **A trivial destroyer is transitive, a non-trivial one is demanded.** A trivial `~T` has no body to
+  instantiate, so the `DestructorInfo`'s destroyer is set at the metadata build (which keeps a scalar like
+  `int` destroyable everywhere); a non-trivial one is left null and set via `SetDestroyer` when the type is
+  named through `TypeOf<T>`, so a reached type never odr-uses a destructor body that could be ill-formed. See
+  the two-tier model above.
 
 ### Selecting a constructor from erased arguments
 
@@ -438,7 +495,7 @@ no facet kind:
   string) sets `Supersedes = true`, which empties the structural field/function view because that
   structure is an implementation detail. A facet that adds information alongside the fields omits the
   member and reads as `false`.
-- **Facet-authoring toolkit:** `TypeOfMeta`, `TypeReferenceTo`, `IdentifierOf`, and `DisplayStringOf` are
+- **Facet-authoring toolkit:** `TypeMetaOf`, `TypeReferenceTo`, `IdentifierOf`, and `DisplayStringOf` are
   exported from `:MetaCommon` because a facet binding lives in its own module (Builtins, or a user's) and
   reaches back for them across the module boundary, where only exported names are visible.
 

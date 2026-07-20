@@ -12,7 +12,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export struct InvokeError
 	{
@@ -187,7 +187,7 @@ namespace PgE
 			{
 				using Referent = std::remove_reference_t<Return>;
 				Referent* pointer = nullptr;
-				const auto result = Invoke(obj, args, TypedRef{.Type = &TypeOf<Referent*>(), .Data = &pointer, .IsConst = false});
+				const auto result = Invoke(obj, args, TypedRef{.Type = &TypeMetaOf<Referent*>(), .Data = &pointer, .IsConst = false});
 				if (!result)
 				{
 					return std::unexpected(result.error());
@@ -206,6 +206,17 @@ namespace PgE
 		TypeReference _returnType;
 		std::span<const ParameterInfo> _params;
 		FunctionTraits _traits;
+
+		// Null until the type is named through TypeOf<T> (the demand upgrade fills it in place), and null after
+		// that for a member the thunk cannot call. SetInvoker is the only writer.
 		Invoker _invoke = nullptr;
+
+		// The demand upgrade sets the invoker in place, once, at static init. A hidden friend rather than a
+		// public setter, so the invoker stays write-once-by-the-builder (reached only through ADL), never
+		// caller-mutable. OperatorInfo and ConversionInfo derive from FunctionInfo, so ADL finds this for them.
+		friend void SetInvoker(FunctionInfo& function, const Invoker invoke)
+		{
+			function._invoke = invoke;
+		}
 	};
 }

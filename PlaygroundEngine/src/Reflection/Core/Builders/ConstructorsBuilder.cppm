@@ -122,7 +122,7 @@ namespace PgE::detail
 
 		// The slot is mandatory, writable storage of exactly the constructed type: construction always
 		// produces the object there (there is no "discard" as with a function's return).
-		if (slot.Type != &TypeOfMeta<MetaType>() || slot.Data == nullptr || slot.IsConst)
+		if (slot.Type != &TypeMetaOf<MetaType>() || slot.Data == nullptr || slot.IsConst)
 		{
 			return std::unexpected(ConstructError{.Reason = ConstructError::SlotTypeMismatch, .ArgumentIndex = 0});
 		}
@@ -181,18 +181,20 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaConstructor>
-	consteval ConstructorInfo MakeConstructor()
+	consteval ConstructorInfo MakeConstructor(const Constructor construct)
 	{
 		return ConstructorInfo(MakeParameters<MetaConstructor>(), DisplayStringOf(MetaConstructor), ScopePathOf<MetaConstructor>(),
-							   MakeConstructorTraits(MetaConstructor), MakeConstructorThunk<MetaType, MetaConstructor>(),
-							   MakeAnnotations<MetaConstructor>());
+							   MakeConstructorTraits(MetaConstructor), construct, MakeAnnotations<MetaConstructor>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>
 	consteval std::array<ConstructorInfo, sizeof...(I)> MakeConstructorArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto constructors = std::define_static_array(GetConstructors(MetaType));
-		return std::array<ConstructorInfo, sizeof...(I)>{MakeConstructor<MetaType, constructors[I]>()...};
+
+		// Thunks left null, set in place on demand (FillConstructorThunks): forming &ConstructThunk odr-uses the
+		// constructor, so the metadata build must not, or a deprecated/ill-formed constructor would break it.
+		return std::array<ConstructorInfo, sizeof...(I)>{MakeConstructor<MetaType, constructors[I]>(nullptr)...};
 	}
 
 	template <std::meta::info MetaType>
@@ -213,5 +215,24 @@ namespace PgE::detail
 		{
 			return std::array<ConstructorInfo, 0>{};
 		}
+	}
+
+	// One mutable array per type; TypeInfo's GetConstructors span points here, and the demand upgrade sets each
+	// thunk in place. See the two-tier model in docs/ReflectionInternals.md.
+	template <std::meta::info MetaType>
+	inline constinit auto GConstructors = MakeConstructorsFromType<MetaType>();
+
+	template <std::meta::info MetaType, std::size_t... I>
+	void FillConstructorThunksImpl(std::index_sequence<I...>)
+	{
+		[[maybe_unused]] constexpr auto constructors = std::define_static_array(GetConstructors(MetaType));
+		((SetConstructor(GConstructors<MetaType>[I], MakeConstructorThunk<MetaType, constructors[I]>())), ...);
+	}
+
+	export template <std::meta::info MetaType>
+	void FillConstructorThunks()
+	{
+		constexpr auto count = std::define_static_array(GetConstructors(MetaType)).size();
+		FillConstructorThunksImpl<MetaType>(std::make_index_sequence<count>{});
 	}
 }

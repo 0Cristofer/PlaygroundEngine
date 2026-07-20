@@ -135,7 +135,7 @@ namespace PgE::detail
 	template <typename PointerType>
 	const TypeInfo* PointerReturnTag()
 	{
-		return &TypeOfMeta<^^PointerType>();
+		return &TypeMetaOf<^^PointerType>();
 	}
 
 	template <typename T, std::meta::info MetaFunction, std::size_t... I>
@@ -183,7 +183,7 @@ namespace PgE::detail
 		}
 		else
 		{
-			const TypeInfo* returnTag = &TypeOfMeta<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>();
+			const TypeInfo* returnTag = &TypeMetaOf<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>();
 			if (ret.Type != nullptr && ret.Type != returnTag)
 			{
 				return std::unexpected(InvokeError{.Reason = InvokeError::ReturnTypeMismatch, .ArgumentIndex = 0});
@@ -341,27 +341,24 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType, std::meta::info MetaFunction>
-	consteval FunctionInfo MakeFunction()
+	consteval FunctionInfo MakeFunction(const Invoker invoke)
 	{
-		using T = [:MetaType:];
-
 		return FunctionInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>(), IdentifierOf(MetaFunction),
 							DisplayStringOf(MetaFunction), ScopePathOf<MetaFunction>(), MakeParameters<MetaFunction>(),
-							MakeFunctionTraits<MetaFunction>(), MakeInvoker<T, MetaFunction>(), MakeAnnotations<MetaFunction>());
+							MakeFunctionTraits<MetaFunction>(), invoke, MakeAnnotations<MetaFunction>());
 	}
 
 	export template <std::meta::info MetaFunction>
-	constexpr const FunctionInfo& FunctionOfMeta()
+	constexpr const FunctionInfo& FunctionMetaOf()
 	{
 		// A member here would build a second FunctionInfo for an entity its type already owns, and the helper
 		// instantiations collide at link as a bare duplicate-symbol error naming no source line.
 		static_assert(!std::meta::is_class_member(MetaFunction),
-					  "FunctionOfMeta reflects namespace-scope functions; reach a member through TypeOf<T>().GetFunctions()");
+					  "FunctionMetaOf reflects namespace-scope functions; reach a member through TypeOf<T>().GetFunctions()");
 
-		// A namespace-scope function has no owning type, so the object type is void: every branch that would
-		// use it is discarded, because CallsWithoutObject is true. One instance per function, so a consumer
-		// can compare by pointer identity the way it does for types.
-		static constexpr FunctionInfo Function = MakeFunction<^^void, MetaFunction>();
+		// A namespace-scope function is named directly, not reached through a type, so its invoker is eager and
+		// built into the FunctionInfo here. Object type void is discarded, since CallsWithoutObject is true.
+		static constexpr FunctionInfo Function = MakeFunction<^^void, MetaFunction>(MakeInvoker<void, MetaFunction>());
 		return Function;
 	}
 
@@ -369,7 +366,10 @@ namespace PgE::detail
 	consteval std::array<FunctionInfo, sizeof...(I)> MakeFunctionArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto functions = std::define_static_array(GetMemberFunctions(MetaType));
-		return std::array<FunctionInfo, sizeof...(I)>{MakeFunction<MetaType, functions[I]>()...};
+
+		// A member's invoker is left null and set in place on demand (FillFunctionInvokers), so building the
+		// metadata never splices the member.
+		return std::array<FunctionInfo, sizeof...(I)>{MakeFunction<MetaType, functions[I]>(nullptr)...};
 	}
 
 	template <std::meta::info MetaType>
@@ -388,5 +388,28 @@ namespace PgE::detail
 		{
 			return std::array<FunctionInfo, 0>{};
 		}
+	}
+
+	// The type's member functions live in one mutable array (built with null invokers, no splice); TypeInfo's
+	// GetFunctions span points here, and the demand upgrade sets each invoker in place. See the two-tier model.
+	template <std::meta::info MetaType>
+	inline constinit auto GFunctions = MakeFunctionsFromType<MetaType>();
+
+	template <std::meta::info MetaType, std::size_t... I>
+	void FillFunctionInvokersImpl(std::index_sequence<I...>)
+	{
+		using T = [:MetaType:];
+		[[maybe_unused]] constexpr auto functions = std::define_static_array(GetMemberFunctions(MetaType));
+
+		// The splices live here alone: a member the thunk cannot call sets a null invoker, exactly as the eager
+		// build once produced.
+		((SetInvoker(GFunctions<MetaType>[I], MakeInvoker<T, functions[I]>())), ...);
+	}
+
+	export template <std::meta::info MetaType>
+	void FillFunctionInvokers()
+	{
+		constexpr auto count = std::define_static_array(GetMemberFunctions(MetaType)).size();
+		FillFunctionInvokersImpl<MetaType>(std::make_index_sequence<count>{});
 	}
 }

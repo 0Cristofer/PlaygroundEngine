@@ -11,7 +11,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export enum class ConstructorKind : std::uint8_t
 	{
@@ -158,6 +158,16 @@ namespace PgE
 	private:
 		std::span<const ParameterInfo> _params;
 		ConstructorTraits _traits;
+
+		// Null until the type is named through TypeOf<T> (the demand upgrade sets it in place), and null after
+		// that for a constructor whose erased path is unusable. SetConstructor is the only writer.
 		Constructor _construct = nullptr;
+
+		// Sets the thunk in place during the demand upgrade. A hidden friend rather than a public setter, so the
+		// thunk stays write-once-by-the-builder (reached only through ADL), never caller-mutable.
+		friend void SetConstructor(ConstructorInfo& constructor, const Constructor construct)
+		{
+			constructor._construct = construct;
+		}
 	};
 }

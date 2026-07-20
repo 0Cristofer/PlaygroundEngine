@@ -12,7 +12,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	// A static data member has no offset and no instance, so every accessor drops the object pointer. That
 	// is why it is its own metadata type with its own span on TypeInfo, not an entry in the field list.
@@ -107,7 +107,7 @@ namespace PgE
 		std::expected<T, FieldError> GetAs() const
 		{
 			alignas(T) std::byte storage[sizeof(T)];
-			if (const auto result = GetValue(TypedRef{.Type = &TypeOf<T>(), .Data = storage, .IsConst = false}); !result)
+			if (const auto result = GetValue(TypedRef{.Type = &TypeMetaOf<T>(), .Data = storage, .IsConst = false}); !result)
 			{
 				return std::unexpected(result.error());
 			}
@@ -122,7 +122,7 @@ namespace PgE
 		std::expected<void, FieldError> SetAs(const T& value) const
 		{
 			return SetValue(
-				TypedRef{.Type = &TypeOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
+				TypedRef{.Type = &TypeMetaOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
 		}
 
 	private:

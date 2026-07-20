@@ -348,3 +348,33 @@ TEST_CASE("invoke copies a by-value argument with a deleted move constructor")
 	REQUIRE(take->InvokeAs(&consumer, argument).has_value());
 	CHECK(consumer.Stored == 6);
 }
+
+namespace
+{
+	// The shape of vk::DebugUtilsMessengerCreateInfoEXT: a struct reached through a field that carries a
+	// deprecated non-template member function, which the eager invoker build once spliced and broke on.
+	struct DeprecatedMemberHolder
+	{
+		int Severity = 0;
+		[[deprecated("use the typed callback")]] void SetCallback(void*) {}
+		void SetSeverity(int severity) { Severity = severity; }
+	};
+
+	struct HolderOwner
+	{
+		int Width = 800;
+		DeprecatedMemberHolder Holder;
+	};
+}
+
+TEST_CASE("a reached type with a deprecated member reflects as metadata without materializing its invoker")
+{
+	// Reaching the type as metadata (never naming it through TypeOf<T>) lists its functions but fills no
+	// invoker, so the deprecated member is never spliced and the build does not break on it.
+	const PgE::TypeInfo& holder = PgE::TypeMetaOf<DeprecatedMemberHolder>();
+	CHECK(holder.GetFunctions().size() == 2);
+
+	// ToString walks the owner's fields by offset and recurses into the holder as metadata, so rendering a
+	// type that transitively contains a deprecated member is total, the way it must be for a foreign vk struct.
+	CHECK(PgE::ToString(HolderOwner{}) == "{Width: 800, Holder: {Severity: 0}}");
+}

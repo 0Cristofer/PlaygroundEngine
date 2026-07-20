@@ -24,7 +24,7 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType>
-	consteval DestructorInfo::Destroyer MakeDestroyer()
+	consteval DestructorInfo::Destroyer MakeFullDestroyer()
 	{
 		// obj->~T() reaches a real/pseudo destructor only for a scalar or class object; is_destructible excludes
 		// a deleted or inaccessible one, and arrays are excluded because ~T() is ill-formed on them (elements
@@ -36,6 +36,33 @@ namespace PgE::detail
 		if constexpr (std::meta::is_complete_type(MetaType))
 		{
 			if constexpr (std::is_object_v<T> && std::is_destructible_v<T> && !std::is_array_v<T>)
+			{
+				return &DestroyThunk<T>;
+			}
+			else
+			{
+				return nullptr;
+			}
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+
+	template <std::meta::info MetaType>
+	consteval DestructorInfo::Destroyer MakeTrivialDestroyer()
+	{
+		// The transitive-safe half: a trivial ~T has no body to instantiate, so its thunk is formed during the
+		// metadata build like a field offset. A non-trivial destructor is left null and filled on demand, so a
+		// reached type never odr-uses a destructor body that could be ill-formed for this instantiation.
+		using T = [:MetaType:];
+
+		// Nested, not one && chain: is_trivially_destructible_v requires a complete type, and a variable template
+		// is instantiated even where && would short-circuit, so an incomplete handle would ill-form the query.
+		if constexpr (std::meta::is_complete_type(MetaType))
+		{
+			if constexpr (std::is_object_v<T> && std::is_trivially_destructible_v<T> && !std::is_array_v<T>)
 			{
 				return &DestroyThunk<T>;
 			}
@@ -94,21 +121,31 @@ namespace PgE::detail
 		// disagree about whether this type has a destructor member to read.
 		if constexpr (IsClassOrUnion(MetaType))
 		{
-			constexpr std::optional<std::meta::info> destructor = FindDestructor(MetaType);
-			if constexpr (destructor.has_value())
+			if constexpr (constexpr std::optional<std::meta::info> destructor = FindDestructor(MetaType); destructor.has_value())
 			{
 				constexpr std::meta::info member = *destructor;
 				return DestructorInfo(DisplayStringOf(member), ScopePathOf<member>(), MakeDestructorTraits(MetaType, destructor),
-									  MakeDestroyer<MetaType>(), MakeAnnotations<member>());
+									  MakeTrivialDestroyer<MetaType>(), MakeAnnotations<member>());
 			}
 			else
 			{
-				return DestructorInfo({}, {}, MakeDestructorTraits(MetaType, destructor), MakeDestroyer<MetaType>(), {});
+				return DestructorInfo({}, {}, MakeDestructorTraits(MetaType, destructor), MakeTrivialDestroyer<MetaType>(), {});
 			}
 		}
 		else
 		{
-			return DestructorInfo({}, {}, MakeDestructorTraits(MetaType, std::nullopt), MakeDestroyer<MetaType>(), {});
+			return DestructorInfo({}, {}, MakeDestructorTraits(MetaType, std::nullopt), MakeTrivialDestroyer<MetaType>(), {});
 		}
+	}
+
+	// One mutable DestructorInfo per type; TypeInfo's GetDestructor points here. It carries the trivial destroyer
+	// from the metadata build, and the demand upgrade sets a non-trivial one in place. See the two-tier model.
+	template <std::meta::info MetaType>
+	inline constinit DestructorInfo GDestructor = MakeDestructor<MetaType>();
+
+	export template <std::meta::info MetaType>
+	void FillDestroyer()
+	{
+		SetDestroyer(GDestructor<MetaType>, MakeFullDestroyer<MetaType>());
 	}
 }

@@ -7,7 +7,7 @@ namespace PgE
 	export class TypeInfo;
 
 	export template <typename T>
-	constexpr const TypeInfo& TypeOf();
+	constexpr const TypeInfo& TypeMetaOf();
 
 	export struct TypedRef
 	{
@@ -25,7 +25,7 @@ namespace PgE
 		export template <typename... Arguments>
 		std::array<TypedRef, sizeof...(Arguments)> MakeTypedRefs(Arguments&&... arguments)
 		{
-			return {TypedRef{.Type = &TypeOf<std::remove_cvref_t<Arguments>>(),
+			return {TypedRef{.Type = &TypeMetaOf<std::remove_cvref_t<Arguments>>(),
 							 .Data = const_cast<void*>(static_cast<const void*>(std::addressof(arguments))),
 							 .IsConst = std::is_const_v<std::remove_reference_t<Arguments>>,
 							 .Movable = !std::is_lvalue_reference_v<Arguments>}...};
@@ -40,7 +40,7 @@ namespace PgE
 			using Value = std::remove_cvref_t<T>;
 
 			alignas(Value) std::byte storage[sizeof(Value)];
-			const auto result = call(args, TypedRef{.Type = &TypeOf<Value>(), .Data = storage, .IsConst = false});
+			const auto result = call(args, TypedRef{.Type = &TypeMetaOf<Value>(), .Data = storage, .IsConst = false});
 			if (!result)
 			{
 				return std::unexpected(result.error());
