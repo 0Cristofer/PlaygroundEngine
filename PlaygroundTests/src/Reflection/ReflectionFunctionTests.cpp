@@ -349,36 +349,41 @@ TEST_CASE("invoke copies a by-value argument with a deleted move constructor")
 	CHECK(consumer.Stored == 6);
 }
 
-namespace
+TEST_CASE("a reached type with a deprecated member reflects as metadata without reifying its members")
 {
-	// The shape of vk::DebugUtilsMessengerCreateInfoEXT: a struct reached through a field that carries a
-	// deprecated non-template member function, which the eager invoker build once spliced and broke on.
-	struct DeprecatedMemberHolder
-	{
-		int Severity = 0;
-		[[deprecated("use the typed callback")]] void SetCallback(void*)
-		{}
-		void SetSeverity(int severity)
-		{
-			Severity = severity;
-		}
-	};
-
-	struct HolderOwner
-	{
-		int Width = 800;
-		DeprecatedMemberHolder Holder;
-	};
-}
-
-TEST_CASE("a reached type with a deprecated member reflects as metadata without materializing its invoker")
-{
-	// Reaching the type as metadata (never naming it through TypeOf<T>) lists its functions but fills no
-	// invoker, so the deprecated member is never spliced and the build does not break on it.
+	// The metadata handle never reflects member functions (the list is built only at demand, through
+	// TypeOf<T>), so reaching a type as metadata reifies no member and cannot break on a deprecated or
+	// ill-formed one. Naming this type through TypeOf<T> would splice its deprecated member and fail to build.
 	const PgE::TypeInfo& holder = PgE::TypeMetaOf<DeprecatedMemberHolder>();
-	CHECK(holder.GetFunctions().size() == 2);
+	CHECK(holder.GetFunctions().empty());
 
 	// ToString walks the owner's fields by offset and recurses into the holder as metadata, so rendering a
 	// type that transitively contains a deprecated member is total, the way it must be for a foreign vk struct.
 	CHECK(PgE::ToString(HolderOwner{}) == "{Width: 800, Holder: {Severity: 0}}");
+}
+
+TEST_CASE("a transitively reached type with a constexpr member ill-formed for its argument reflects as metadata")
+{
+	// copy() is ill-formed for T = OpaqueElement, so the metadata walk must never reify the wrapper's member
+	// functions, or instantiating copy would hard-error. The list is empty until the type is named for
+	// invocation, which nothing here does, so reaching it only as metadata keeps the build total.
+	const PgE::TypeInfo& wrapper = PgE::TypeMetaOf<ConstexprMemberWrapper<OpaqueElement, 2>>();
+	CHECK(wrapper.GetFunctions().empty());
+
+	// ToString recurses into the wrapper as metadata; the fact that this compiles at all is the regression guard.
+	CHECK(PgE::ToString(WrapperOwner{}).starts_with("{Count: 3, Wrapper:"));
+}
+
+TEST_CASE("AreOpsMaterialized distinguishes a pending empty function list from a genuinely empty one")
+{
+	// DeprecatedMemberHolder is never named through TypeOf (its deprecated member would break the build), so its
+	// op-lists stay empty because they are pending, not because it has no functions.
+	CHECK_FALSE(PgE::TypeMetaOf<DeprecatedMemberHolder>().AreOpsMaterialized());
+	CHECK(PgE::TypeMetaOf<DeprecatedMemberHolder>().GetFunctions().empty());
+
+	// NoFunctions is splice-able, so naming it through TypeOf materializes its ops; its function list is then
+	// empty because it genuinely has none, which AreOpsMaterialized reports true against the pending case above.
+	const PgE::TypeInfo& materialized = PgE::TypeOf<NoFunctions>();
+	CHECK(materialized.AreOpsMaterialized());
+	CHECK(materialized.GetFunctions().empty());
 }

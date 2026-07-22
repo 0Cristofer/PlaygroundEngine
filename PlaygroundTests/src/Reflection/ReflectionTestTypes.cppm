@@ -7,17 +7,18 @@ export module PlaygroundTests.ReflectionTestTypes;
 import std;
 import PlaygroundEngine.Reflection;
 
+// ReSharper disable CppDeclaratorNeverUsed
+// ReSharper disable CppParameterMayBeConst
+// ReSharper disable CppPassValueParameterByConstReference
+// ReSharper disable CppEnumeratorNeverUsed
+// ReSharper disable CppMemberFunctionMayBeStatic
+// ReSharper disable CppMemberFunctionMayBeConst
+
 // Shared fixtures for the reflection test suite. Each Reflection*Tests.cpp imports this so the reflected
 // types (and their deterministic display names) are defined once. A named namespace (not anonymous) keeps
 // reflected member display strings stable across runs.
 export namespace ReflectionTestTypes
 {
-	// ReSharper disable CppDeclaratorNeverUsed
-	// ReSharper disable CppParameterMayBeConst
-	// ReSharper disable CppPassValueParameterByConstReference
-	// ReSharper disable CppEnumeratorNeverUsed
-	// ReSharper disable CppMemberFunctionMayBeStatic
-	// ReSharper disable CppMemberFunctionMayBeConst
 	// Namespace-scope entities, reflected by being named rather than discovered. FreeMaxSlots is the
 	// constant-readable case whose address must never be taken (it has no out-of-line definition).
 	int FreeSpawn(const int count, const float scale)
@@ -143,7 +144,7 @@ export namespace ReflectionTestTypes
 		{}
 	};
 
-	// An rvalue-reference data member: shares the referent's decayed tag like the lvalue aliases, told apart
+	// A rvalue-reference data member: shares the referent's decayed tag like the lvalue aliases, told apart
 	// only by IsRvalueReference. Bound in the constructor, never rebindable.
 	struct RvalueField
 	{
@@ -630,8 +631,8 @@ export namespace ReflectionTestTypes
 		{}
 	};
 
-	// The classic sink pair: a const-ref and an rvalue-ref overload of the same parameter. Both erase to
-	// the same argument tag, and neither is a copy or move constructor of Sinkable itself. Sunk records
+	// The classic sink pair: a const-ref and a rvalue-ref overload of the same parameter. Both erase to
+	// the same argument tag, and neither is a copy nor move constructor of Sinkable itself. Sunk records
 	// which overload ran, since a moved-from string's state is unspecified.
 	struct Sinkable
 	{
@@ -821,7 +822,7 @@ export namespace ReflectionTestTypes
 		{
 			return 3;
 		}
-		virtual int Virt()
+		virtual int Virtual()
 		{
 			return 4;
 		}
@@ -861,7 +862,7 @@ export namespace ReflectionTestTypes
 
 	struct SurfaceChild : Surface
 	{
-		int Virt() override
+		int Virtual() override
 		{
 			return 9;
 		}
@@ -910,8 +911,6 @@ export namespace ReflectionTestTypes
 		int Plain = 0;
 	};
 
-	// An anonymous nested struct (the shape of `struct { int a; } field;`) is a type member with no identifier,
-	// so it is excluded from GetNestedTypes: nothing can name it, and its field already reaches it.
 	struct AnonymousNested
 	{
 		struct
@@ -928,7 +927,7 @@ export namespace ReflectionTestTypes
 	};
 
 	// A defaulted operator==: the language generates memberwise comparison, so IsDefaulted() is true on the
-	// reflected operator, unlike Coord's hand-written one.
+	// reflected operator, unlike Coord's handwritten one.
 	struct Comparable
 	{
 		int Value = 0;
@@ -970,12 +969,56 @@ export namespace ReflectionTestTypes
 		int Plain = 0;
 	};
 
-	// ReSharper restore CppMemberFunctionMayBeConst
-	// ReSharper restore CppMemberFunctionMayBeStatic
-	// ReSharper restore CppParameterMayBeConst
-	// ReSharper restore CppDeclaratorNeverUsed
-	// ReSharper restore CppPassValueParameterByConstReference
-	// ReSharper restore CppEnumeratorNeverUsed
+	struct DeprecatedMemberHolder
+	{
+		int Severity = 0;
+		[[deprecated("use the typed callback")]] void SetCallback(void*)
+		{}
+		void SetSeverity(int severity)
+		{
+			Severity = severity;
+		}
+	};
+
+	struct HolderOwner
+	{
+		int Width = 800;
+		DeprecatedMemberHolder Holder;
+	};
+
+
+	// The shape of vk::ArrayWrapper1D: a class template with a constexpr member whose body is ill-formed for the
+	// given T (it assigns a char, valid only for T = char), kept compilable only by never being instantiated.
+	// Reifying its member functions, as the metadata build once did, would instantiate copy and hard-error.
+	template <typename T, std::size_t N>
+	struct ConstexprMemberWrapper
+	{
+		T Data[N];
+		constexpr void copy(const char* source, std::size_t length)
+		{
+			for (std::size_t index = 0; index < length; ++index)
+			{
+				Data[index] = source[index];
+			}
+		}
+	};
+
+	struct OpaqueElement
+	{
+		int Handle = 0;
+	};
+
+	struct WrapperOwner
+	{
+		int Count = 3;
+		ConstexprMemberWrapper<OpaqueElement, 2> Wrapper;
+	};
+
+	struct NoFunctions
+	{
+		int X = 1;
+		int Y = 2;
+	};
 }
 
 // Not exported, so it has module linkage rather than external: no cross-translation-unit identity. A
@@ -1002,3 +1045,10 @@ struct PgE::TypeInfoTraits<ReflectionTestTypes::Labeled> : PgE::TypeInfoTraitsDe
 		return std::tuple{ReflectionTestTypes::LabelFacet{.Text = "the-label"}};
 	}
 };
+
+// ReSharper restore CppMemberFunctionMayBeConst
+// ReSharper restore CppMemberFunctionMayBeStatic
+// ReSharper restore CppParameterMayBeConst
+// ReSharper restore CppDeclaratorNeverUsed
+// ReSharper restore CppPassValueParameterByConstReference
+// ReSharper restore CppEnumeratorNeverUsed

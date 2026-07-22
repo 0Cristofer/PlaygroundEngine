@@ -217,10 +217,14 @@ namespace PgE::detail
 		}
 	}
 
-	// One mutable array per type; TypeInfo's GetConstructors span points here, and the demand upgrade sets each
-	// thunk in place. See the two-tier model in docs/ReflectionInternals.md.
+	// One mutable array per type, instantiated only at demand (from MaterializeConstructors), never on the
+	// metadata walk (reifying a constructor reflection instantiates its body). See docs/ReflectionInternals.md.
 	template <std::meta::info MetaType>
 	inline constinit auto GConstructors = MakeConstructorsFromType<MetaType>();
+
+	// The view TypeInfo::GetConstructors reads. Empty until MaterializeConstructors publishes the list.
+	template <std::meta::info MetaType>
+	inline constinit std::span<const ConstructorInfo> GConstructorsView{};
 
 	template <std::meta::info MetaType, std::size_t... I>
 	void FillConstructorThunksImpl(std::index_sequence<I...>)
@@ -230,8 +234,11 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaType>
-	void FillConstructorThunks()
+	void MaterializeConstructors()
 	{
+		// Publish the list (reifying the constructors) and fill the thunks, both at demand.
+		GConstructorsView<MetaType> = GConstructors<MetaType>;
+
 		constexpr auto count = std::define_static_array(GetConstructors(MetaType)).size();
 		FillConstructorThunksImpl<MetaType>(std::make_index_sequence<count>{});
 	}

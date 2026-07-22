@@ -70,10 +70,14 @@ namespace PgE::detail
 		}
 	}
 
-	// One mutable array per type; TypeInfo's GetConversions span points here, and the demand upgrade sets each
-	// invoker in place. A ConversionInfo is a FunctionInfo, so SetInvoker fills its inherited invoker.
+	// One mutable array per type, instantiated only at demand (from MaterializeConversions), never on the
+	// metadata walk. A ConversionInfo is a FunctionInfo, so SetInvoker fills its inherited invoker.
 	template <std::meta::info MetaType>
 	inline constinit auto GConversions = MakeConversionsFromType<MetaType>();
+
+	// The view TypeInfo::GetConversions reads. Empty until MaterializeConversions publishes the list.
+	template <std::meta::info MetaType>
+	inline constinit std::span<const ConversionInfo> GConversionsView{};
 
 	template <std::meta::info MetaType, std::size_t... I>
 	void FillConversionInvokersImpl(std::index_sequence<I...>)
@@ -84,8 +88,11 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaType>
-	void FillConversionInvokers()
+	void MaterializeConversions()
 	{
+		// Publish the list (reifying the conversions) and fill the invokers, both at demand.
+		GConversionsView<MetaType> = GConversions<MetaType>;
+
 		constexpr auto count = std::define_static_array(GetConversionFunctions(MetaType)).size();
 		FillConversionInvokersImpl<MetaType>(std::make_index_sequence<count>{});
 	}

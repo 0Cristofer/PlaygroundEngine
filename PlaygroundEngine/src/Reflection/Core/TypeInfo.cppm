@@ -102,13 +102,13 @@ namespace PgE
 						   const std::span<const AnnotationInfo> annotations,
 						   const TypeTraits& traits,
 						   const std::span<const FacetEntry> facets,
-						   const std::span<const FunctionInfo> functions,
-						   const std::span<const OperatorInfo> operators,
-						   const std::span<const ConversionInfo> conversions,
+						   const std::span<const FunctionInfo>* functions,
+						   const std::span<const OperatorInfo>* operators,
+						   const std::span<const ConversionInfo>* conversions,
 						   const std::span<const FieldInfo> fields,
 						   const std::span<const StaticFieldInfo> staticFields,
 						   const std::span<const BaseInfo> bases,
-						   const std::span<const ConstructorInfo> constructors,
+						   const std::span<const ConstructorInfo>* constructors,
 						   const DestructorInfo* destructor,
 						   const std::span<const NestedTypeInfo> nestedTypes,
 						   const TemplateInfo* templateInfo,
@@ -116,12 +116,14 @@ namespace PgE
 						   const TypeReference innerType,
 						   const FunctionSignatureInfo* signature,
 						   const MemberPointerInfo* memberPointer,
-						   std::string (*stringifyThunk)(const void*)) pre(destructor)
+						   std::string (*stringifyThunk)(const void*),
+						   const bool* opsMaterialized) pre(functions) pre(operators) pre(conversions)
+			pre(constructors) pre(destructor) pre(opsMaterialized)
 			: DeclarationInfo(identifier, displayName, scopePath, annotations), _traits(traits), _facets(facets), _functions(functions),
 			  _operators(operators), _conversions(conversions), _fields(fields), _staticFields(staticFields), _bases(bases),
 			  _constructors(constructors), _destructor(destructor), _nestedTypes(nestedTypes), _template(templateInfo),
 			  _templateArguments(templateArguments), _innerType(innerType), _signature(signature), _memberPointer(memberPointer),
-			  _stringifyThunk(stringifyThunk)
+			  _stringifyThunk(stringifyThunk), _opsMaterialized(opsMaterialized)
 		{}
 
 		const TypeTraits& GetTraits() const
@@ -159,6 +161,14 @@ namespace PgE
 			return nullptr;
 		}
 
+		// The four op-bearing lists (GetFunctions/GetOperators/GetConversions/GetConstructors) are materialized
+		// only through TypeOf<T>. On a metadata-only handle they are empty, which does not mean the type has
+		// none: AreOpsMaterialized tells "not materialized yet" from "genuinely empty". See the two tiers doc.
+		bool AreOpsMaterialized() const
+		{
+			return *_opsMaterialized;
+		}
+
 		std::span<const FunctionInfo> GetFunctions() const;
 		std::vector<const FunctionInfo*> FindFunctionsByIdentifier(std::string_view identifier) const;
 
@@ -166,13 +176,13 @@ namespace PgE
 		// its OperatorKind (there may be several overloads of one kind), a conversion by its target type.
 		std::span<const OperatorInfo> GetOperators() const
 		{
-			return _operators;
+			return *_operators;
 		}
 		std::vector<const OperatorInfo*> FindOperators(OperatorKind kind) const;
 
 		std::span<const ConversionInfo> GetConversions() const
 		{
-			return _conversions;
+			return *_conversions;
 		}
 
 		std::span<const FieldInfo> GetFields() const
@@ -240,7 +250,7 @@ namespace PgE
 
 		std::span<const ConstructorInfo> GetConstructors() const
 		{
-			return _constructors;
+			return *_constructors;
 		}
 
 		const ConstructorInfo* FindConstructor(ConstructorKind kind) const;
@@ -349,13 +359,16 @@ namespace PgE
 
 		TypeTraits _traits;
 		std::span<const FacetEntry> _facets;
-		std::span<const FunctionInfo> _functions;
-		std::span<const OperatorInfo> _operators;
-		std::span<const ConversionInfo> _conversions;
+		// The four op-bearing lists are built at demand, so TypeInfo holds a pointer to a mutable view global
+		// (empty until published) rather than a span: the metadata walk sets the pointer without reifying a
+		// member. See docs/ReflectionInternals.md (the two tiers).
+		const std::span<const FunctionInfo>* _functions = nullptr;
+		const std::span<const OperatorInfo>* _operators = nullptr;
+		const std::span<const ConversionInfo>* _conversions = nullptr;
 		std::span<const FieldInfo> _fields;
 		std::span<const StaticFieldInfo> _staticFields;
 		std::span<const BaseInfo> _bases;
-		std::span<const ConstructorInfo> _constructors;
+		const std::span<const ConstructorInfo>* _constructors = nullptr;
 		const DestructorInfo* _destructor = nullptr;
 		std::span<const NestedTypeInfo> _nestedTypes;
 		const TemplateInfo* _template = nullptr;
@@ -364,5 +377,9 @@ namespace PgE
 		const FunctionSignatureInfo* _signature = nullptr;
 		const MemberPointerInfo* _memberPointer = nullptr;
 		std::string (*_stringifyThunk)(const void*) = nullptr;
+
+		// Points at the type's demand-pass flag: false while the four op-lists are empty and pending, true once
+		// TypeOf<T> has materialized them. Lets AreOpsMaterialized tell "empty and pending" from "genuinely none".
+		const bool* _opsMaterialized = nullptr;
 	};
 }
