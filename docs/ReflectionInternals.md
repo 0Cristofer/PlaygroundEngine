@@ -156,26 +156,59 @@ The resolution splits reflection by *what odr-uses a fallible member body*, not 
   and annotations; **offset-based field access** (`(char*)obj + byteOffset`, no member splice, so a deprecated
   or move-only field still borrows); and **trivial** construct/destroy (a trivial `~T` has no body to be
   ill-formed, gated on `is_trivially_destructible`). This tier is total: it describes `std::optional`,
-  `std::unique_ptr`, a deprecated-laced `Vk*CreateInfo`, and `Holder<int>` above, all without a hard error.
-- **Demand-or-curated tier**, everything that odr-uses a member body: function / operator / conversion
-  **invokers**, the **constructor** thunks, and a **non-trivial** destructor. These are not built during the
-  metadata walk. Each op lives **on its own metadata object** (`FunctionInfo::_invoke`,
-  `ConstructorInfo::_construct`, `DestructorInfo::_destroy`), null until filled. The op-bearing lists are held
-  in mutable globals (`GFunctions<T>`, `GOperators<T>`, `GConversions<T>`, `GConstructors<T>`, and a single
-  `GDestructor<T>`) that the metadata build populates with null ops; `TypeInfo` holds a `const` span or pointer
-  into each, and the demand upgrade sets the ops in place through a **hidden-friend** setter
-  (`SetInvoker` / `SetConstructor` / `SetDestroyer`), reachable only by ADL on the metadata object it mutates,
-  so it is the sole writer and never surfaces to ordinary lookup or the public API. `SetInvoker` is declared on
-  `FunctionInfo`; `OperatorInfo` and `ConversionInfo` derive from it, so ADL finds the same setter for them.
+  `std::unique_ptr`, a deprecated-laced `Vk*CreateInfo`, a `vk::ArrayWrapper1D` with a `constexpr` member
+  ill-formed for its element type, and `Holder<int>` above, all without a hard error.
+- **Demand-or-curated tier**, everything whose construction reifies a member body: the function / operator /
+  conversion / constructor **lists** (with their invokers and thunks) and a **non-trivial** destructor. None are
+  built during the metadata walk, because *reflecting a member function is not inert*. Building the list promotes
+  the member reflections into a static array (`std::define_static_array` / `std::meta::reflect_constant_array`,
+  needed so each member can be spliced as a template argument), and reifying a reflection **instantiates the
+  definition** of any `constexpr`/`consteval` member. For a member ill-formed for its own template argument
+  (`vk::ArrayWrapper1D<T>::copy`, whose body assigns a `char` and is valid only for `T = char`, kept compilable
+  only by never being instantiated) that is a hard error; for a well-formed one it is a needless body
+  instantiation. So the *list itself* is deferred, not merely its ops. (Plain, non-`constexpr` members and data
+  members are left dormant by reification, which is why the field, base, and nested-type lists stay total.)
 
-`TypeMetaOf<T>()` returns the metadata handle and never fills a slot. `TypeOf<T>()` returns the same `TypeInfo`
-but first forces `TypeOpsUpgrader<T>` (an `inline` variable whose constructor runs at static init, before
-`main`, emitted only for a type actually named), which calls `MaterializeTypeOps<T>` to fill the slots. So the
-splices happen once, at static init, and **only for a type named through `TypeOf<T>`**; a type reached only
-through a `TypeReference` (a field type, a base, a return type) stays metadata alone. `ToString`, and every
-internal type tag, use `TypeMetaOf`, so rendering a type that transitively contains a deprecated member is
-total. A superseded type (`std::string`) is skipped entirely: its 150-odd members are the facet's business,
-not slots to fill.
+Each list lives in a mutable global (`GFunctions<T>`, `GOperators<T>`, `GConversions<T>`, `GConstructors<T>`,
+and a single `GDestructor<T>`) instantiated only at demand. For the four lists `TypeInfo` holds a `const`
+pointer to a per-type **view** (`GFunctionsView<T>` …, an empty `std::span` until published); for the
+destructor it holds a pointer to `GDestructor<T>`. The metadata walk sets those pointers **without naming the
+`G…<T>` list**, so it reifies no member. The demand upgrade `MaterializeFunctions/Operators/Conversions/
+Constructors<T>` publishes each view (this is where the list is built and its members reified) and fills the
+ops in place through a **hidden-friend** setter (`SetInvoker` / `SetConstructor` / `SetDestroyer`), reachable
+only by ADL on the object it mutates, so it is the sole writer and never surfaces to ordinary lookup or the
+public API. `SetInvoker` is declared on `FunctionInfo`; `OperatorInfo` and `ConversionInfo` derive from it, so
+ADL finds the same setter for them.
+
+`TypeMetaOf<T>()` returns the metadata handle: its `GetFunctions` / `GetOperators` / `GetConversions` /
+`GetConstructors` are **empty**, because those lists are never built on the metadata walk. `TypeOf<T>()` returns
+the same `TypeInfo` but first forces `TypeOpsUpgrader<T>` (an `inline` variable whose constructor runs at static
+init, before `main`, emitted only for a type actually named), which calls `MaterializeTypeOps<T>` to publish the
+lists and fill the ops. So member reflection happens once, at static init, and **only for a type named through
+`TypeOf<T>`**; a type reached only through a `TypeReference` (a field type, a base, a return type) stays metadata
+alone and never reifies a member. `ToString`, and every internal type tag, use `TypeMetaOf`, so rendering a type
+that transitively contains a deprecated *or* ill-formed-`constexpr` member is total. A superseded type
+(`std::string`) is skipped even at demand: its members are the facet's business. Note the trade: a type's method
+metadata (names, signatures) is reachable only through `TypeOf<T>`, so a consumer that wants it without invoking
+(a C# generator) must name the type for invocation, which also requires every member to be splice-able.
+
+Because the four views are one global per type, materialization is a **program-global** property, not a
+per-handle one: once *any* translation unit names `TypeOf<T>`, `TypeMetaOf<T>().GetFunctions()` is non-empty
+everywhere. So an empty `GetFunctions()` is ambiguous, "genuinely no functions" or "not materialized yet".
+`TypeInfo::AreOpsMaterialized()` (backed by a per-type `GOpsMaterialized<T>` flag the demand pass sets)
+resolves it: `false` means the list is still pending, `true` means it is at its final value, empty or not. A
+consumer holding a bare `TypeInfo&` must not read an empty op-list as absence without checking it first.
+
+That the list, not merely the invoker, must be deferred rests on *array promotion* being the reifying step, not
+invoker splicing: promoting the member reflections into a static array (`std::meta::reflect_constant_array`,
+inside `std::define_static_array`) instantiates the `constexpr` member bodies on its own, with no `[:M:]` splice
+and no invoker formed. A throwaway that promotes an ill-formed-`constexpr` member and reads only `identifier_of`
+still hard-errors, which is why deferring only the invoker (the earlier "demand-gated ops" work) was not enough.
+
+**Parallel hazard, not yet mitigated:** `NamespaceInfo::GetFunctions()` reflects free functions with no demand
+tier, so reflecting a namespace whose members include an ill-formed-`constexpr` function or function template
+has the same reification failure this split fixes for types. Left as future work; the namespace path is not
+safe by analogy to the type path.
 
 **Constructors and the destructor launder deprecation through `<memory>`.** The lifetime slots route through
 `std::construct_at` / `std::destroy_at`, which name the special member lexically inside a system header, where

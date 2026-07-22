@@ -65,6 +65,12 @@ namespace PgE::detail
 		}
 	}
 
+	// Whether the demand pass has run for this type. False on the metadata walk (the four lists are empty and
+	// pending); set true by MaterializeTypeOps once TypeOf<T> names the type. TypeInfo::AreOpsMaterialized reads
+	// it so a caller can tell an empty GetFunctions() (not yet materialized) from a type that genuinely has none.
+	template <std::meta::info MetaType>
+	inline constinit bool GOpsMaterialized = false;
+
 	template <std::meta::info MetaType>
 	consteval TypeInfo MakeType()
 	{
@@ -83,24 +89,24 @@ namespace PgE::detail
 
 		static constexpr auto Facets = MakeFacetsFromType<MetaType>();
 
-		// The function, operator, conversion, and constructor lists, and the destructor, live in mutable globals
-		// so the demand upgrade can set their ops in place; TypeInfo holds a const view (span or pointer) into
-		// each. The other lists are immutable and built here. See docs/ReflectionInternals.md (the two tiers).
+		// The function, operator, conversion, and constructor lists are built only at demand, so the metadata
+		// walk never reifies a member (which would instantiate its body). TypeInfo points at empty view globals
+		// that MaterializeTypeOps publishes. The other lists are immutable and built here. See the two tiers.
 		if constexpr (Fields.empty() && std::is_object_v<T> && std::meta::is_complete_type(MetaType))
 		{
 			// A fieldless object is a leaf: it stringifies through its (total) trait, so it always gets a thunk;
 			// the guard excludes void and an incomplete type, neither of which StringifyValue can dereference.
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, GFunctions<MetaType>, GOperators<MetaType>,
-							GConversions<MetaType>, Fields, StaticFields, Bases, GConstructors<MetaType>, &GDestructor<MetaType>, NestedTypes,
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>, &GOperatorsView<MetaType>,
+							&GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>, &GDestructor<MetaType>, NestedTypes,
 							MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(),
-							MakeMemberPointer<MetaType>(), &StringifyValue<T>);
+							MakeMemberPointer<MetaType>(), &StringifyValue<T>, &GOpsMaterialized<MetaType>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, GFunctions<MetaType>, GOperators<MetaType>,
-							GConversions<MetaType>, Fields, StaticFields, Bases, GConstructors<MetaType>, &GDestructor<MetaType>, NestedTypes,
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>, &GOperatorsView<MetaType>,
+							&GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>, &GDestructor<MetaType>, NestedTypes,
 							MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(),
-							MakeMemberPointer<MetaType>(), nullptr);
+							MakeMemberPointer<MetaType>(), nullptr, &GOpsMaterialized<MetaType>);
 		}
 	}
 
@@ -120,21 +126,25 @@ namespace PgE::detail
 		}
 	}
 
-	// The demand upgrade: fills the type's op slots (invokers now) the metadata build left null. It runs once,
-	// at static-init before main, and only for a type actually named through TypeOf<T>, so a type merely reached
-	// through a TypeReference never instantiates a thunk. See docs/ReflectionInternals.md (demand ops).
+	// The demand upgrade: builds and publishes the function/operator/conversion/constructor lists (with their
+	// ops) and the non-trivial destructor. It runs once, at static-init before main, and only for a type named
+	// through TypeOf<T>, so a type merely reached as metadata never reifies a member. See the demand ops doc.
 	template <std::meta::info MetaType>
 	void MaterializeTypeOps()
 	{
-		// A superseding facet empties the structural function/operator/conversion views (the metadata build does
-		// the same), so there are no slots to fill and nothing to splice: std::string is reached as its facet,
-		// never as its 150-odd deprecated-laced members.
+		// Set unconditionally: once the demand pass runs, the four lists are at their final value, empty or not.
+		// A superseded or non-class type publishes nothing, but its empty lists are then settled, not pending.
+		GOpsMaterialized<MetaType> = true;
+
+		// A superseded type leaves its function/operator/conversion/constructor views empty (never published),
+		// so its members are never reified: std::string is reached as its facet, never as its 150-odd
+		// deprecated-laced members.
 		if constexpr (IsClassOrUnion(MetaType) && !ProvidesSupersedingFacet<MetaType>())
 		{
-			FillFunctionInvokers<MetaType>();
-			FillOperatorInvokers<MetaType>();
-			FillConversionInvokers<MetaType>();
-			FillConstructorThunks<MetaType>();
+			MaterializeFunctions<MetaType>();
+			MaterializeOperators<MetaType>();
+			MaterializeConversions<MetaType>();
+			MaterializeConstructors<MetaType>();
 
 			// A non-trivial destructor is materialized here; a trivial one is already set from the metadata
 			// build. A superseded type's lifetime is the facet's, so it is left out with the rest.

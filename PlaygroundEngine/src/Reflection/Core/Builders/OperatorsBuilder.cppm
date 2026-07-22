@@ -172,10 +172,14 @@ namespace PgE::detail
 		}
 	}
 
-	// One mutable array per type; TypeInfo's GetOperators span points here, and the demand upgrade sets each
-	// invoker in place. An OperatorInfo is a FunctionInfo, so SetInvoker fills its inherited invoker.
+	// One mutable array per type, instantiated only at demand (from MaterializeOperators), never on the
+	// metadata walk. An OperatorInfo is a FunctionInfo, so SetInvoker fills its inherited invoker.
 	template <std::meta::info MetaType>
 	inline constinit auto GOperators = MakeOperatorsFromType<MetaType>();
+
+	// The view TypeInfo::GetOperators reads. Empty until MaterializeOperators publishes the list.
+	template <std::meta::info MetaType>
+	inline constinit std::span<const OperatorInfo> GOperatorsView{};
 
 	template <std::meta::info MetaType, std::size_t... I>
 	void FillOperatorInvokersImpl(std::index_sequence<I...>)
@@ -186,8 +190,11 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaType>
-	void FillOperatorInvokers()
+	void MaterializeOperators()
 	{
+		// Publish the list (reifying the operators) and fill the invokers, both at demand.
+		GOperatorsView<MetaType> = GOperators<MetaType>;
+
 		constexpr auto count = std::define_static_array(GetOperatorFunctions(MetaType)).size();
 		FillOperatorInvokersImpl<MetaType>(std::make_index_sequence<count>{});
 	}

@@ -464,10 +464,10 @@ TEST_CASE("a function reports its remaining language facts")
 	CHECK(FunctionNamed(type, "Never").IsNoexcept());
 	CHECK_FALSE(FunctionNamed(type, "Plain").IsNoexcept());
 
-	CHECK(FunctionNamed(type, "Virt").IsVirtual());
+	CHECK(FunctionNamed(type, "Virtual").IsVirtual());
 	CHECK(FunctionNamed(type, "Pure").IsPureVirtual());
-	CHECK_FALSE(FunctionNamed(type, "Virt").IsPureVirtual());
-	CHECK(FunctionNamed(PgE::TypeOf<SurfaceChild>(), "Virt").IsOverride());
+	CHECK_FALSE(FunctionNamed(type, "Virtual").IsPureVirtual());
+	CHECK(FunctionNamed(PgE::TypeOf<SurfaceChild>(), "Virtual").IsOverride());
 
 	CHECK(FunctionNamed(type, "Gone").IsDeleted());
 	CHECK_FALSE(FunctionNamed(type, "Plain").IsDeleted());

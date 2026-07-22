@@ -54,7 +54,7 @@ namespace PgE
 {
 	std::span<const FunctionInfo> TypeInfo::GetFunctions() const
 	{
-		return _functions;
+		return *_functions;
 	}
 
 	std::vector<const FunctionInfo*> TypeInfo::FindFunctionsByIdentifier(const std::string_view identifier) const
@@ -62,7 +62,7 @@ namespace PgE
 		// Linear scan: function counts per type are small and lookups happen at boundaries, not the
 		// frame loop. Acceleration, if ever needed, belongs at the registry keyed by stable id.
 		std::vector<const FunctionInfo*> matches;
-		for (const FunctionInfo& function : _functions)
+		for (const FunctionInfo& function : *_functions)
 		{
 			if (function.GetIdentifier() == identifier)
 			{
@@ -78,7 +78,7 @@ namespace PgE
 		// One operator kind can have several overloads (operator+ on different right-hand types), so this
 		// returns all of them, the way FindFunctionsByIdentifier returns every overload of a name.
 		std::vector<const OperatorInfo*> matches;
-		for (const OperatorInfo& op : _operators)
+		for (const OperatorInfo& op : *_operators)
 		{
 			if (op.GetOperator() == kind)
 			{
@@ -93,7 +93,7 @@ namespace PgE
 	{
 		// Default, copy, and move are unique per type, so the first match is the only one; Converting and
 		// Other are not, and a caller that needs a specific one of those selects by arguments instead.
-		for (const ConstructorInfo& constructor : _constructors)
+		for (const ConstructorInfo& constructor : *_constructors)
 		{
 			if (constructor.GetKind() == kind)
 			{
@@ -109,7 +109,7 @@ namespace PgE
 		// A constructor with no thunk (deleted, inaccessible, consteval) is not a candidate: selection must
 		// never resolve to something the erased path cannot call.
 		std::vector<const ConstructorInfo*> candidates;
-		for (const ConstructorInfo& constructor : _constructors)
+		for (const ConstructorInfo& constructor : *_constructors)
 		{
 			if (constructor.CanConstruct() && constructor.MatchesArguments(args))
 			{

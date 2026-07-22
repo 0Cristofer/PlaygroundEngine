@@ -390,10 +390,16 @@ namespace PgE::detail
 		}
 	}
 
-	// The type's member functions live in one mutable array (built with null invokers, no splice); TypeInfo's
-	// GetFunctions span points here, and the demand upgrade sets each invoker in place. See the two-tier model.
+	// The type's member functions, one mutable array with null invokers. Instantiated only at demand (from
+	// MaterializeFunctions), never on the metadata walk, because reifying a member function reflection
+	// instantiates its (possibly ill-formed constexpr) body. See docs/ReflectionInternals.md (the two tiers).
 	template <std::meta::info MetaType>
 	inline constinit auto GFunctions = MakeFunctionsFromType<MetaType>();
+
+	// The view TypeInfo::GetFunctions reads. Empty until MaterializeFunctions publishes the list; taking its
+	// address on the metadata walk reifies no member function, which is the whole point of the split.
+	template <std::meta::info MetaType>
+	inline constinit std::span<const FunctionInfo> GFunctionsView{};
 
 	template <std::meta::info MetaType, std::size_t... I>
 	void FillFunctionInvokersImpl(std::index_sequence<I...>)
@@ -407,8 +413,11 @@ namespace PgE::detail
 	}
 
 	export template <std::meta::info MetaType>
-	void FillFunctionInvokers()
+	void MaterializeFunctions()
 	{
+		// Publish the list (this is where the member functions are reified) and fill the invokers, both at demand.
+		GFunctionsView<MetaType> = GFunctions<MetaType>;
+
 		constexpr auto count = std::define_static_array(GetMemberFunctions(MetaType)).size();
 		FillFunctionInvokersImpl<MetaType>(std::make_index_sequence<count>{});
 	}

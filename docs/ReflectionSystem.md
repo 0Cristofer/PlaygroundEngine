@@ -32,6 +32,7 @@ The annotated-field subset of serialization, plus: stable type/field identity ac
 ### 3. C# binding generation
 A build-time generator emits C# wrappers and native thunks from the reflected type surface (methods, parameters, return types, factories).
 - Main consumer of function reflection and the typed invocation path.
+- Method/operator/conversion/constructor metadata is materialized through `TypeOf<T>` (the invoke handle), not the metadata handle `TypeMetaOf<T>` which exposes empty op-lists; a bound type is named for invocation, which authored engine types always satisfy. See [ReflectionInternals.md](ReflectionInternals.md) (the two tiers).
 - Bindings translate error models (`std::expected` ⇄ C# exceptions).
 - Three marshaling shapes, derived structurally: handle-referenced engine objects, value-marshaled (blittable) types, opaque resources.
 
@@ -134,8 +135,13 @@ Overload disambiguation and cross-build function identity are deferred to the st
 
 ## Next Step
 
-Close the invoker-forced-instantiation limitation
-([ReflectionInternals.md](ReflectionInternals.md#invokers-defeat-lazy-member-instantiation)): decide the policy
-that separates the type asked for from the types reached through it, so that reflecting a type can never fail
-to compile because of a member nobody calls. This is the only known gap in the core itself; the registry, the
-provider seam, stable IDs, `Poly<T>` and the erased sugar (`Equals`, `CopyTo`) are all the layer above.
+The invoker-forced-instantiation limitation is **closed for types**: op materialization, both the invokers and
+the function/operator/conversion/constructor *lists* themselves (building a list reifies member bodies, so the
+list is deferred too), happens only through `TypeOf<T>`. Reflecting a type as metadata (`TypeMetaOf<T>`) can no
+longer fail to compile because of a member nobody calls (see
+[ReflectionInternals.md](ReflectionInternals.md), the two tiers).
+
+The residual gap is the parallel path `NamespaceInfo::GetFunctions()`, which reflects free functions with no
+demand tier and carries the same reification hazard for an ill-formed-`constexpr` free function. Beyond that, the
+core is settled; the registry, the provider seam, stable IDs, `Poly<T>` and the erased sugar (`Equals`, `CopyTo`)
+are all the layer above.
