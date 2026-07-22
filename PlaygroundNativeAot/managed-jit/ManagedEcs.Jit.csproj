@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Plain managed build (IL .dll, JIT at runtime). EnableDynamicLoading
+         emits the .runtimeconfig.json hostfxr needs to load this as a component. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+
+    <!-- Same assembly identity as the AOT build, so the managed type name the
+         host asks for ("ManagedEcs.Interop, ManagedEcs") is identical too. -->
+    <AssemblyName>ManagedEcs</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The exact same source as the NativeAOT project. Nothing C#-side changes
+         between backends; only how it is compiled. -->
+    <Compile Include="../managed/Interop.cs" Link="Interop.cs" />
+  </ItemGroup>
+
+</Project>

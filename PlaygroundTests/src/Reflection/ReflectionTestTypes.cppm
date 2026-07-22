@@ -986,7 +986,6 @@ export namespace ReflectionTestTypes
 		DeprecatedMemberHolder Holder;
 	};
 
-
 	// The shape of vk::ArrayWrapper1D: a class template with a constexpr member whose body is ill-formed for the
 	// given T (it assigns a char, valid only for T = char), kept compilable only by never being instantiated.
 	// Reifying its member functions, as the metadata build once did, would instantiate copy and hard-error.

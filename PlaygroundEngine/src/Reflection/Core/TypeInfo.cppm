@@ -117,8 +117,8 @@ namespace PgE
 						   const FunctionSignatureInfo* signature,
 						   const MemberPointerInfo* memberPointer,
 						   std::string (*stringifyThunk)(const void*),
-						   const bool* opsMaterialized) pre(functions) pre(operators) pre(conversions)
-			pre(constructors) pre(destructor) pre(opsMaterialized)
+						   const bool* opsMaterialized) pre(functions) pre(operators) pre(conversions) pre(constructors) pre(destructor)
+			pre(opsMaterialized)
 			: DeclarationInfo(identifier, displayName, scopePath, annotations), _traits(traits), _facets(facets), _functions(functions),
 			  _operators(operators), _conversions(conversions), _fields(fields), _staticFields(staticFields), _bases(bases),
 			  _constructors(constructors), _destructor(destructor), _nestedTypes(nestedTypes), _template(templateInfo),

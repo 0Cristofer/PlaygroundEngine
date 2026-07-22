@@ -96,17 +96,19 @@ namespace PgE::detail
 		{
 			// A fieldless object is a leaf: it stringifies through its (total) trait, so it always gets a thunk;
 			// the guard excludes void and an incomplete type, neither of which StringifyValue can dereference.
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>, &GOperatorsView<MetaType>,
-							&GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>, &GDestructor<MetaType>, NestedTypes,
-							MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(),
-							MakeMemberPointer<MetaType>(), &StringifyValue<T>, &GOpsMaterialized<MetaType>);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>,
+							&GOperatorsView<MetaType>, &GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>,
+							&GDestructor<MetaType>, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), &StringifyValue<T>,
+							&GOpsMaterialized<MetaType>);
 		}
 		else
 		{
-			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>, &GOperatorsView<MetaType>,
-							&GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>, &GDestructor<MetaType>, NestedTypes,
-							MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(), MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(),
-							MakeMemberPointer<MetaType>(), nullptr, &GOpsMaterialized<MetaType>);
+			return TypeInfo(identifier, displayName, ScopePathOf<MetaType>(), Annotations, traits, Facets, &GFunctionsView<MetaType>,
+							&GOperatorsView<MetaType>, &GConversionsView<MetaType>, Fields, StaticFields, Bases, &GConstructorsView<MetaType>,
+							&GDestructor<MetaType>, NestedTypes, MakeTemplate<MetaType>(), MakeTemplateArguments<MetaType>(),
+							MakeInnerType<MetaType>(), MakeFunctionSignature<MetaType>(), MakeMemberPointer<MetaType>(), nullptr,
+							&GOpsMaterialized<MetaType>);
 		}
 	}
 
