@@ -602,6 +602,17 @@ focused demo; the reusable knowledge, including the GCC 16 workarounds, is captu
 - **JSON deserialization** (`serialization.h`): `FromJson<T>` matches JSON keys to member names at compile
   time (`if constexpr` per field type, since a splicer cannot appear in a template argument) and writes
   through `obj.[:member:] = value`. No per-type boilerplate.
+- **Member injection** (`member_injection.h`): a `consteval` block plus `define_aggregate` generates data
+  members from a reflected member list. `define_aggregate` needs its target in the *same* scope as the block,
+  so declaring it as a nested class of the class template holding the block is what makes injection automatic
+  per `T`. `substitute` instantiates a template at consteval time, so generated members stay typed. See
+  [ReflectionInjection.md](ReflectionInjection.md) for the full findings and the traps.
+- **Typed field operations and property matching** (`member_accessors.h`): injection cannot add a function,
+  but an injected member's *type* can be a template carrying behaviour bound to one field by its reflection
+  (`std::meta::info` is structural, so it is a usable non-type template parameter). This is the non-erased
+  twin of the op-tables, and it is demand-gated per function body rather than per type. Unreal needs UHT plus
+  `GET_MEMBER_NAME_CHECKED` for the equivalent; a reflected field index is a constant expression, so it also
+  works as a `case` label.
 - **Inheritance, type names, type_index, enums** (`type_exploration.h`): `nonstatic_data_members_of`
   returns only **direct** members, so inherited fields need `bases_of` plus recursion. `display_string_of`
   names any type including template specializations (`identifier_of` fails on those). `typeid(typename [:splice:])`

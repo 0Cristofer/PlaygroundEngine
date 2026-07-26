@@ -66,6 +66,8 @@ target_sources(
 		src/type_exploration.h
 		src/serialization.h
 		src/construction.h
+		src/member_injection.h
+		src/member_accessors.h
 	PUBLIC
 		FILE_SET CXX_MODULES
 			BASE_DIRS
