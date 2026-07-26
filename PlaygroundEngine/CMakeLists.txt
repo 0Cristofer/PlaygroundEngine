@@ -136,6 +136,54 @@ target_sources(
 )
 # --- Vulkan setup --
 
+# --- Slang shader setup --
+# slangc is not part of FindVulkan's component set, so it is located on its own rather than
+# through find_package(Vulkan).
+find_program(SLANGC_EXECUTABLE slangc REQUIRED)
+
+function(add_slang_shader_target TARGET)
+	cmake_parse_arguments("SHADER" "" "OUTPUT" "SOURCES;ENTRY_POINTS" ${ARGN})
+
+	set(OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/Shaders/${SHADER_OUTPUT})
+
+	set(ENTRY_POINT_FLAGS "")
+	foreach(ENTRY_POINT IN LISTS SHADER_ENTRY_POINTS)
+		list(APPEND ENTRY_POINT_FLAGS -entry ${ENTRY_POINT})
+	endforeach()
+
+	# DEPFILE carries the imports slangc discovers, which DEPENDS cannot know: without it an edit
+	# to an imported .slang leaves a stale .spv behind with the build reporting success.
+
+	add_custom_command(
+		OUTPUT ${OUTPUT_FILE}
+		COMMAND
+			${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name
+			${ENTRY_POINT_FLAGS} -depfile ${OUTPUT_FILE}.d -o ${OUTPUT_FILE}
+		DEPENDS ${SHADER_SOURCES}
+		DEPFILE ${OUTPUT_FILE}.d
+		COMMENT "Compiling Slang shaders for ${TARGET}"
+		VERBATIM
+	)
+
+	add_custom_target(${TARGET} DEPENDS ${OUTPUT_FILE})
+
+	# Published as a global property rather than a target property: consumers live in sibling
+	# directories and need the path at configure time, where a $<TARGET_PROPERTY:> genex cannot be
+	# evaluated.
+
+	set_property(GLOBAL PROPERTY ${TARGET}_OUTPUT_FILE ${OUTPUT_FILE})
+endfunction()
+
+add_slang_shader_target(
+	PlaygroundEngineShaders
+	OUTPUT shaders.spv
+	SOURCES ${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Shaders/shaders.slang
+	ENTRY_POINTS vertMain fragMain
+)
+
+add_dependencies(PlaygroundEngine PlaygroundEngineShaders)
+# --- Slang shader setup --
+
 target_link_libraries(
 	PlaygroundEngine
 	PUBLIC
@@ -158,6 +206,8 @@ target_sources(
 		src/Component/TransformComponent.cpp
 		src/App.cpp
 		src/main.cpp
+		src/Files.cpp
+		src/Paths.cpp
 		src/Window.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
@@ -176,6 +226,8 @@ target_sources(
 				src/Engine.cppm
 				src/App.cppm
 				src/World.cppm
+				src/Files.cppm
+				src/Paths.cppm
 				src/Window.cppm
 				src/WindowTypes.cppm
 				src/WindowBackend.GLFW.cppm

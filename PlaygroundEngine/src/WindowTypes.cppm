@@ -11,6 +11,19 @@ namespace PgE
 		int Height = 720;
 	};
 
+	// The drawable size in pixels: the window's screen-coordinate size scaled by the display's
+	// content scale.
+	export struct FramebufferSize
+	{
+		int Width = 0;
+		int Height = 0;
+	};
+
+	// Notification that the drawable size changed. A stand-in for the event queue: once input and
+	// window events are routed properly this becomes one more event, not a registered callback.
+
+	export using FramebufferResizedCallback = std::function<void(FramebufferSize)>;
+
 	export enum class WindowError
 	{
 		PlatformInitializationFailed,

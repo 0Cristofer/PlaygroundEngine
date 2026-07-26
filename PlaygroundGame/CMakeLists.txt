@@ -64,3 +64,30 @@ target_sources(
 )
 
 target_link_libraries(PlaygroundGame PRIVATE PlaygroundEngine)
+
+# Shaders are loaded at runtime by a path relative to the working directory, so the compiled SPIR-V
+# is staged into a Shaders folder beside the executable. A stand-in until the asset system owns
+# content deployment.
+
+# Staging is its own build edge rather than a POST_BUILD step: a shader-only edit leaves the engine
+# archive untouched, so the executable never relinks and a POST_BUILD command would not run, leaving
+# a stale .spv beside a successfully built binary.
+
+get_property(COMPILED_SHADER GLOBAL PROPERTY PlaygroundEngineShaders_OUTPUT_FILE)
+
+# $<CONFIG> mirrors where the multi-config generator places the executable. A TARGET_FILE_DIR genex
+# would say it directly but cannot be evaluated in an OUTPUT, which has no associated target.
+
+set(STAGED_SHADER ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/Shaders/shaders.spv)
+
+add_custom_command(
+	OUTPUT ${STAGED_SHADER}
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different ${COMPILED_SHADER} ${STAGED_SHADER}
+	DEPENDS ${COMPILED_SHADER}
+	COMMENT "Staging shaders next to PlaygroundGame"
+	VERBATIM
+)
+
+add_custom_target(PlaygroundGameShaders DEPENDS ${STAGED_SHADER})
+
+add_dependencies(PlaygroundGame PlaygroundGameShaders)

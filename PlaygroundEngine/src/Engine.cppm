@@ -73,7 +73,7 @@ namespace PgE
 		[[nodiscard]] std::expected<void, BootError> BootRendering();
 
 		void Run();
-		void RunFrame();
+		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame();
 
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;

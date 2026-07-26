@@ -27,10 +27,6 @@ namespace PgE
 		return std::unique_ptr<Window>(new Window(std::move(*backend), specification));
 	}
 
-	Window::Window(std::unique_ptr<WindowBackend> backend, WindowSpecification specification)
-		: _backend(std::move(backend)), _specification(std::move(specification))
-	{}
-
 	Window::~Window() = default;
 
 	void Window::PollEvents()
@@ -38,9 +34,20 @@ namespace PgE
 		_backend->PollEvents();
 	}
 
-	void Window::SwapBuffers() const
+	bool Window::ShouldClose() const
 	{
-		_backend->SwapBuffers();
+		return _backend->ShouldClose();
+	}
+
+	FramebufferSize Window::GetFramebufferSize() const
+	{
+		return _backend->GetFramebufferSize();
+	}
+
+	// ReSharper disable once CppMemberFunctionMayBeConst
+	void Window::SetFramebufferResizedCallback(FramebufferResizedCallback callback)
+	{
+		_backend->SetFramebufferResizedCallback(std::move(callback));
 	}
 
 	std::expected<std::span<const char* const>, VulkanWindowError> Window::GetRequiredVulkanExtensions() const
@@ -53,8 +60,7 @@ namespace PgE
 		return _backend->CreateVulkanSurface(vkInstance);
 	}
 
-	bool Window::ShouldClose() const
-	{
-		return _backend->ShouldClose();
-	}
+	Window::Window(std::unique_ptr<WindowBackend> backend, WindowSpecification specification)
+		: _backend(std::move(backend)), _specification(std::move(specification))
+	{}
 }

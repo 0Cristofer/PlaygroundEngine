@@ -51,8 +51,9 @@ namespace PgE
 		WindowBackend& operator=(const WindowBackend&) = delete;
 
 		void PollEvents();
-		void SwapBuffers() const;
 		[[nodiscard]] bool ShouldClose() const;
+		[[nodiscard]] FramebufferSize GetFramebufferSize() const;
+		void SetFramebufferResizedCallback(FramebufferResizedCallback callback);
 		[[nodiscard]] std::expected<std::span<const char* const>, VulkanWindowError> GetRequiredVulkanExtensions() const;
 		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance instance) const pre(_handle);
 
@@ -60,7 +61,10 @@ namespace PgE
 		explicit WindowBackend(GLFWwindow* handle) : _handle(handle)
 		{}
 
+		static void OnFramebufferResized(GLFWwindow* handle, int width, int height);
+
 		GLFWwindow* _handle;
+		FramebufferResizedCallback _framebufferResizedCallback;
 	};
 
 	std::expected<std::unique_ptr<WindowBackend>, WindowError> WindowBackend::Create(const WindowSpecification& specification)
@@ -71,7 +75,7 @@ namespace PgE
 		}
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 		GLFWwindow* handle = glfwCreateWindow(specification.Width, specification.Height, specification.Title.c_str(), nullptr, nullptr);
 
@@ -91,7 +95,12 @@ namespace PgE
 
 		PGE_LOG(Info, "Created GLFW window \"{}\" ({}x{})", specification.Title, specification.Width, specification.Height);
 
-		return std::unique_ptr<WindowBackend>(new WindowBackend(handle));
+		std::unique_ptr<WindowBackend> backend(new WindowBackend(handle));
+
+		glfwSetWindowUserPointer(handle, backend.get());
+		glfwSetFramebufferSizeCallback(handle, OnFramebufferResized);
+
+		return backend;
 	}
 
 	WindowBackend::~WindowBackend()
@@ -111,15 +120,34 @@ namespace PgE
 		glfwPollEvents();
 	}
 
-	// ReSharper disable once CppMemberFunctionMayBeStatic
-	void WindowBackend::SwapBuffers() const
-	{
-		// glfwSwapBuffers(_handle);
-	}
-
 	bool WindowBackend::ShouldClose() const
 	{
 		return glfwWindowShouldClose(_handle) != 0;
+	}
+
+	FramebufferSize WindowBackend::GetFramebufferSize() const
+	{
+		int width = 0;
+		int height = 0;
+		glfwGetFramebufferSize(_handle, &width, &height);
+
+		return FramebufferSize{.Width = width, .Height = height};
+	}
+
+	void WindowBackend::SetFramebufferResizedCallback(FramebufferResizedCallback callback)
+	{
+		_framebufferResizedCallback = std::move(callback);
+	}
+
+	void WindowBackend::OnFramebufferResized(GLFWwindow* handle, const int width, const int height)
+	{
+		const auto* backend = static_cast<const WindowBackend*>(glfwGetWindowUserPointer(handle));
+		if (backend == nullptr || !backend->_framebufferResizedCallback)
+		{
+			return;
+		}
+
+		backend->_framebufferResizedCallback(FramebufferSize{.Width = width, .Height = height});
 	}
 
 	// ReSharper disable once CppMemberFunctionMayBeStatic

@@ -28,6 +28,12 @@ namespace PgE
 
 	std::expected<void, BootError> Engine::BootRendering()
 	{
+		if (!_window)
+		{
+			PGE_LOG(Error, "Rendering bootstrap failed: can't create renderer without window");
+			return std::unexpected(BootError::Rendering);
+		}
+
 		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_window);
 
 		if (!renderer)
@@ -37,6 +43,12 @@ namespace PgE
 		}
 
 		_rendererVulkan = std::move(*renderer);
+
+		// Wired at the root rather than the renderer subscribing itself: the window is the event
+		// source and the renderer only consumes, so neither has to know how the other is built.
+
+		_window->SetFramebufferResizedCallback([this](const FramebufferSize) { _rendererVulkan->NotifyFramebufferResized(); });
+
 		return {};
 	}
 
@@ -90,10 +102,14 @@ namespace PgE
 		_running = true;
 		while (_running)
 		{
-			RunFrame();
+			if (const std::expected<void, RendererError<RendererRenderErrorKind>> runFrameResult = RunFrame(); !runFrameResult)
+			{
+				RequestStop();
+			}
 		}
 	}
-	void Engine::RunFrame()
+
+	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
 	{
 		if (_window)
 		{
@@ -102,10 +118,16 @@ namespace PgE
 
 		_world->Run();
 
+		if (_rendererVulkan && _window)
+		{
+			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult = _rendererVulkan->DrawFrame(_window->GetFramebufferSize()); !drawResult)
+			{
+				return drawResult;
+			}
+		}
+
 		if (_window)
 		{
-			_window->SwapBuffers();
-
 			if (_window->ShouldClose())
 			{
 				RequestStop();
@@ -118,6 +140,8 @@ namespace PgE
 			// (dedicated server: a shutdown command; cook tool: an empty work queue).
 			RequestStop();
 		}
+
+		return {};
 	}
 
 	void Engine::RequestStop()
@@ -133,6 +157,19 @@ namespace PgE
 
 		_app.reset();
 		_world.reset();
+
+		// Dropped before the renderer it points at, so a late resize event cannot reach a
+		// destroyed subscriber.
+
+		if (_window)
+		{
+			_window->SetFramebufferResizedCallback({});
+		}
+
+		if (_rendererVulkan)
+		{
+			_rendererVulkan->Teardown();
+		}
 		_rendererVulkan.reset();
 		_window.reset();
 	}
