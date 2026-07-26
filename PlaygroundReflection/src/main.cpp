@@ -10,6 +10,8 @@ import std;
 #include "type_exploration.h"	 // bases_of, display_string_of, typeid+splice, enumerators_of
 #include "serialization.h"		 // FromJson<T>: JSON string → struct via field-name matching
 #include "construction.h"		 // feasibility: parameter annotations + constructor splicing
+#include "member_injection.h"	 // consteval block + define_aggregate: generating members from members
+#include "member_accessors.h"	 // typed per-field operations, UE-style property matching without UHT
 
 int main()
 {
@@ -19,5 +21,7 @@ int main()
 	DemoTypeExploration();
 	DemoSerialization();
 	DemoConstruction();
+	DemoMemberInjection();
+	DemoMemberAccessors();
 	return 0;
 }
