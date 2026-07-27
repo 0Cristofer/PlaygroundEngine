@@ -15,7 +15,11 @@ import PlaygroundEngine.Paths;
 
 namespace PgE
 {
-	constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+	constexpr int MaxFramesInFlight = 2;
+	constexpr std::array RequiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
+
+	template <typename T>
+	using CreationResult = std::expected<T, RendererError<RendererCreationErrorKind>>;
 
 	struct SwapChainResources
 	{
@@ -25,15 +29,355 @@ namespace PgE
 		vk::Extent2D Extent;
 	};
 
-	std::expected<std::vector<vk::raii::ImageView>, RendererError<RendererCreationErrorKind>> CreateImageViews(
-		const vk::raii::Device& logicalDevice, const vk::SurfaceFormatKHR& swapChainSurfaceFormat, const std::vector<vk::Image>& swapChainImages);
+#if defined(PGE_DEV)
+	static VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanRendererDebugCallback(const vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+																		const vk::DebugUtilsMessageTypeFlagsEXT type,
+																		const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+																		[[maybe_unused]] void* pUserData)
+	{
+		switch (severity)
+		{
+		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
+			PGE_LOG(Trace, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
+			break;
+		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
+			PGE_LOG(Info, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
+			break;
+		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
+			PGE_LOG(Warn, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
+			break;
+		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
+			PGE_LOG(Error, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
+			break;
+		default:
+			PGE_LOG(Info, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
+			break;
+		}
 
-	std::expected<SwapChainResources, RendererError<RendererCreationErrorKind>> CreateSwapChainResources(
-		const vk::raii::PhysicalDevice& physicalDevice,
-		const vk::raii::Device& logicalDevice,
-		const vk::raii::SurfaceKHR& surface,
-		const FramebufferSize framebufferSize,
-		const vk::SurfaceFormatKHR& swapChainSurfaceFormat)
+		return vk::False;
+	}
+
+	vk::DebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo()
+	{
+		constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+																	  vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+																	  vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
+		constexpr vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+																	 vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+																	 vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
+
+		return vk::DebugUtilsMessengerCreateInfoEXT{
+			.messageSeverity = severityFlags, .messageType = messageTypeFlags, .pfnUserCallback = &VulkanRendererDebugCallback};
+	}
+#endif
+
+	CreationResult<std::vector<const char*>> CollectRequiredInstanceExtensions(const vk::raii::Context& context, const Window& window)
+	{
+		std::expected<std::span<const char* const>, VulkanWindowError> requiredWindowExtensionsResult = window.GetRequiredVulkanExtensions();
+		if (!requiredWindowExtensionsResult)
+		{
+			return std::unexpected(
+				RendererError(RendererCreationErrorKind::UnableToRequestExtensions, ToString(requiredWindowExtensionsResult.error())));
+		}
+		const std::span<const char* const> requiredWindowExtensions = requiredWindowExtensionsResult.value();
+
+		std::expected<std::vector<vk::ExtensionProperties>, vk::Result> availableExtensionsResult = context.enumerateInstanceExtensionProperties();
+		if (!availableExtensionsResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ExtensionsEnumerationError, ToString(availableExtensionsResult.error())));
+		}
+		const std::vector<vk::ExtensionProperties>& availableExtensions = availableExtensionsResult.value();
+
+		std::vector<const char*> requiredExtensions(requiredWindowExtensions.begin(), requiredWindowExtensions.end());
+#if defined(PGE_DEV)
+		requiredExtensions.push_back(vk::EXTDebugUtilsExtensionName);
+#endif
+
+		for (const char* const requiredExtension : requiredExtensions)
+		{
+			if (std::ranges::none_of(availableExtensions, [requiredExtension](const vk::ExtensionProperties& availableExtension) {
+					return requiredExtension == std::string_view(availableExtension.extensionName);
+				}))
+			{
+				return std::unexpected(RendererError(RendererCreationErrorKind::ExtensionUnavailable, requiredExtension));
+			}
+		}
+
+		return requiredExtensions;
+	}
+
+	CreationResult<std::vector<const char*>> CollectRequiredValidationLayers(const vk::raii::Context& context)
+	{
+		std::vector<const char*> requiredValidationLayers;
+#if defined(PGE_DEV)
+		requiredValidationLayers.push_back("VK_LAYER_KHRONOS_validation");
+#endif
+
+		std::expected<std::vector<vk::LayerProperties>, vk::Result> availableLayersResult = context.enumerateInstanceLayerProperties();
+		if (!availableLayersResult)
+		{
+			return std::unexpected(
+				RendererError(RendererCreationErrorKind::ValidationLayersEnumerationError, ToString(availableLayersResult.error())));
+		}
+		const std::vector<vk::LayerProperties>& availableLayers = availableLayersResult.value();
+
+		for (const char* const requiredLayer : requiredValidationLayers)
+		{
+			if (std::ranges::none_of(availableLayers, [requiredLayer](const vk::LayerProperties& availableLayer) {
+					return requiredLayer == std::string_view(availableLayer.layerName);
+				}))
+			{
+				return std::unexpected(RendererError(RendererCreationErrorKind::ValidationLayerUnavailable, requiredLayer));
+			}
+		}
+
+		return requiredValidationLayers;
+	}
+
+	CreationResult<vk::raii::Instance> CreateInstance(const vk::raii::Context& context,
+													  const RendererSpecification& specification,
+													  const Window& window)
+	{
+		const vk::ApplicationInfo applicationInfo{.pApplicationName = specification.ApplicationName.c_str(),
+												  .applicationVersion = vk::makeVersion(1, 0, 0),
+												  .pEngineName = specification.EngineName.c_str(),
+												  .engineVersion = vk::makeVersion(1, 0, 0),
+												  .apiVersion = vk::ApiVersion14};
+
+		CreationResult<std::vector<const char*>> requiredExtensionsResult = CollectRequiredInstanceExtensions(context, window);
+		if (!requiredExtensionsResult)
+		{
+			return std::unexpected(requiredExtensionsResult.error());
+		}
+		const std::vector<const char*>& requiredExtensions = requiredExtensionsResult.value();
+
+		CreationResult<std::vector<const char*>> requiredValidationLayersResult = CollectRequiredValidationLayers(context);
+		if (!requiredValidationLayersResult)
+		{
+			return std::unexpected(requiredValidationLayersResult.error());
+		}
+		const std::vector<const char*>& requiredValidationLayers = requiredValidationLayersResult.value();
+
+#if defined(PGE_DEV)
+		// Chained into the instance so the validation layer also reports faults raised during
+		// instance creation and destruction, which the standalone messenger does not span.
+
+		const vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo = MakeDebugMessengerCreateInfo();
+#endif
+
+		const vk::InstanceCreateInfo instanceCreateInfo{
+#if defined(PGE_DEV)
+			.pNext = &debugUtilsMessengerCreateInfo,
+#endif
+			.pApplicationInfo = &applicationInfo,
+			.enabledLayerCount = static_cast<std::uint32_t>(requiredValidationLayers.size()),
+			.ppEnabledLayerNames = requiredValidationLayers.data(),
+			.enabledExtensionCount = static_cast<std::uint32_t>(requiredExtensions.size()),
+			.ppEnabledExtensionNames = requiredExtensions.data(),
+		};
+
+		std::expected<vk::raii::Instance, vk::Result> instanceResult = context.createInstance(instanceCreateInfo);
+		if (!instanceResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::InstanceCreationError, ToString(instanceResult.error())));
+		}
+
+		return std::move(instanceResult.value());
+	}
+
+	CreationResult<vk::raii::DebugUtilsMessengerEXT> CreateDebugMessenger([[maybe_unused]] const vk::raii::Instance& instance)
+	{
+#if defined(PGE_DEV)
+		std::expected<vk::raii::DebugUtilsMessengerEXT, vk::Result> debugMessengerResult =
+			instance.createDebugUtilsMessengerEXT(MakeDebugMessengerCreateInfo());
+		if (!debugMessengerResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DebugMessengerCreationError, ToString(debugMessengerResult.error())));
+		}
+
+		return std::move(debugMessengerResult.value());
+#else
+		return vk::raii::DebugUtilsMessengerEXT(nullptr);
+#endif
+	}
+
+	CreationResult<vk::raii::SurfaceKHR> CreateSurface(const vk::raii::Instance& instance, const Window& window)
+	{
+		std::expected<VkSurfaceKHR, VulkanWindowError> surfaceResult = window.CreateVulkanSurface(*instance);
+		if (!surfaceResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::UnableToCreateWindowSurface, ToString(surfaceResult.error())));
+		}
+
+		return vk::raii::SurfaceKHR(instance, surfaceResult.value());
+	}
+
+	bool IsPhysicalDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice)
+	{
+		const bool supportsVulkan13 = physicalDevice.getProperties().apiVersion >= vk::ApiVersion13;
+
+		const std::vector<vk::QueueFamilyProperties> queueFamilies = physicalDevice.getQueueFamilyProperties();
+		const bool supportsGraphics = std::ranges::any_of(queueFamilies, [](const vk::QueueFamilyProperties& queueFamilyProperty) {
+			return !!(queueFamilyProperty.queueFlags & vk::QueueFlagBits::eGraphics);
+		});
+
+		std::expected<std::vector<vk::ExtensionProperties>, vk::Result> availableExtensionsResult =
+			physicalDevice.enumerateDeviceExtensionProperties();
+		if (!availableExtensionsResult)
+		{
+			PGE_LOG(Info, "Couldn't enumerate device extensions. Device: {}, Error: {}", physicalDevice.getProperties().deviceName,
+					ToString(availableExtensionsResult.error()));
+			return false;
+		}
+		const std::vector<vk::ExtensionProperties>& availableExtensions = availableExtensionsResult.value();
+
+		const bool supportsAllRequiredExtensions =
+			std::ranges::all_of(RequiredDeviceExtensions, [&availableExtensions](const char* const requiredExtension) {
+				return std::ranges::any_of(availableExtensions, [requiredExtension](const vk::ExtensionProperties& availableExtension) {
+					return requiredExtension == std::string_view(availableExtension.extensionName);
+				});
+			});
+
+		const auto features = physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
+														  vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+		const bool supportsRequiredFeatures = features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
+											  features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+											  features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+
+		return supportsVulkan13 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
+	}
+
+	CreationResult<vk::raii::PhysicalDevice> SelectPhysicalDevice(const vk::raii::Instance& instance)
+	{
+		std::expected<std::vector<vk::raii::PhysicalDevice>, vk::Result> physicalDevicesResult = instance.enumeratePhysicalDevices();
+		if (!physicalDevicesResult)
+		{
+			return std::unexpected(
+				RendererError(RendererCreationErrorKind::PhysicalDevicesEnumerationError, ToString(physicalDevicesResult.error())));
+		}
+		const std::vector<vk::raii::PhysicalDevice>& physicalDevices = physicalDevicesResult.value();
+
+		if (physicalDevices.empty())
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::NoPhysicalDevices));
+		}
+
+		const auto suitableDevice = std::ranges::find_if(physicalDevices, IsPhysicalDeviceSuitable);
+		if (suitableDevice == physicalDevices.end())
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::NoSuitablePhysicalDevices));
+		}
+
+		return *suitableDevice;
+	}
+
+	CreationResult<std::uint32_t> FindGraphicsPresentQueueFamily(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface)
+	{
+		const std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+		for (std::uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyProperties.size(); queueFamilyIndex++)
+		{
+			if (!(queueFamilyProperties[queueFamilyIndex].queueFlags & vk::QueueFlagBits::eGraphics))
+			{
+				continue;
+			}
+
+			// A failed query is treated as "no present support" rather than an error: another
+			// queue family may still serve, and an empty result surfaces as SuitableQueueNotFound.
+
+			if (physicalDevice.getSurfaceSupportKHR(queueFamilyIndex, *surface).value_or(vk::False))
+			{
+				return queueFamilyIndex;
+			}
+		}
+
+		return std::unexpected(RendererError(RendererCreationErrorKind::SuitableQueueNotFound));
+	}
+
+	CreationResult<vk::raii::Device> CreateLogicalDevice(const vk::raii::PhysicalDevice& physicalDevice, const std::uint32_t queueFamilyIndex)
+	{
+		constexpr float queuePriority = 0.5f;
+		const vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
+			.queueFamilyIndex = queueFamilyIndex, .queueCount = 1, .pQueuePriorities = &queuePriority};
+
+		const vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features,
+								 vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+			featureChain = {
+				{},													  // vk::PhysicalDeviceFeatures2
+				{.shaderDrawParameters = true},						  // vk::PhysicalDeviceVulkan11Features
+				{.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
+				{.extendedDynamicState = true}						  // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+			};
+
+		const vk::DeviceCreateInfo deviceCreateInfo{.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+													.queueCreateInfoCount = 1,
+													.pQueueCreateInfos = &deviceQueueCreateInfo,
+													.enabledExtensionCount = static_cast<std::uint32_t>(RequiredDeviceExtensions.size()),
+													.ppEnabledExtensionNames = RequiredDeviceExtensions.data()};
+
+		std::expected<vk::raii::Device, vk::Result> logicalDeviceResult = physicalDevice.createDevice(deviceCreateInfo);
+		if (!logicalDeviceResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::LogicalDeviceCreationError, ToString(logicalDeviceResult.error())));
+		}
+
+		return std::move(logicalDeviceResult.value());
+	}
+
+	CreationResult<vk::SurfaceFormatKHR> SelectSurfaceFormat(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface)
+	{
+		std::expected<std::vector<vk::SurfaceFormatKHR>, vk::Result> availableFormatsResult = physicalDevice.getSurfaceFormatsKHR(*surface);
+		if (!availableFormatsResult)
+		{
+			return std::unexpected(
+				RendererError(RendererCreationErrorKind::SurfaceCapabilitiesFormatsError, ToString(availableFormatsResult.error())));
+		}
+		const std::vector<vk::SurfaceFormatKHR>& availableFormats = availableFormatsResult.value();
+
+		if (availableFormats.empty())
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::SurfaceCapabilitiesFormatsError, "The surface reports no formats"));
+		}
+
+		const auto preferredFormat = std::ranges::find_if(availableFormats, [](const vk::SurfaceFormatKHR& format) {
+			return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+		});
+
+		return preferredFormat != availableFormats.end() ? *preferredFormat : availableFormats.front();
+	}
+
+	CreationResult<std::vector<vk::raii::ImageView>> CreateImageViews(const vk::raii::Device& logicalDevice,
+																	  const vk::SurfaceFormatKHR& swapChainSurfaceFormat,
+																	  const std::vector<vk::Image>& swapChainImages)
+	{
+		vk::ImageViewCreateInfo imageViewCreateInfo{
+			.viewType = vk::ImageViewType::e2D,
+			.format = swapChainSurfaceFormat.format,
+			.subresourceRange = {
+				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+
+		std::vector<vk::raii::ImageView> swapChainImageViews;
+		swapChainImageViews.reserve(swapChainImages.size());
+
+		for (const vk::Image& image : swapChainImages)
+		{
+			imageViewCreateInfo.image = image;
+			std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
+			if (!imageViewResult)
+			{
+				return std::unexpected(RendererError(RendererCreationErrorKind::ImageViewCreationError, ToString(imageViewResult.error())));
+			}
+
+			swapChainImageViews.push_back(std::move(imageViewResult.value()));
+		}
+
+		return swapChainImageViews;
+	}
+
+	CreationResult<SwapChainResources> CreateSwapChainResources(const vk::raii::PhysicalDevice& physicalDevice,
+																const vk::raii::Device& logicalDevice,
+																const vk::raii::SurfaceKHR& surface,
+																const FramebufferSize framebufferSize,
+																const vk::SurfaceFormatKHR& swapChainSurfaceFormat)
 	{
 		// Capabilities are re-queried on every call: a resize moves currentExtent and the min/max
 		// extents the new swap chain has to satisfy, so cached values from creation are stale here.
@@ -92,7 +436,7 @@ namespace PgE
 		}
 		std::vector<vk::Image>& swapChainImages = swapChainImagesResult.value();
 
-		std::expected<std::vector<vk::raii::ImageView>, RendererError<RendererCreationErrorKind>> swapChainImageViewsResult =
+		CreationResult<std::vector<vk::raii::ImageView>> swapChainImageViewsResult =
 			CreateImageViews(logicalDevice, swapChainSurfaceFormat, swapChainImages);
 		if (!swapChainImageViewsResult)
 		{
@@ -105,382 +449,93 @@ namespace PgE
 								  .Extent = swapChainExtent};
 	}
 
-	std::expected<std::vector<vk::raii::ImageView>, RendererError<RendererCreationErrorKind>> CreateImageViews(
-		const vk::raii::Device& logicalDevice, const vk::SurfaceFormatKHR& swapChainSurfaceFormat, const std::vector<vk::Image>& swapChainImages)
+	CreationResult<vk::raii::ShaderModule> LoadShaderModule(const vk::raii::Device& logicalDevice)
 	{
-		vk::ImageViewCreateInfo imageViewCreateInfo{
-			.viewType = vk::ImageViewType::e2D,
-			.format = swapChainSurfaceFormat.format,
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
-
-		std::vector<vk::raii::ImageView> swapChainImageViews;
-		for (const vk::Image& image : swapChainImages)
-		{
-			imageViewCreateInfo.image = image;
-			std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
-			if (!imageViewResult)
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::ImageViewCreationError, ToString(imageViewResult.error())));
-			}
-
-			swapChainImageViews.push_back(std::move(imageViewResult.value()));
-		}
-
-		return swapChainImageViews;
-	}
-
-	static VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanRendererDebugCallback(const vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-																		const vk::DebugUtilsMessageTypeFlagsEXT type,
-																		const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-																		[[maybe_unused]] void* pUserData)
-	{
-		switch (severity)
-		{
-		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
-			PGE_LOG(Trace, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
-			break;
-		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
-			PGE_LOG(Info, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
-			break;
-		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
-			PGE_LOG(Warn, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
-			break;
-		case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
-			PGE_LOG(Error, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
-			break;
-		default:
-			PGE_LOG(Info, "validation layer: type {} msg: {}", to_string(type), pCallbackData->pMessage);
-			break;
-		}
-
-		return vk::False;
-	}
-
-	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
-		const RendererSpecification& specification, const Window& window)
-	{
-		vk::raii::Context context;
-
-		// Instance creation
-
-		vk::ApplicationInfo appInfo{.pApplicationName = specification.ApplicationName.c_str(),
-									.applicationVersion = vk::makeVersion(1, 0, 0),
-									.pEngineName = specification.EngineName.c_str(),
-									.engineVersion = vk::makeVersion(1, 0, 0),
-									.apiVersion = vk::ApiVersion14};
-
-		std::expected<std::span<const char* const>, VulkanWindowError> requiredWindowExtensionsResult = window.GetRequiredVulkanExtensions();
-		if (!requiredWindowExtensionsResult)
-		{
-			return std::unexpected(
-				RendererError(RendererCreationErrorKind::UnableToRequestExtensions, ToString(requiredWindowExtensionsResult.error())));
-		}
-		std::span<const char* const> requiredWindowExtensions = requiredWindowExtensionsResult.value();
-
-		std::expected<std::vector<vk::ExtensionProperties>, vk::Result> availableExtensionsResult = context.enumerateInstanceExtensionProperties();
-		if (!availableExtensionsResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::ExtensionsEnumerationError, ToString(availableExtensionsResult.error())));
-		}
-		const std::vector<vk::ExtensionProperties>& availableExtensions = availableExtensionsResult.value();
-
-		std::vector<const char*> requiredExtraExtensions;
-#if defined(PGE_DEV)
-		requiredExtraExtensions.push_back(vk::EXTDebugUtilsExtensionName);
-#endif
-
-		std::vector<const char*> requiredExtensions;
-		requiredExtensions.reserve(requiredExtraExtensions.size() + requiredWindowExtensions.size());
-		requiredExtensions.insert(requiredExtensions.end(), requiredWindowExtensions.begin(), requiredWindowExtensions.end());
-		requiredExtensions.insert(requiredExtensions.end(), requiredExtraExtensions.begin(), requiredExtraExtensions.end());
-
-		for (const char* const& requiredExtension : requiredExtensions)
-		{
-			if (std::ranges::none_of(availableExtensions, [&requiredExtension](const vk::ExtensionProperties& providedExtension) {
-					return requiredExtension == std::string_view(providedExtension.extensionName);
-				}))
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::ExtensionUnavailable, requiredExtension));
-			}
-		}
-
-		std::vector<const char*> requiredValidationLayers;
-#if defined(PGE_DEV)
-		requiredValidationLayers = {"VK_LAYER_KHRONOS_validation"};
-#endif
-
-		std::expected<std::vector<vk::LayerProperties>, vk::Result> availableValidationLayersResult = context.enumerateInstanceLayerProperties();
-		if (!availableValidationLayersResult)
-		{
-			return std::unexpected(
-				RendererError(RendererCreationErrorKind::ValidationLayersEnumerationError, ToString(availableValidationLayersResult.error())));
-		}
-		const std::vector<vk::LayerProperties>& availableValidationLayers = availableValidationLayersResult.value();
-
-		for (const char* const& requiredValidationLayer : requiredValidationLayers)
-		{
-			if (std::ranges::none_of(availableValidationLayers, [&requiredValidationLayer](const vk::LayerProperties& providedLayer) {
-					return requiredValidationLayer == std::string_view(providedLayer.layerName);
-				}))
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::ValidationLayerUnavailable, requiredValidationLayer));
-			}
-		}
-
-#if defined(PGE_DEV)
-		vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-															vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-															vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
-		vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-														   vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-														   vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
-		vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{
-			.messageSeverity = severityFlags, .messageType = messageTypeFlags, .pfnUserCallback = &VulkanRendererDebugCallback};
-#endif
-
-		vk::InstanceCreateInfo instanceCreateInfo{
-#if defined(PGE_DEV)
-			.pNext = &debugUtilsMessengerCreateInfo,
-#endif
-			.pApplicationInfo = &appInfo,
-			.enabledLayerCount = static_cast<std::uint32_t>(requiredValidationLayers.size()),
-			.ppEnabledLayerNames = requiredValidationLayers.data(),
-			.enabledExtensionCount = static_cast<std::uint32_t>(requiredExtensions.size()),
-			.ppEnabledExtensionNames = requiredExtensions.data(),
-		};
-
-		std::expected<vk::raii::Instance, vk::Result> instanceResult = context.createInstance(instanceCreateInfo);
-		if (!instanceResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::InstanceCreationError, ToString(instanceResult.error())));
-		}
-		vk::raii::Instance& instance = instanceResult.value();
-
-#if defined(PGE_DEV)
-		std::expected<vk::raii::DebugUtilsMessengerEXT, vk::Result> debugMessengerResult =
-			instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfo);
-		if (!debugMessengerResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::DebugMessengerCreationError, ToString(debugMessengerResult.error())));
-		}
-		vk::raii::DebugUtilsMessengerEXT& debugMessenger = debugMessengerResult.value();
-#endif
-
-		std::expected<VkSurfaceKHR, VulkanWindowError> surfaceCreationResult = window.CreateVulkanSurface(*instance);
-		if (!surfaceCreationResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::UnableToCreateWindowSurface, ToString(surfaceCreationResult.error())));
-		}
-		auto surface = vk::raii::SurfaceKHR(instance, surfaceCreationResult.value());
-
-		// Physical device selection
-
-		auto physicalDevicesResult = instance.enumeratePhysicalDevices();
-		if (!physicalDevicesResult)
-		{
-			return std::unexpected(
-				RendererError(RendererCreationErrorKind::PhysicalDevicesEnumerationError, ToString(physicalDevicesResult.error())));
-		}
-		std::vector<vk::raii::PhysicalDevice>& physicalDevices = physicalDevicesResult.value();
-
-		if (physicalDevices.empty())
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::NoPhysicalDevices));
-		}
-
-		std::vector requiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
-
-		std::vector<vk::raii::PhysicalDevice> suitableDevices;
-		for (const vk::raii::PhysicalDevice& physicalDevice : physicalDevices)
-		{
-			const bool supportsVulkan13 = physicalDevice.getProperties().apiVersion >= vk::ApiVersion13;
-			const std::vector<vk::QueueFamilyProperties>& queueFamilies = physicalDevice.getQueueFamilyProperties();
-			bool supportsGraphics = std::ranges::any_of(queueFamilies, [](const vk::QueueFamilyProperties& queueFamilyProperty) {
-				return !!(queueFamilyProperty.queueFlags & vk::QueueFlagBits::eGraphics);
-			});
-
-			std::expected<std::vector<vk::ExtensionProperties>, vk::Result> availableDeviceExtensionsResult =
-				physicalDevice.enumerateDeviceExtensionProperties();
-			if (!availableDeviceExtensionsResult)
-			{
-				PGE_LOG(Info, "Couldn't enumerate device extensions. Device: {}, Error: {}", physicalDevice.getProperties().deviceName,
-						ToString(availableDeviceExtensionsResult.error()));
-				continue;
-			}
-			const std::vector<vk::ExtensionProperties>& availableDeviceExtensions = availableDeviceExtensionsResult.value();
-			bool supportsAllRequiredExtensions =
-				std::ranges::all_of(requiredDeviceExtensions, [&availableDeviceExtensions](const auto& requiredDeviceExtension) {
-					return std::ranges::any_of(availableDeviceExtensions, [requiredDeviceExtension](const auto& availableDeviceExtension) {
-						return requiredDeviceExtension == std::string_view(availableDeviceExtension.extensionName);
-					});
-				});
-
-			auto features = physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
-														vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-			bool supportsRequiredFeatures = features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
-											features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-											features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
-
-			if (supportsVulkan13 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures)
-			{
-				suitableDevices.push_back(physicalDevice);
-			}
-		}
-
-		if (suitableDevices.empty())
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::NoSuitablePhysicalDevices));
-		}
-
-		// Logical device setup
-
-		vk::raii::PhysicalDevice& physicalDevice = suitableDevices.front();
-
-		std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-		std::optional<std::uint32_t> queueIndex;
-		for (std::uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
-		{
-			if (queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics && physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
-			{
-				// found a queue family that supports both graphics and present
-				queueIndex = qfpIndex;
-				break;
-			}
-		}
-		if (!queueIndex.has_value())
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::SuitableQueueNotFound));
-		}
-
-		float queuePriority = 0.5f;
-		vk::DeviceQueueCreateInfo deviceQueueCreateInfo{.queueFamilyIndex = queueIndex.value(), .queueCount = 1, .pQueuePriorities = &queuePriority};
-
-		vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features,
-						   vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
-			featureChain = {
-				{},													  // vk::PhysicalDeviceFeatures2
-				{.shaderDrawParameters = true},						  // vk::PhysicalDeviceVulkan11Features
-				{.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
-				{.extendedDynamicState = true}						  // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
-			};
-		std::vector requiredDeviceExtension = {vk::KHRSwapchainExtensionName};
-
-		vk::DeviceCreateInfo deviceCreateInfo{.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-											  .queueCreateInfoCount = 1,
-											  .pQueueCreateInfos = &deviceQueueCreateInfo,
-											  .enabledExtensionCount = static_cast<std::uint32_t>(requiredDeviceExtension.size()),
-											  .ppEnabledExtensionNames = requiredDeviceExtension.data()};
-
-		std::expected<vk::raii::Device, vk::Result> deviceResult = physicalDevice.createDevice(deviceCreateInfo);
-		if (!deviceResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::LogicalDeviceCreationError, ToString(deviceResult.error())));
-		}
-
-		vk::raii::Device& logicalDevice = deviceResult.value();
-		vk::raii::Queue queue = logicalDevice.getQueue(queueIndex.value(), 0);
-
-		std::expected<std::vector<vk::SurfaceFormatKHR>, vk::Result> availableFormatsResult = physicalDevice.getSurfaceFormatsKHR(*surface);
-		std::expected<std::vector<vk::PresentModeKHR>, vk::Result> availablePresentModesResult = physicalDevice.getSurfacePresentModesKHR(*surface);
-
-		if (!availableFormatsResult || !availablePresentModesResult)
-		{
-			std::string message =
-				!availableFormatsResult ? ToString(availableFormatsResult.error()) : ToString(availablePresentModesResult.error());
-			return std::unexpected(RendererError(RendererCreationErrorKind::SurfaceCapabilitiesFormatsError, message));
-		}
-
-		std::vector<vk::SurfaceFormatKHR>& availableFormats = availableFormatsResult.value();
-		std::vector<vk::PresentModeKHR>& availablePresentModes = availablePresentModesResult.value();
-
-		const auto formatIt = std::ranges::find_if(availableFormats, [](const auto& format) {
-			return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-		});
-		vk::SurfaceFormatKHR swapChainSurfaceFormat = formatIt != availableFormats.end() ? *formatIt : availableFormats[0];
-
-		if (!std::ranges::any_of(availablePresentModes, [](auto presentMode) { return presentMode == vk::PresentModeKHR::eFifo; }))
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::UnavailablePresentMode,
-												 std::format("Available present modes: {}", availablePresentModes.size())));
-		}
-
-		std::expected<SwapChainResources, RendererError<RendererCreationErrorKind>> swapChainResult =
-			CreateSwapChainResources(physicalDevice, logicalDevice, surface, window.GetFramebufferSize(), swapChainSurfaceFormat);
-		if (!swapChainResult)
-		{
-			return std::unexpected(swapChainResult.error());
-		}
-
-		vk::raii::SwapchainKHR& swapChain = swapChainResult->SwapChain;
-		std::vector<vk::Image>& swapChainImages = swapChainResult->Images;
-		std::vector<vk::raii::ImageView>& swapChainImageViews = swapChainResult->ImageViews;
-		vk::Extent2D swapChainExtent = swapChainResult->Extent;
-
 		std::expected<std::filesystem::path, PathError> executableDirectoryResult = GetExecutableDirectory();
 		if (!executableDirectoryResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::ShaderLoadError, ToString(executableDirectoryResult.error())));
 		}
 
-		std::expected<std::vector<std::byte>, FileError> shaderLoadResult =
+		std::expected<std::vector<std::byte>, FileError> shaderBinaryResult =
 			ReadBinaryFile(executableDirectoryResult.value() / "Shaders" / "shaders.spv");
-		if (!shaderLoadResult)
+		if (!shaderBinaryResult)
 		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::ShaderLoadError, ToString(shaderLoadResult.error())));
+			return std::unexpected(RendererError(RendererCreationErrorKind::ShaderLoadError, ToString(shaderBinaryResult.error())));
 		}
-		std::vector<std::byte>& shaderBin = shaderLoadResult.value();
+		const std::vector<std::byte>& shaderBinary = shaderBinaryResult.value();
 
-		vk::ShaderModuleCreateInfo shaderModuleCreateInfo{.codeSize = shaderBin.size(),
-														  .pCode = reinterpret_cast<const std::uint32_t*>(shaderBin.data())};
+		const vk::ShaderModuleCreateInfo shaderModuleCreateInfo{.codeSize = shaderBinary.size(),
+																.pCode = reinterpret_cast<const std::uint32_t*>(shaderBinary.data())};
 		std::expected<vk::raii::ShaderModule, vk::Result> shaderModuleResult = logicalDevice.createShaderModule(shaderModuleCreateInfo);
 		if (!shaderModuleResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::ShaderModuleCreateError, ToString(shaderModuleResult.error())));
 		}
-		vk::raii::ShaderModule& shaderModule = shaderModuleResult.value();
 
-		vk::PipelineShaderStageCreateInfo vertShaderStageInfo{.stage = vk::ShaderStageFlagBits::eVertex, .module = shaderModule, .pName = "vertMain"};
-		vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
-			.stage = vk::ShaderStageFlagBits::eFragment, .module = shaderModule, .pName = "fragMain"};
-		vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+		return std::move(shaderModuleResult.value());
+	}
 
-		std::vector dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-		vk::PipelineDynamicStateCreateInfo dynamicState{.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size()),
-														.pDynamicStates = dynamicStates.data()};
+	CreationResult<vk::raii::PipelineLayout> CreatePipelineLayout(const vk::raii::Device& logicalDevice)
+	{
+		constexpr vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{.setLayoutCount = 0, .pushConstantRangeCount = 0};
 
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-
-		vk::PipelineInputAssemblyStateCreateInfo inputAssembly{.topology = vk::PrimitiveTopology::eTriangleList};
-
-		vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1, .scissorCount = 1};
-
-		vk::PipelineRasterizationStateCreateInfo rasterizer{.depthClampEnable = vk::False,
-															.rasterizerDiscardEnable = vk::False,
-															.polygonMode = vk::PolygonMode::eFill,
-															.cullMode = vk::CullModeFlagBits::eBack,
-															.frontFace = vk::FrontFace::eClockwise,
-															.depthBiasEnable = vk::False,
-															.lineWidth = 1.0f};
-
-		vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = vk::False};
-		vk::PipelineColorBlendAttachmentState colorBlendAttachment{.blendEnable = vk::False,
-																   .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-																					 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
-
-		vk::PipelineColorBlendStateCreateInfo colorBlending{
-			.logicOpEnable = vk::False, .logicOp = vk::LogicOp::eCopy, .attachmentCount = 1, .pAttachments = &colorBlendAttachment};
-
-		vk::PipelineLayoutCreateInfo pipelineLayoutInfo{.setLayoutCount = 0, .pushConstantRangeCount = 0};
-
-		std::expected<vk::raii::PipelineLayout, vk::Result> pipelineLayoutResult = logicalDevice.createPipelineLayout(pipelineLayoutInfo);
+		std::expected<vk::raii::PipelineLayout, vk::Result> pipelineLayoutResult = logicalDevice.createPipelineLayout(pipelineLayoutCreateInfo);
 		if (!pipelineLayoutResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::PipelineLayoutCreateError, ToString(pipelineLayoutResult.error())));
 		}
-		vk::raii::PipelineLayout& pipelineLayout = pipelineLayoutResult.value();
 
-		vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
+		return std::move(pipelineLayoutResult.value());
+	}
+
+	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
+															  const vk::raii::PipelineLayout& pipelineLayout,
+															  const vk::Format colorAttachmentFormat)
+	{
+		// The shader module only has to outlive the pipeline creation call, so it stays local.
+
+		CreationResult<vk::raii::ShaderModule> shaderModuleResult = LoadShaderModule(logicalDevice);
+		if (!shaderModuleResult)
+		{
+			return std::unexpected(shaderModuleResult.error());
+		}
+		const vk::raii::ShaderModule& shaderModule = shaderModuleResult.value();
+
+		const vk::PipelineShaderStageCreateInfo shaderStages[] = {
+			{.stage = vk::ShaderStageFlagBits::eVertex, .module = shaderModule, .pName = "vertMain"},
+			{.stage = vk::ShaderStageFlagBits::eFragment, .module = shaderModule, .pName = "fragMain"}};
+
+		const std::vector dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+		const vk::PipelineDynamicStateCreateInfo dynamicState{.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size()),
+															  .pDynamicStates = dynamicStates.data()};
+
+		constexpr vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+		constexpr vk::PipelineInputAssemblyStateCreateInfo inputAssembly{.topology = vk::PrimitiveTopology::eTriangleList};
+
+		constexpr vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1, .scissorCount = 1};
+
+		constexpr vk::PipelineRasterizationStateCreateInfo rasterizer{.depthClampEnable = vk::False,
+																	  .rasterizerDiscardEnable = vk::False,
+																	  .polygonMode = vk::PolygonMode::eFill,
+																	  .cullMode = vk::CullModeFlagBits::eBack,
+																	  .frontFace = vk::FrontFace::eClockwise,
+																	  .depthBiasEnable = vk::False,
+																	  .lineWidth = 1.0f};
+
+		constexpr vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = vk::SampleCountFlagBits::e1,
+																	   .sampleShadingEnable = vk::False};
+
+		constexpr vk::PipelineColorBlendAttachmentState colorBlendAttachment{.blendEnable = vk::False,
+																			 .colorWriteMask =
+																				 vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+																				 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
+
+		const vk::PipelineColorBlendStateCreateInfo colorBlending{
+			.logicOpEnable = vk::False, .logicOp = vk::LogicOp::eCopy, .attachmentCount = 1, .pAttachments = &colorBlendAttachment};
+
+		const vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
 			{.stageCount = 2,
 			 .pStages = shaderStages,
 			 .pVertexInputState = &vertexInputInfo,
@@ -492,78 +547,208 @@ namespace PgE
 			 .pDynamicState = &dynamicState,
 			 .layout = pipelineLayout,
 			 .renderPass = nullptr},
-			{.colorAttachmentCount = 1, .pColorAttachmentFormats = &swapChainSurfaceFormat.format}};
+			{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colorAttachmentFormat}};
 
-		auto graphicsPipelineResult = logicalDevice.createGraphicsPipeline(nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
+		std::expected<vk::raii::Pipeline, vk::Result> graphicsPipelineResult =
+			logicalDevice.createGraphicsPipeline(nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
 		if (!graphicsPipelineResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::PipelineCreateError, ToString(graphicsPipelineResult.error())));
 		}
-		vk::raii::Pipeline& graphicsPipeline = graphicsPipelineResult.value();
 
-		vk::CommandPoolCreateInfo poolInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = queueIndex.value()};
-		std::expected<vk::raii::CommandPool, vk::Result> commandPoolResult = logicalDevice.createCommandPool(poolInfo);
+		return std::move(graphicsPipelineResult.value());
+	}
+
+	CreationResult<vk::raii::CommandPool> CreateCommandPool(const vk::raii::Device& logicalDevice, const std::uint32_t queueFamilyIndex)
+	{
+		const vk::CommandPoolCreateInfo commandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+															  .queueFamilyIndex = queueFamilyIndex};
+
+		std::expected<vk::raii::CommandPool, vk::Result> commandPoolResult = logicalDevice.createCommandPool(commandPoolCreateInfo);
 		if (!commandPoolResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::CommandPoolCreateError, ToString(commandPoolResult.error())));
 		}
-		vk::raii::CommandPool& commandPool = commandPoolResult.value();
 
-		vk::CommandBufferAllocateInfo allocInfo{.commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = MAX_FRAMES_IN_FLIGHT};
-		std::expected<std::vector<vk::raii::CommandBuffer>, vk::Result> commandBuffersResult = logicalDevice.allocateCommandBuffers(allocInfo);
+		return std::move(commandPoolResult.value());
+	}
+
+	CreationResult<std::vector<vk::raii::CommandBuffer>> AllocateCommandBuffers(const vk::raii::Device& logicalDevice,
+																				const vk::raii::CommandPool& commandPool)
+	{
+		const vk::CommandBufferAllocateInfo commandBufferAllocateInfo{
+			.commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = MaxFramesInFlight};
+
+		std::expected<std::vector<vk::raii::CommandBuffer>, vk::Result> commandBuffersResult =
+			logicalDevice.allocateCommandBuffers(commandBufferAllocateInfo);
 		if (!commandBuffersResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCreateError, ToString(commandBuffersResult.error())));
 		}
+
+		return std::move(commandBuffersResult.value());
+	}
+
+	CreationResult<std::vector<vk::raii::Semaphore>> CreateSemaphores(const vk::raii::Device& logicalDevice, const std::size_t count)
+	{
+		std::vector<vk::raii::Semaphore> semaphores;
+		semaphores.reserve(count);
+
+		for (std::size_t index = 0; index < count; index++)
+		{
+			std::expected<vk::raii::Semaphore, vk::Result> semaphoreResult = logicalDevice.createSemaphore({});
+			if (!semaphoreResult)
+			{
+				return std::unexpected(RendererError(RendererCreationErrorKind::SemaphoreCreateError, ToString(semaphoreResult.error())));
+			}
+
+			semaphores.push_back(std::move(semaphoreResult.value()));
+		}
+
+		return semaphores;
+	}
+
+	CreationResult<std::vector<vk::raii::Fence>> CreateSignaledFences(const vk::raii::Device& logicalDevice, const std::size_t count)
+	{
+		std::vector<vk::raii::Fence> fences;
+		fences.reserve(count);
+
+		for (std::size_t index = 0; index < count; index++)
+		{
+			std::expected<vk::raii::Fence, vk::Result> fenceResult = logicalDevice.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
+			if (!fenceResult)
+			{
+				return std::unexpected(RendererError(RendererCreationErrorKind::FenceCreateError, ToString(fenceResult.error())));
+			}
+
+			fences.push_back(std::move(fenceResult.value()));
+		}
+
+		return fences;
+	}
+
+	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
+		const RendererSpecification& specification, const Window& window)
+	{
+		vk::raii::Context context;
+
+		CreationResult<vk::raii::Instance> instanceResult = CreateInstance(context, specification, window);
+		if (!instanceResult)
+		{
+			return std::unexpected(instanceResult.error());
+		}
+		vk::raii::Instance& instance = instanceResult.value();
+
+		CreationResult<vk::raii::DebugUtilsMessengerEXT> debugMessengerResult = CreateDebugMessenger(instance);
+		if (!debugMessengerResult)
+		{
+			return std::unexpected(debugMessengerResult.error());
+		}
+		vk::raii::DebugUtilsMessengerEXT& debugMessenger = debugMessengerResult.value();
+
+		CreationResult<vk::raii::SurfaceKHR> surfaceResult = CreateSurface(instance, window);
+		if (!surfaceResult)
+		{
+			return std::unexpected(surfaceResult.error());
+		}
+		vk::raii::SurfaceKHR& surface = surfaceResult.value();
+
+		CreationResult<vk::raii::PhysicalDevice> physicalDeviceResult = SelectPhysicalDevice(instance);
+		if (!physicalDeviceResult)
+		{
+			return std::unexpected(physicalDeviceResult.error());
+		}
+		vk::raii::PhysicalDevice& physicalDevice = physicalDeviceResult.value();
+
+		CreationResult<std::uint32_t> queueFamilyIndexResult = FindGraphicsPresentQueueFamily(physicalDevice, surface);
+		if (!queueFamilyIndexResult)
+		{
+			return std::unexpected(queueFamilyIndexResult.error());
+		}
+		const std::uint32_t queueFamilyIndex = queueFamilyIndexResult.value();
+
+		CreationResult<vk::raii::Device> logicalDeviceResult = CreateLogicalDevice(physicalDevice, queueFamilyIndex);
+		if (!logicalDeviceResult)
+		{
+			return std::unexpected(logicalDeviceResult.error());
+		}
+		vk::raii::Device& logicalDevice = logicalDeviceResult.value();
+
+		vk::raii::Queue queue = logicalDevice.getQueue(queueFamilyIndex, 0);
+
+		CreationResult<vk::SurfaceFormatKHR> surfaceFormatResult = SelectSurfaceFormat(physicalDevice, surface);
+		if (!surfaceFormatResult)
+		{
+			return std::unexpected(surfaceFormatResult.error());
+		}
+		const vk::SurfaceFormatKHR swapChainSurfaceFormat = surfaceFormatResult.value();
+
+		CreationResult<SwapChainResources> swapChainResult =
+			CreateSwapChainResources(physicalDevice, logicalDevice, surface, window.GetFramebufferSize(), swapChainSurfaceFormat);
+		if (!swapChainResult)
+		{
+			return std::unexpected(swapChainResult.error());
+		}
+		SwapChainResources& swapChain = swapChainResult.value();
+
+		CreationResult<vk::raii::PipelineLayout> pipelineLayoutResult = CreatePipelineLayout(logicalDevice);
+		if (!pipelineLayoutResult)
+		{
+			return std::unexpected(pipelineLayoutResult.error());
+		}
+		vk::raii::PipelineLayout& pipelineLayout = pipelineLayoutResult.value();
+
+		CreationResult<vk::raii::Pipeline> graphicsPipelineResult =
+			CreateGraphicsPipeline(logicalDevice, pipelineLayout, swapChainSurfaceFormat.format);
+		if (!graphicsPipelineResult)
+		{
+			return std::unexpected(graphicsPipelineResult.error());
+		}
+		vk::raii::Pipeline& graphicsPipeline = graphicsPipelineResult.value();
+
+		CreationResult<vk::raii::CommandPool> commandPoolResult = CreateCommandPool(logicalDevice, queueFamilyIndex);
+		if (!commandPoolResult)
+		{
+			return std::unexpected(commandPoolResult.error());
+		}
+		vk::raii::CommandPool& commandPool = commandPoolResult.value();
+
+		CreationResult<std::vector<vk::raii::CommandBuffer>> commandBuffersResult = AllocateCommandBuffers(logicalDevice, commandPool);
+		if (!commandBuffersResult)
+		{
+			return std::unexpected(commandBuffersResult.error());
+		}
 		std::vector<vk::raii::CommandBuffer>& commandBuffers = commandBuffersResult.value();
 
-		std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
-		for (std::size_t i = 0; i < swapChainImages.size(); i++)
+		// One render-finished semaphore per swap chain image, since the present waits on the
+		// semaphore belonging to the image it hands over, not to the frame in flight.
+
+		CreationResult<std::vector<vk::raii::Semaphore>> renderFinishedSemaphoresResult = CreateSemaphores(logicalDevice, swapChain.Images.size());
+		if (!renderFinishedSemaphoresResult)
 		{
-			std::expected<vk::raii::Semaphore, vk::Result> renderFinishedSemaphoreResult = logicalDevice.createSemaphore({});
-			if (!renderFinishedSemaphoreResult)
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::SemaphoreCreateError, ToString(renderFinishedSemaphoreResult.error())));
-			}
-			vk::raii::Semaphore& renderFinishedSemaphore = renderFinishedSemaphoreResult.value();
-			renderFinishedSemaphores.push_back(std::move(renderFinishedSemaphore));
+			return std::unexpected(renderFinishedSemaphoresResult.error());
 		}
+		std::vector<vk::raii::Semaphore>& renderFinishedSemaphores = renderFinishedSemaphoresResult.value();
 
-		std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
-		std::vector<vk::raii::Fence> inFlightFences;
-		for (std::size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		CreationResult<std::vector<vk::raii::Semaphore>> presentCompleteSemaphoresResult = CreateSemaphores(logicalDevice, MaxFramesInFlight);
+		if (!presentCompleteSemaphoresResult)
 		{
-			std::expected<vk::raii::Semaphore, vk::Result> presentCompleteSemaphoreResult = logicalDevice.createSemaphore({});
-			if (!presentCompleteSemaphoreResult)
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::SemaphoreCreateError, ToString(presentCompleteSemaphoreResult.error())));
-			}
-			vk::raii::Semaphore& presentCompleteSemaphore = presentCompleteSemaphoreResult.value();
-			presentCompleteSemaphores.push_back(std::move(presentCompleteSemaphore));
-
-			std::expected<vk::raii::Fence, vk::Result> inFlightFenceResult = logicalDevice.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
-			if (!inFlightFenceResult)
-			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::FenceCreateError, ToString(inFlightFenceResult.error())));
-			}
-			vk::raii::Fence& inFlightFence = inFlightFenceResult.value();
-			inFlightFences.push_back(std::move(inFlightFence));
+			return std::unexpected(presentCompleteSemaphoresResult.error());
 		}
+		std::vector<vk::raii::Semaphore>& presentCompleteSemaphores = presentCompleteSemaphoresResult.value();
 
-#if defined(PGE_DEV)
-		return std::unique_ptr<RendererVulkan>(
-			new RendererVulkan(std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
-							   std::move(logicalDevice), std::move(queue), std::move(swapChain), std::move(swapChainImages),
-							   std::move(swapChainSurfaceFormat), std::move(swapChainExtent), std::move(swapChainImageViews),
-							   std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool), std::move(commandBuffers),
-							   std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
-#else
+		CreationResult<std::vector<vk::raii::Fence>> inFlightFencesResult = CreateSignaledFences(logicalDevice, MaxFramesInFlight);
+		if (!inFlightFencesResult)
+		{
+			return std::unexpected(inFlightFencesResult.error());
+		}
+		std::vector<vk::raii::Fence>& inFlightFences = inFlightFencesResult.value();
+
 		return std::unique_ptr<RendererVulkan>(new RendererVulkan(
-			std::move(context), std::move(instance), nullptr, std::move(surface), std::move(physicalDevice), std::move(logicalDevice),
-			std::move(queue), std::move(swapChain), std::move(swapChainImages), std::move(swapChainSurfaceFormat), std::move(swapChainExtent),
-			std::move(swapChainImageViews), std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool), std::move(commandBuffers),
-			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
-#endif
+			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
+			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
+			swapChain.Extent, std::move(swapChain.ImageViews), std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool),
+			std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -573,14 +758,15 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const FramebufferSize framebufferSize)
 	{
-		// A minimised window reports a zero framebuffer, and no swap chain can be built for one.
+		// A minimized window reports a zero framebuffer, and no swap chain can be built for one.
 
 		if (framebufferSize.Width == 0 || framebufferSize.Height == 0)
 		{
 			return {};
 		}
 
-		if (const vk::Result fenceResult = _logicalDevice.waitForFences(*_inFlightFences[_frameIndex], vk::True, UINT64_MAX); fenceResult != vk::Result::eSuccess)
+		if (const vk::Result fenceResult = _logicalDevice.waitForFences(*_inFlightFences[_frameIndex], vk::True, UINT64_MAX);
+			fenceResult != vk::Result::eSuccess)
 		{
 			return std::unexpected(RendererError(RendererRenderErrorKind::FenceWaitError, ToString(fenceResult)));
 		}
@@ -600,7 +786,7 @@ namespace PgE
 			return std::unexpected(RendererError(RendererRenderErrorKind::UnableToAcquireSwapChainImage, ToString(acquireNextImageResult)));
 		}
 
-		// Reset only once the frame is certain to submit. Resetting before the acquire would leave
+		// Reset only once the frame is certain to submit. Resetting before acquire would leave
 		// the fence unsignalled on the early return above, deadlocking the next wait on it.
 
 		if (const std::expected<void, vk::Result> fenceResetResult = _logicalDevice.resetFences(*_inFlightFences[_frameIndex]); !fenceResetResult)
@@ -641,7 +827,7 @@ namespace PgE
 
 		const vk::Result presentResult = _queue.presentKHR(presentInfoKHR);
 
-		_frameIndex = (_frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+		_frameIndex = (_frameIndex + 1) % MaxFramesInFlight;
 
 		if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR || _framebufferResized)
 		{
@@ -677,7 +863,7 @@ namespace PgE
 		_swapChainImages.clear();
 		_swapChain = nullptr;
 
-		std::expected<SwapChainResources, RendererError<RendererCreationErrorKind>> swapChainResult =
+		CreationResult<SwapChainResources> swapChainResult =
 			CreateSwapChainResources(_physicalDevice, _logicalDevice, _surface, framebufferSize, _swapChainSurfaceFormat);
 		if (!swapChainResult)
 		{
@@ -694,17 +880,17 @@ namespace PgE
 
 		if (_renderFinishedSemaphores.size() != _swapChainImages.size())
 		{
-			_renderFinishedSemaphores.clear();
-			for (std::size_t imageIndex = 0; imageIndex < _swapChainImages.size(); imageIndex++)
-			{
-				std::expected<vk::raii::Semaphore, vk::Result> semaphoreResult = _logicalDevice.createSemaphore({});
-				if (!semaphoreResult)
-				{
-					return std::unexpected(RendererError(RendererRenderErrorKind::SwapChainRecreationError, ToString(semaphoreResult.error())));
-				}
+			// The current set stays alive until the replacement is complete, so a failed 'create'
+			// leaves usable semaphores behind rather than an empty vector the next present indexes.
 
-				_renderFinishedSemaphores.push_back(std::move(semaphoreResult.value()));
+			CreationResult<std::vector<vk::raii::Semaphore>> semaphoresResult = CreateSemaphores(_logicalDevice, _swapChainImages.size());
+			if (!semaphoresResult)
+			{
+				return std::unexpected(
+					RendererError(RendererRenderErrorKind::SwapChainRecreationError, std::string(semaphoresResult.error().Message())));
 			}
+
+			_renderFinishedSemaphores = std::move(semaphoresResult.value());
 		}
 
 		return {};
