@@ -3,6 +3,7 @@ module;
 #include "PlaygroundEngine/Log.h"
 
 #define GLFW_INCLUDE_NONE
+#include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
 module PlaygroundEngine.Window:backend;
@@ -50,14 +51,20 @@ namespace PgE
 		WindowBackend& operator=(const WindowBackend&) = delete;
 
 		void PollEvents();
-		void SwapBuffers() const;
 		[[nodiscard]] bool ShouldClose() const;
+		[[nodiscard]] FramebufferSize GetFramebufferSize() const;
+		void SetFramebufferResizedCallback(FramebufferResizedCallback callback);
+		[[nodiscard]] std::expected<std::span<const char* const>, VulkanWindowError> GetRequiredVulkanExtensions() const;
+		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance instance) const pre(_handle);
 
 	private:
 		explicit WindowBackend(GLFWwindow* handle) : _handle(handle)
 		{}
 
+		static void OnFramebufferResized(GLFWwindow* handle, int width, int height);
+
 		GLFWwindow* _handle;
+		FramebufferResizedCallback _framebufferResizedCallback;
 	};
 
 	std::expected<std::unique_ptr<WindowBackend>, WindowError> WindowBackend::Create(const WindowSpecification& specification)
@@ -66,6 +73,9 @@ namespace PgE
 		{
 			return std::unexpected(WindowError::PlatformInitializationFailed);
 		}
+
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 		GLFWwindow* handle = glfwCreateWindow(specification.Width, specification.Height, specification.Title.c_str(), nullptr, nullptr);
 
@@ -83,13 +93,14 @@ namespace PgE
 
 		++s_liveWindowCount;
 
-		// Bind the window's GL context to this (main) thread so buffer swaps present to it.
-		// A dedicated GraphicsContext will own this once the renderer exists.
-		glfwMakeContextCurrent(handle);
-
 		PGE_LOG(Info, "Created GLFW window \"{}\" ({}x{})", specification.Title, specification.Width, specification.Height);
 
-		return std::unique_ptr<WindowBackend>(new WindowBackend(handle));
+		std::unique_ptr<WindowBackend> backend(new WindowBackend(handle));
+
+		glfwSetWindowUserPointer(handle, backend.get());
+		glfwSetFramebufferSizeCallback(handle, OnFramebufferResized);
+
+		return backend;
 	}
 
 	WindowBackend::~WindowBackend()
@@ -102,19 +113,68 @@ namespace PgE
 		}
 	}
 
+	// ReSharper disable once CppMemberFunctionMayBeStatic
 	void WindowBackend::PollEvents()
 	{
 		// Processes the platform-wide event queue (all windows), not just this one.
 		glfwPollEvents();
 	}
 
-	void WindowBackend::SwapBuffers() const
-	{
-		glfwSwapBuffers(_handle);
-	}
-
 	bool WindowBackend::ShouldClose() const
 	{
 		return glfwWindowShouldClose(_handle) != 0;
+	}
+
+	FramebufferSize WindowBackend::GetFramebufferSize() const
+	{
+		int width = 0;
+		int height = 0;
+		glfwGetFramebufferSize(_handle, &width, &height);
+
+		return FramebufferSize{.Width = width, .Height = height};
+	}
+
+	void WindowBackend::SetFramebufferResizedCallback(FramebufferResizedCallback callback)
+	{
+		_framebufferResizedCallback = std::move(callback);
+	}
+
+	void WindowBackend::OnFramebufferResized(GLFWwindow* handle, const int width, const int height)
+	{
+		const auto* backend = static_cast<const WindowBackend*>(glfwGetWindowUserPointer(handle));
+		if (backend == nullptr || !backend->_framebufferResizedCallback)
+		{
+			return;
+		}
+
+		backend->_framebufferResizedCallback(FramebufferSize{.Width = width, .Height = height});
+	}
+
+	// ReSharper disable once CppMemberFunctionMayBeStatic
+	std::expected<std::span<const char* const>, VulkanWindowError> WindowBackend::GetRequiredVulkanExtensions() const
+	{
+		std::uint32_t extensionCount = 0;
+		const char** extensionNames = glfwGetRequiredInstanceExtensions(&extensionCount);
+
+		// GLFW yields null when the Vulkan loader is missing and does not define what it leaves in the count, so the pointer is the only signal
+		// that can be trusted here. A working Vulkan build always reports at least VK_KHR_surface plus a platform
+		// surface extension, making an empty list a broken platform rather than a valid answer.
+		if (extensionNames == nullptr || extensionCount == 0)
+		{
+			return std::unexpected(VulkanWindowError::ExtensionsUnavailable);
+		}
+
+		return std::span<const char* const>{extensionNames, extensionCount};
+	}
+
+	std::expected<VkSurfaceKHR, VulkanWindowError> WindowBackend::CreateVulkanSurface(const VkInstance instance) const
+	{
+		VkSurfaceKHR surface;
+		if (glfwCreateWindowSurface(instance, _handle, nullptr, &surface) != 0)
+		{
+			return std::unexpected(VulkanWindowError::SurfaceCreationFailed);
+		}
+
+		return surface;
 	}
 }

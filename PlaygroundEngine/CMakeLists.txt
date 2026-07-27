@@ -85,7 +85,124 @@ set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
 # --- GLFW setup --
 
-target_link_libraries(PlaygroundEngine PUBLIC spdlog::spdlog PRIVATE glfw)
+# --- Vulkan setup --
+# The C++ bindings ship as a named module rather than a header, so they get their own target. The
+# configuration macros below must be set while that module is compiled: they bake into the BMI, and
+# importers consequently need none of them. CMake's scanner orders vulkan.cppm after the :video
+# partition it exports, so the two files are listed without any manual ordering.
+find_package(Vulkan REQUIRED)
+
+add_library(VulkanModule STATIC)
+
+target_compile_features(VulkanModule PUBLIC cxx_std_26)
+
+target_link_libraries(VulkanModule PUBLIC Vulkan::Vulkan)
+
+target_compile_definitions(
+	VulkanModule
+	PRIVATE
+		# The renderer is native runtime code, which must not depend on unwinding. USE_STD_EXPECTED
+		# is what turns the vk::raii factories into std::expected<T, vk::Result>; defining
+		# VULKAN_HPP_EXPECTED directly is not the supported switch.
+		VULKAN_HPP_NO_EXCEPTIONS
+		VULKAN_HPP_USE_STD_EXPECTED
+		# Without this the vk:: structs gain constructors, making them non-aggregates, and
+		# designated initializers stop compiling.
+		VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+		# Defined empty on purpose. With exceptions off, resultCheck() otherwise asserts on any
+		# non-success Result, aborting before the caller can read the returned std::expected.
+		VULKAN_HPP_ASSERT_ON_RESULT=
+)
+
+# Generated third-party source, which does not compile clean under the engine's warning set.
+target_compile_options(VulkanModule PRIVATE -w)
+
+set_target_properties(
+	VulkanModule
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			OFF
+)
+
+target_sources(
+	VulkanModule
+	PUBLIC
+		FILE_SET CXX_MODULES
+			BASE_DIRS
+				"${Vulkan_INCLUDE_DIR}/vulkan"
+			FILES
+				"${Vulkan_INCLUDE_DIR}/vulkan/vulkan_video.cppm"
+				"${Vulkan_INCLUDE_DIR}/vulkan/vulkan.cppm"
+)
+# --- Vulkan setup --
+
+# --- Slang shader setup --
+# slangc is not part of FindVulkan's component set, so it is located on its own rather than
+# through find_package(Vulkan).
+find_program(SLANGC_EXECUTABLE slangc REQUIRED)
+
+function(add_slang_shader_target TARGET)
+	cmake_parse_arguments("SHADER" "" "OUTPUT" "SOURCES;ENTRY_POINTS" ${ARGN})
+
+	set(OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/Shaders/${SHADER_OUTPUT})
+
+	set(ENTRY_POINT_FLAGS "")
+	foreach(ENTRY_POINT IN LISTS SHADER_ENTRY_POINTS)
+		list(
+			APPEND ENTRY_POINT_FLAGS
+			-entry
+			${ENTRY_POINT}
+		)
+	endforeach()
+
+	# DEPFILE carries the imports slangc discovers, which DEPENDS cannot know: without it an edit
+	# to an imported .slang leaves a stale .spv behind with the build reporting success.
+
+	add_custom_command(
+		OUTPUT
+			${OUTPUT_FILE}
+		COMMAND
+			${SLANGC_EXECUTABLE} ${SHADER_SOURCES} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINT_FLAGS} -depfile
+			${OUTPUT_FILE}.d -o ${OUTPUT_FILE}
+		DEPENDS
+			${SHADER_SOURCES}
+		DEPFILE ${OUTPUT_FILE}.d
+		COMMENT "Compiling Slang shaders for ${TARGET}"
+		VERBATIM
+	)
+
+	add_custom_target(${TARGET} DEPENDS ${OUTPUT_FILE})
+
+	# Published as a global property rather than a target property: consumers live in sibling
+	# directories and need the path at configure time, where a $<TARGET_PROPERTY:> genex cannot be
+	# evaluated.
+
+	set_property(
+		GLOBAL
+		PROPERTY
+			${TARGET}_OUTPUT_FILE
+				${OUTPUT_FILE}
+	)
+endfunction()
+
+add_slang_shader_target(
+	PlaygroundEngineShaders
+	OUTPUT shaders.spv
+	SOURCES ${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Shaders/shaders.slang
+	ENTRY_POINTS vertMain fragMain
+)
+
+add_dependencies(PlaygroundEngine PlaygroundEngineShaders)
+# --- Slang shader setup --
+
+target_link_libraries(
+	PlaygroundEngine
+	PUBLIC
+		spdlog::spdlog
+	PRIVATE
+		glfw
+		VulkanModule
+)
 
 target_sources(
 	PlaygroundEngine
@@ -100,12 +217,15 @@ target_sources(
 		src/Component/TransformComponent.cpp
 		src/App.cpp
 		src/main.cpp
+		src/Files.cpp
+		src/Paths.cpp
 		src/Window.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
 		src/Reflection/Core/FunctionInfo.cpp
 		src/Reflection/Core/Core.cpp
 		src/Reflection/Builtins/EnumerationFacet.cpp
+		src/Renderer/RendererVulkan.cpp
 	PUBLIC
 		FILE_SET CXX_MODULES
 			BASE_DIRS
@@ -117,6 +237,8 @@ target_sources(
 				src/Engine.cppm
 				src/App.cppm
 				src/World.cppm
+				src/Files.cppm
+				src/Paths.cppm
 				src/Window.cppm
 				src/WindowTypes.cppm
 				src/WindowBackend.GLFW.cppm
@@ -174,6 +296,7 @@ target_sources(
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm
+				src/Renderer/RendererVulkan.cppm
 	PUBLIC
 		FILE_SET HEADERS
 			BASE_DIRS

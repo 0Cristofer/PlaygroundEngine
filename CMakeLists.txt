@@ -118,6 +118,19 @@ if(LINUX)
 	# and load fails with "version GLIBCXX_... not found". add_link_options (not a preset linker
 	# flag) so it survives the asan/coverage presets overriding CMAKE_EXE_LINKER_FLAGS.
 	add_link_options("-Wl,-rpath,${_gccBinDir}/../lib64")
+
+	# Link this GCC's C++ runtime in statically on top of the rpath above. The rpath makes the whole
+	# process use the source-built libstdc++, including any distro-built plugin the process dlopens,
+	# and such a plugin is not built against it: the Vulkan validation layer, which the loader
+	# dlopens, then fails vkCreateInstance with VK_ERROR_INITIALIZATION_FAILED or segfaults outright.
+	# Linking statically leaves those plugins bound to the system copy while our own code keeps the
+	# newer runtime it needs. Safe because the boundaries that dlopen a plugin are C ABI, so the two
+	# runtimes in the process never exchange C++ objects. The rpath stays for anything the global
+	# link options do not reach.
+	add_link_options(
+		-static-libstdc++
+		-static-libgcc
+	)
 endif()
 
 # Global options to ensure all compilation (including cmake internal) steps are using the same flags.
