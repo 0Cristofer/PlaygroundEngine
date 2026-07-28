@@ -85,6 +85,25 @@ set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
 # --- GLFW setup --
 
+# --- GLM setup --
+FetchContent_Declare(glm GIT_REPOSITORY https://github.com/g-truc/glm.git GIT_TAG 1.0.3 SYSTEM FIND_PACKAGE_ARGS NAMES glm)
+
+# GLM_BUILD_LIBRARY OFF keeps glm::glm a pure INTERFACE target. The compiled variant would give the
+# global -freflection a C++17 sub-target to leak onto, and nothing here needs the prebuilt symbols.
+set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
+set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLM_BUILD_INSTALL OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(glm)
+
+# GLM defaults to OpenGL's [-1, 1] clip-space depth; Vulkan's is [0, 1]. Without this every
+# projection matrix is silently wrong in Z. Carried on the glm target itself rather than on
+# PlaygroundEngine, so every TU that reaches glm gets the same convention: this macro changes the
+# definition of glm's inline functions, so a TU disagreeing about it is an ODR violation, not just a
+# wrong matrix.
+target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE)
+# --- GLM setup --
+
 # --- Vulkan setup --
 # The C++ bindings ship as a named module rather than a header, so they get their own target. The
 # configuration macros below must be set while that module is compiled: they bake into the BMI, and
@@ -201,6 +220,7 @@ target_link_libraries(
 		spdlog::spdlog
 	PRIVATE
 		glfw
+		glm::glm
 		VulkanModule
 )
 
@@ -226,6 +246,7 @@ target_sources(
 		src/Reflection/Core/Core.cpp
 		src/Reflection/Builtins/EnumerationFacet.cpp
 		src/Renderer/RendererVulkan.cpp
+		src/Renderer/VulkanUtils.cpp
 	PUBLIC
 		FILE_SET CXX_MODULES
 			BASE_DIRS
@@ -296,6 +317,9 @@ target_sources(
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm
+				src/Renderer/Vertex.cppm
+				src/Renderer/VulkanTypes.cppm
+				src/Renderer/VulkanUtils.cppm
 				src/Renderer/RendererVulkan.cppm
 	PUBLIC
 		FILE_SET HEADERS
