@@ -5,7 +5,7 @@ export import PlaygroundEngine.GameObject;
 export import PlaygroundEngine.Window;
 
 import PlaygroundEngine.App;
-import PlaygroundEngine.RendererVulkan;
+import PlaygroundEngine.Renderer.Vulkan;
 
 import std;
 
