@@ -444,9 +444,11 @@ namespace PgE
 								  .Extent = swapChainExtent};
 	}
 
-	CreationResult<vk::raii::PipelineLayout> CreatePipelineLayout(const vk::raii::Device& logicalDevice)
+	CreationResult<vk::raii::PipelineLayout> CreatePipelineLayout(const vk::raii::Device& logicalDevice,
+																  const vk::raii::DescriptorSetLayout& descriptorSetLayout)
 	{
-		constexpr vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{.setLayoutCount = 0, .pushConstantRangeCount = 0};
+		const vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+			.setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0};
 
 		std::expected<vk::raii::PipelineLayout, vk::Result> pipelineLayoutResult = logicalDevice.createPipelineLayout(pipelineLayoutCreateInfo);
 		if (!pipelineLayoutResult)
@@ -455,6 +457,22 @@ namespace PgE
 		}
 
 		return std::move(pipelineLayoutResult.value());
+	}
+
+	CreationResult<vk::raii::DescriptorSetLayout> CreateDescriptorSetLayout(const vk::raii::Device& logicalDevice)
+	{
+		vk::DescriptorSetLayoutBinding uboLayoutBinding{
+			.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex};
+		const vk::DescriptorSetLayoutCreateInfo layoutInfo{.bindingCount = 1, .pBindings = &uboLayoutBinding};
+
+		std::expected<vk::raii::DescriptorSetLayout, vk::Result> descriptorSetLayoutResult = logicalDevice.createDescriptorSetLayout(layoutInfo);
+		if (!descriptorSetLayoutResult)
+		{
+			return std::unexpected(
+				RendererError(RendererCreationErrorKind::DescriptorSetLayoutCreateError, ToString(descriptorSetLayoutResult.error())));
+		}
+
+		return std::move(descriptorSetLayoutResult.value());
 	}
 
 	static CreationResult<vk::raii::ShaderModule> LoadShaderModule(const vk::raii::Device& logicalDevice)
@@ -519,7 +537,7 @@ namespace PgE
 																	  .rasterizerDiscardEnable = vk::False,
 																	  .polygonMode = vk::PolygonMode::eFill,
 																	  .cullMode = vk::CullModeFlagBits::eBack,
-																	  .frontFace = vk::FrontFace::eClockwise,
+																	  .frontFace = vk::FrontFace::eCounterClockwise,
 																	  .depthBiasEnable = vk::False,
 																	  .lineWidth = 1.0f};
 		constexpr vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = vk::SampleCountFlagBits::e1,
@@ -642,7 +660,8 @@ namespace PgE
 		}
 		const vk::raii::CommandBuffer& commandCopyBuffer = commandCopyBufferResult->front();
 
-		if (std::expected<void, vk::Result> beginResult = commandCopyBuffer.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}); !beginResult)
+		if (std::expected<void, vk::Result> beginResult = commandCopyBuffer.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+			!beginResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(beginResult.error())));
 		}
@@ -654,7 +673,9 @@ namespace PgE
 			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(endCommandBufferResult.error())));
 		}
 
-		if (std::expected<void, vk::Result> submitResult = queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr); !submitResult)
+		if (std::expected<void, vk::Result> submitResult =
+				queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
+			!submitResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(submitResult.error())));
 		}
@@ -678,6 +699,61 @@ namespace PgE
 		}
 
 		return std::move(commandPoolResult.value());
+	}
+
+	CreationResult<UniformBufferResource> CreateUniformBuffer(const vk::raii::PhysicalDevice& physicalDevice,
+															  const vk::raii::Device& logicalDevice,
+															  const vk::DeviceSize bufferSize)
+	{
+		CreationResult<BufferResource> bufferResult =
+			CreateBufferResource(physicalDevice, logicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		if (!bufferResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::UniformBufferCreateError, ToString(bufferResult.error())));
+		}
+		BufferResource& buffer = bufferResult.value();
+
+		std::expected<void*, vk::Result> mapResult = buffer.DeviceMemory.mapMemory(0, bufferSize);
+		if (!mapResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DeviceMemoryMapError, ToString(mapResult.error())));
+		}
+
+		return UniformBufferResource{.Buffer = std::move(buffer), .BufferMapped = mapResult.value()};
+	}
+
+	CreationResult<vk::raii::DescriptorPool> CreateDescriptorPool(const vk::raii::Device& logicalDevice, const std::uint32_t descriptorCount)
+	{
+		vk::DescriptorPoolSize poolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = descriptorCount};
+		const vk::DescriptorPoolCreateInfo poolInfo{
+			.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, .maxSets = descriptorCount, .poolSizeCount = 1, .pPoolSizes = &poolSize};
+
+		std::expected<vk::raii::DescriptorPool, vk::Result> poolCreationResult = logicalDevice.createDescriptorPool(poolInfo);
+		if (!poolCreationResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DescriptorPoolCreateError, ToString(poolCreationResult.error())));
+		}
+
+		return std::move(poolCreationResult.value());
+	}
+
+	CreationResult<std::vector<vk::raii::DescriptorSet>> CreateDescriptorSets(const vk::raii::Device& logicalDevice,
+																			  const vk::raii::DescriptorSetLayout& descriptorSetLayout,
+																			  const vk::raii::DescriptorPool& descriptorPool,
+																			  const std::uint32_t descriptorSetCount)
+	{
+		std::vector layouts(descriptorSetCount, *descriptorSetLayout);
+		const vk::DescriptorSetAllocateInfo allocInfo{
+			.descriptorPool = descriptorPool, .descriptorSetCount = static_cast<std::uint32_t>(layouts.size()), .pSetLayouts = layouts.data()};
+
+		std::expected<std::vector<vk::raii::DescriptorSet>, vk::Result> descriptorSetsResult = logicalDevice.allocateDescriptorSets(allocInfo);
+		if (!descriptorSetsResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DescriptorSetCreateError, ToString(descriptorSetsResult.error())));
+		}
+
+		return std::move(descriptorSetsResult.value());
 	}
 
 	CreationResult<std::vector<vk::raii::CommandBuffer>> AllocateCommandBuffers(const vk::raii::Device& logicalDevice,

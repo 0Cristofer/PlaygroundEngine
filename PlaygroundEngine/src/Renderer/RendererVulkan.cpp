@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 module PlaygroundEngine.Renderer.Vulkan;
 
@@ -86,7 +87,14 @@ namespace PgE
 		}
 		SwapChainResources& swapChain = swapChainResult.value();
 
-		CreationResult<vk::raii::PipelineLayout> pipelineLayoutResult = CreatePipelineLayout(logicalDevice);
+		CreationResult<vk::raii::DescriptorSetLayout> descriptorSetLayoutResult = CreateDescriptorSetLayout(logicalDevice);
+		if (!descriptorSetLayoutResult)
+		{
+			return std::unexpected(descriptorSetLayoutResult.error());
+		}
+		vk::raii::DescriptorSetLayout& descriptorSetLayout = descriptorSetLayoutResult.value();
+
+		CreationResult<vk::raii::PipelineLayout> pipelineLayoutResult = CreatePipelineLayout(logicalDevice, descriptorSetLayout);
 		if (!pipelineLayoutResult)
 		{
 			return std::unexpected(pipelineLayoutResult.error());
@@ -170,6 +178,45 @@ namespace PgE
 			return std::unexpected(indexBufferCopyResult.error());
 		}
 
+		std::vector<UniformBufferResource> uniformBufferResources;
+		for (std::size_t i = 0; i < MaxFramesInFlight; ++i)
+		{
+			CreationResult<UniformBufferResource> uniformBufferResourceResult =
+				CreateUniformBuffer(physicalDevice, logicalDevice, sizeof(UniformBufferObject));
+			if (!uniformBufferResourceResult)
+			{
+				return std::unexpected(uniformBufferResourceResult.error());
+			}
+			uniformBufferResources.emplace_back(std::move(uniformBufferResourceResult.value()));
+		}
+
+		CreationResult<vk::raii::DescriptorPool> descriptorPoolResult = CreateDescriptorPool(logicalDevice, MaxFramesInFlight);
+		if (!descriptorPoolResult)
+		{
+			return std::unexpected(descriptorPoolResult.error());
+		}
+		vk::raii::DescriptorPool& descriptorPool = descriptorPoolResult.value();
+
+		CreationResult<std::vector<vk::raii::DescriptorSet>> descriptorSetsResult =
+			CreateDescriptorSets(logicalDevice, descriptorSetLayout, descriptorPool, MaxFramesInFlight);
+		if (!descriptorSetsResult)
+		{
+			return std::unexpected(descriptorSetsResult.error());
+		}
+		std::vector<vk::raii::DescriptorSet>& descriptorSets = descriptorSetsResult.value();
+
+		for (std::size_t i = 0; i < MaxFramesInFlight; i++)
+		{
+			vk::DescriptorBufferInfo bufferInfo{.buffer = uniformBufferResources[i].Buffer.Buffer, .offset = 0, .range = sizeof(UniformBufferObject)};
+			vk::WriteDescriptorSet descriptorWrite{.dstSet = descriptorSets[i],
+												   .dstBinding = 0,
+												   .dstArrayElement = 0,
+												   .descriptorCount = 1,
+												   .descriptorType = vk::DescriptorType::eUniformBuffer,
+												   .pBufferInfo = &bufferInfo};
+			logicalDevice.updateDescriptorSets(descriptorWrite, {});
+		}
+
 		CreationResult<std::vector<vk::raii::CommandBuffer>> commandBuffersResult =
 			AllocateCommandBuffers(logicalDevice, commandPool, MaxFramesInFlight);
 		if (!commandBuffersResult)
@@ -205,9 +252,10 @@ namespace PgE
 		return std::unique_ptr<RendererVulkan>(new RendererVulkan(
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
-			swapChain.Extent, std::move(swapChain.ImageViews), std::move(pipelineLayout), std::move(graphicsPipeline),
-			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(commandBuffers),
-			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
+			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(uniformBufferResources),
+			std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers), std::move(presentCompleteSemaphores),
+			std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -252,6 +300,8 @@ namespace PgE
 		{
 			return std::unexpected(RendererError(RendererRenderErrorKind::FenceResetError, ToString(fenceResetResult)));
 		}
+
+		UpdateUniformBuffer(_frameIndex);
 
 		if (const std::expected<void, vk::Result> resetCommandBufferResult = _commandBuffers[_frameIndex].reset(); !resetCommandBufferResult)
 		{
@@ -355,6 +405,22 @@ namespace PgE
 		return {};
 	}
 
+	void RendererVulkan::UpdateUniformBuffer(const std::uint32_t frameIndex) const
+	{
+		static auto startTime = std::chrono::high_resolution_clock::now();
+
+		const auto currentTime = std::chrono::high_resolution_clock::now();
+		const float timeSeconds = std::chrono::duration<float>(currentTime - startTime).count();
+
+		UniformBufferObject ubo;
+		ubo.Model = glm::rotate(glm::mat4(1.0f), timeSeconds * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.View = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.Proj = glm::perspective(glm::radians(45.0f), static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height),
+									0.1f, 10.0f);
+		ubo.Proj[1][1] *= -1;
+		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &ubo, sizeof(ubo));
+	}
+
 	void RendererVulkan::TransitionImageLayout(const std::uint32_t imageIndex,
 											   const vk::ImageLayout oldLayout,
 											   const vk::ImageLayout newLayout,
@@ -416,6 +482,7 @@ namespace PgE
 			0, vk::Viewport(0.0f, 0.0f, static_cast<float>(_swapChainExtent.width), static_cast<float>(_swapChainExtent.height), 0.0f, 1.0f));
 		_commandBuffers[_frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChainExtent));
 
+		_commandBuffers[_frameIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, _pipelineLayout, 0, *_descriptorSets[_frameIndex], nullptr);
 		_commandBuffers[_frameIndex].drawIndexed(Indices.size(), 1, 0, 0, 0);
 
 		_commandBuffers[_frameIndex].endRendering();

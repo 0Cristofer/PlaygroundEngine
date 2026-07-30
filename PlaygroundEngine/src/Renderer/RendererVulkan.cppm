@@ -39,11 +39,15 @@ namespace PgE
 					   vk::SurfaceFormatKHR swapChainSurfaceFormat,
 					   vk::Extent2D swapChainExtent,
 					   std::vector<vk::raii::ImageView> swapChainImageViews,
+					   vk::raii::DescriptorSetLayout descriptorSetLayout,
 					   vk::raii::PipelineLayout pipelineLayout,
 					   vk::raii::Pipeline graphicsPipeline,
 					   vk::raii::CommandPool commandPool,
 					   BufferResource vertexBufferResource,
 					   BufferResource indexBufferResource,
+					   std::vector<UniformBufferResource> uniformBufferResources,
+					   vk::raii::DescriptorPool descriptorPool,
+					   std::vector<vk::raii::DescriptorSet> descriptorSets,
 					   std::vector<vk::raii::CommandBuffer> commandBuffer,
 					   std::vector<vk::raii::Semaphore> presentCompleteSemaphores,
 					   std::vector<vk::raii::Semaphore> renderFinishedSemaphores,
@@ -52,11 +56,13 @@ namespace PgE
 			  _physicalDevice(std::move(physicalDevice)), _logicalDevice(std::move(logicalDevice)), _queue(std::move(queue)),
 			  _swapChain(std::move(swapChain)), _swapChainImages(std::move(swapChainImages)),
 			  _swapChainSurfaceFormat(std::move(swapChainSurfaceFormat)), _swapChainExtent(std::move(swapChainExtent)),
-			  _swapChainImageViews(std::move(swapChainImageViews)), _pipelineLayout(std::move(pipelineLayout)),
-			  _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
+			  _swapChainImageViews(std::move(swapChainImageViews)), _descriptorSetLayout(std::move(descriptorSetLayout)),
+			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
 			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)),
-			  _commandBuffers(std::move(commandBuffer)), _presentCompleteSemaphores(std::move(presentCompleteSemaphores)),
-			  _renderFinishedSemaphores(std::move(renderFinishedSemaphores)), _inFlightFences(std::move(inFlightFences))
+			  _uniformBufferResources(std::move(uniformBufferResources)), _descriptorPool(std::move(descriptorPool)),
+			  _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
+			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
+			  _inFlightFences(std::move(inFlightFences))
 		{}
 
 		void TransitionImageLayout(std::uint32_t imageIndex,
@@ -68,6 +74,7 @@ namespace PgE
 								   vk::PipelineStageFlags2 dstStageMask) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
+		void UpdateUniformBuffer(std::uint32_t frameIndex) const;
 
 		vk::raii::Context _context;
 		vk::raii::Instance _instance;
@@ -81,11 +88,15 @@ namespace PgE
 		vk::SurfaceFormatKHR _swapChainSurfaceFormat;
 		vk::Extent2D _swapChainExtent;
 		std::vector<vk::raii::ImageView> _swapChainImageViews;
+		vk::raii::DescriptorSetLayout _descriptorSetLayout;
 		vk::raii::PipelineLayout _pipelineLayout;
 		vk::raii::Pipeline _graphicsPipeline;
 		vk::raii::CommandPool _commandPool;
 		BufferResource _vertexBufferResource;
 		BufferResource _indexBufferResource;
+		std::vector<UniformBufferResource> _uniformBufferResources;
+		vk::raii::DescriptorPool _descriptorPool;
+		std::vector<vk::raii::DescriptorSet> _descriptorSets;
 		std::vector<vk::raii::CommandBuffer> _commandBuffers;
 		std::vector<vk::raii::Semaphore> _presentCompleteSemaphores;
 		std::vector<vk::raii::Semaphore> _renderFinishedSemaphores;

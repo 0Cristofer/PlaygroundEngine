@@ -25,4 +25,11 @@ namespace PgE
 					 {.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, Color)}}};
 		}
 	};
+
+	export struct UniformBufferObject
+	{
+		glm::mat4 Model;
+		glm::mat4 View;
+		glm::mat4 Proj;
+	};
 }
