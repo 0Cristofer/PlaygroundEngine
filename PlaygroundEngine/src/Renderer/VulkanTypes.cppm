@@ -39,6 +39,8 @@ namespace PgE
 		DeviceMemoryBindError,
 		DeviceMemoryMapError,
 		CantFindMemoryType,
+		ImageCreateError,
+		TextureLoadError,
 		CommandPoolCreateError,
 		CommandBufferCreateError,
 		UniformBufferCreateError,

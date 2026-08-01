@@ -94,3 +94,33 @@ add_custom_command(
 add_custom_target(PlaygroundGameShaders DEPENDS ${STAGED_SHADER})
 
 add_dependencies(PlaygroundGame PlaygroundGameShaders)
+
+# Textures are located the same way the shaders above are, so the images the engine publishes are
+# staged into a Textures folder beside the executable. Same stand-in status, and the same reason for
+# being a build edge rather than a POST_BUILD step: an asset-only edit does not relink the executable.
+
+get_property(TEXTURE_SOURCES GLOBAL PROPERTY PlaygroundEngineTextures_SOURCE_FILES)
+
+set(STAGED_TEXTURES "")
+
+foreach(TEXTURE_SOURCE IN LISTS TEXTURE_SOURCES)
+	get_filename_component(TEXTURE_NAME ${TEXTURE_SOURCE} NAME)
+	set(STAGED_TEXTURE ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/Textures/${TEXTURE_NAME})
+
+	add_custom_command(
+		OUTPUT
+			${STAGED_TEXTURE}
+		COMMAND
+			${CMAKE_COMMAND} -E copy_if_different ${TEXTURE_SOURCE} ${STAGED_TEXTURE}
+		DEPENDS
+			${TEXTURE_SOURCE}
+		COMMENT "Staging ${TEXTURE_NAME} next to PlaygroundGame"
+		VERBATIM
+	)
+
+	list(APPEND STAGED_TEXTURES ${STAGED_TEXTURE})
+endforeach()
+
+add_custom_target(PlaygroundGameTextures DEPENDS ${STAGED_TEXTURES})
+
+add_dependencies(PlaygroundGame PlaygroundGameTextures)

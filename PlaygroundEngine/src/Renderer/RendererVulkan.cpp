@@ -22,6 +22,7 @@ namespace PgE
 		Vertex{.Pos = {-0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.f}}, Vertex{.Pos = {0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}},
 		Vertex{.Pos = {0.5f, 0.5f}, .Color = {0.0f, 0.0f, 1.0f}}, Vertex{.Pos = {-0.5f, 0.5f}, .Color = {0.0f, 1.0f, 1.0f}}};
 	constexpr std::array<std::uint16_t, 6> Indices = {0, 1, 2, 2, 3, 0};
+	constexpr std::string_view PlaceholderTextureFileName = "placeholder.png";
 
 	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
 		const RendererSpecification& specification, const Window& window)
@@ -178,6 +179,14 @@ namespace PgE
 			return std::unexpected(indexBufferCopyResult.error());
 		}
 
+		CreationResult<ImageResource> textureImageResourceResult =
+			CreateTextureImage(physicalDevice, logicalDevice, queue, commandPool, PlaceholderTextureFileName);
+		if (!textureImageResourceResult)
+		{
+			return std::unexpected(textureImageResourceResult.error());
+		}
+		ImageResource& textureImageResource = textureImageResourceResult.value();
+
 		std::vector<UniformBufferResource> uniformBufferResources;
 		for (std::size_t i = 0; i < MaxFramesInFlight; ++i)
 		{
@@ -253,9 +262,9 @@ namespace PgE
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
-			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(uniformBufferResources),
-			std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers), std::move(presentCompleteSemaphores),
-			std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(textureImageResource),
+			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
+			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -421,31 +430,6 @@ namespace PgE
 		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &ubo, sizeof(ubo));
 	}
 
-	void RendererVulkan::TransitionImageLayout(const std::uint32_t imageIndex,
-											   const vk::ImageLayout oldLayout,
-											   const vk::ImageLayout newLayout,
-											   const vk::AccessFlags2 srcAccessMask,
-											   const vk::AccessFlags2 dstAccessMask,
-											   const vk::PipelineStageFlags2 srcStageMask,
-											   const vk::PipelineStageFlags2 dstStageMask) const
-	{
-		vk::ImageMemoryBarrier2 barrier = {
-			.srcStageMask = srcStageMask,
-			.srcAccessMask = srcAccessMask,
-			.dstStageMask = dstStageMask,
-			.dstAccessMask = dstAccessMask,
-			.oldLayout = oldLayout,
-			.newLayout = newLayout,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = _swapChainImages[imageIndex],
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
-		const vk::DependencyInfo dependencyInfo = {.dependencyFlags = {}, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
-
-		_commandBuffers[_frameIndex].pipelineBarrier2(dependencyInfo);
-	}
-
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex) const
 	{
 		if (std::expected<void, vk::Result> beginResult = _commandBuffers[_frameIndex].begin({}); !beginResult)
@@ -454,8 +438,9 @@ namespace PgE
 		}
 
 		// Before starting rendering, transition the swapchain image to vk::ImageLayout::eColorAttachmentOptimal
-		TransitionImageLayout(imageIndex, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
-							  {},												  // srcAccessMask (no need to wait for previous operations)
+		TransitionImageLayout(_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eUndefined,
+							  vk::ImageLayout::eColorAttachmentOptimal,
+							  vk::AccessFlagBits2::eNone,						  // srcAccessMask (no need to wait for previous operations)
 							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // dstAccessMask
 							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
 							  vk::PipelineStageFlagBits2::eColorAttachmentOutput  // dstStage
@@ -488,9 +473,10 @@ namespace PgE
 		_commandBuffers[_frameIndex].endRendering();
 
 		// After rendering, transition the swapchain image to vk::ImageLayout::ePresentSrcKHR
-		TransitionImageLayout(imageIndex, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
+		TransitionImageLayout(_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal,
+							  vk::ImageLayout::ePresentSrcKHR,
 							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // srcAccessMask
-							  {},												  // dstAccessMask
+							  vk::AccessFlagBits2::eNone,						  // dstAccessMask
 							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
 							  vk::PipelineStageFlagBits2::eBottomOfPipe			  // dstStage
 		);

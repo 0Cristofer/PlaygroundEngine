@@ -16,6 +16,7 @@ import PlaygroundEngine.Files;
 import PlaygroundEngine.Renderer.Vertex;
 import :VulkanTypes;
 import :VulkanUtils;
+import PlaygroundEngine.Image;
 
 namespace PgE
 {
@@ -653,35 +654,18 @@ namespace PgE
 									const vk::raii::Buffer& dstBuffer,
 									const vk::DeviceSize size)
 	{
-		CreationResult<std::vector<vk::raii::CommandBuffer>> commandCopyBufferResult = AllocateCommandBuffers(logicalDevice, commandPool, 1);
-		if (!commandCopyBufferResult)
+		CreationResult<vk::raii::CommandBuffer> copyCommandBufferResult = BeginSingleTimeCommands(logicalDevice, commandPool);
+		if (!copyCommandBufferResult)
 		{
-			return std::unexpected(commandCopyBufferResult.error());
+			return std::unexpected(copyCommandBufferResult.error());
 		}
-		const vk::raii::CommandBuffer& commandCopyBuffer = commandCopyBufferResult->front();
+		vk::raii::CommandBuffer& copyCommandBuffer = copyCommandBufferResult.value();
 
-		if (std::expected<void, vk::Result> beginResult = commandCopyBuffer.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-			!beginResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(beginResult.error())));
-		}
+		copyCommandBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
 
-		commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy(0, 0, size));
-
-		if (std::expected<void, vk::Result> endCommandBufferResult = commandCopyBuffer.end(); !endCommandBufferResult)
+		if (CreationResult<void> endCommandBufferResult = EndSingleTimeCommands(queue, std::move(copyCommandBuffer)); !endCommandBufferResult)
 		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(endCommandBufferResult.error())));
-		}
-
-		if (std::expected<void, vk::Result> submitResult =
-				queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
-			!submitResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(submitResult.error())));
-		}
-		if (std::expected<void, vk::Result> waitResult = queue.waitIdle(); !waitResult)
-		{
-			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(waitResult.error())));
+			return std::unexpected(endCommandBufferResult.error());
 		}
 
 		return {};
@@ -809,5 +793,209 @@ namespace PgE
 		}
 
 		return fences;
+	}
+
+	CreationResult<ImageResource> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
+													 const vk::raii::Device& logicalDevice,
+													 const vk::raii::Queue& queue,
+													 const vk::raii::CommandPool& commandPool,
+													 const std::string_view textureFileName)
+	{
+		const std::expected<std::filesystem::path, PathError> executableDirectoryResult = GetExecutableDirectory();
+		if (!executableDirectoryResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::TextureLoadError, ToString(executableDirectoryResult.error())));
+		}
+
+		const std::expected<std::vector<std::byte>, FileError> encodedBytesResult =
+			ReadBinaryFile(executableDirectoryResult.value() / "Textures" / textureFileName);
+		if (!encodedBytesResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::TextureLoadError, ToString(encodedBytesResult.error())));
+		}
+
+		const std::expected<Image, ImageError> decodedImageResult = DecodeImage(encodedBytesResult.value());
+		if (!decodedImageResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::TextureLoadError, ToString(decodedImageResult.error())));
+		}
+		const Image& decodedImage = decodedImageResult.value();
+
+		CreationResult<BufferResource> stagingBufferResult =
+			CreateBufferResource(physicalDevice, logicalDevice, decodedImage.Pixels.size(), vk::BufferUsageFlagBits::eTransferSrc,
+								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		if (!stagingBufferResult)
+		{
+			return std::unexpected(stagingBufferResult.error());
+		}
+		const BufferResource& stagingBuffer = stagingBufferResult.value();
+
+		if (CreationResult<void> uploadResult = UploadToDeviceMemory(stagingBuffer.DeviceMemory, decodedImage.Pixels); !uploadResult)
+		{
+			return std::unexpected(uploadResult.error());
+		}
+
+		CreationResult<ImageResource> imageResult =
+			CreateImage(physicalDevice, logicalDevice, decodedImage.Width, decodedImage.Height, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
+						vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		if (!imageResult)
+		{
+			return std::unexpected(imageResult.error());
+		}
+		ImageResource& imageResource = imageResult.value();
+
+		CreationResult<vk::raii::CommandBuffer> commandBufferResult = BeginSingleTimeCommands(logicalDevice, commandPool);
+		if (!commandBufferResult)
+		{
+			return std::unexpected(commandBufferResult.error());
+		}
+		vk::raii::CommandBuffer& commandBuffer = commandBufferResult.value();
+
+		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+							  vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eTransferWrite, vk::PipelineStageFlagBits2::eNone,
+							  vk::PipelineStageFlagBits2::eTransfer);
+
+		CopyBufferToImage(commandBuffer, stagingBuffer.Buffer, imageResource.Image, decodedImage.Width, decodedImage.Height);
+
+		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+							  vk::AccessFlagBits2::eTransferWrite, vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eTransfer,
+							  vk::PipelineStageFlagBits2::eFragmentShader);
+
+		if (CreationResult<void> endResult = EndSingleTimeCommands(queue, std::move(commandBuffer)); !endResult)
+		{
+			return std::unexpected(endResult.error());
+		}
+
+		return std::move(imageResource);
+	}
+
+	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
+											  const vk::raii::Device& logicalDevice,
+											  const std::uint32_t width,
+											  const std::uint32_t height,
+											  const vk::Format format,
+											  const vk::ImageTiling tiling,
+											  const vk::ImageUsageFlags usage,
+											  const vk::MemoryPropertyFlags properties)
+	{
+		const vk::ImageCreateInfo imageInfo{.imageType = vk::ImageType::e2D,
+											.format = format,
+											.extent = {.width = width, .height = height, .depth = 1},
+											.mipLevels = 1,
+											.arrayLayers = 1,
+											.samples = vk::SampleCountFlagBits::e1,
+											.tiling = tiling,
+											.usage = usage,
+											.sharingMode = vk::SharingMode::eExclusive};
+		std::expected<vk::raii::Image, vk::Result> imageResult = logicalDevice.createImage(imageInfo);
+		if (!imageResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ImageCreateError, ToString(imageResult.error())));
+		}
+		vk::raii::Image& image = imageResult.value();
+
+		const vk::MemoryRequirements memoryRequirements = image.getMemoryRequirements();
+		CreationResult<std::uint32_t> memoryTypeResult = FindMemoryType(physicalDevice, memoryRequirements.memoryTypeBits, properties);
+		if (!memoryTypeResult)
+		{
+			return std::unexpected(memoryTypeResult.error());
+		}
+
+		const vk::MemoryAllocateInfo memoryAllocateInfo{.allocationSize = memoryRequirements.size, .memoryTypeIndex = memoryTypeResult.value()};
+		std::expected<vk::raii::DeviceMemory, vk::Result> deviceMemoryResult = logicalDevice.allocateMemory(memoryAllocateInfo);
+		if (!deviceMemoryResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DeviceMemoryAllocationError, ToString(deviceMemoryResult.error())));
+		}
+		vk::raii::DeviceMemory& deviceMemory = deviceMemoryResult.value();
+
+		if (std::expected<void, vk::Result> bindResult = image.bindMemory(*deviceMemory, 0); !bindResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DeviceMemoryBindError, ToString(bindResult.error())));
+		}
+
+		return ImageResource{.Image = std::move(image), .DeviceMemory = std::move(deviceMemory)};
+	}
+
+	CreationResult<vk::raii::CommandBuffer> BeginSingleTimeCommands(const vk::raii::Device& logicalDevice, const vk::raii::CommandPool& commandPool)
+	{
+		CreationResult<std::vector<vk::raii::CommandBuffer>> commandBufferResult = AllocateCommandBuffers(logicalDevice, commandPool, 1);
+		if (!commandBufferResult)
+		{
+			return std::unexpected(commandBufferResult.error());
+		}
+		vk::raii::CommandBuffer& commandBuffer = commandBufferResult.value().front();
+
+		constexpr vk::CommandBufferBeginInfo beginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+		if (std::expected<void, vk::Result> beginResult = commandBuffer.begin(beginInfo); !beginResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(beginResult.error())));
+		}
+
+		return std::move(commandBuffer);
+	}
+
+	CreationResult<void> EndSingleTimeCommands(const vk::raii::Queue& queue, vk::raii::CommandBuffer&& commandBuffer)
+	{
+		if (std::expected<void, vk::Result> endCommandBufferResult = commandBuffer.end(); !endCommandBufferResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(endCommandBufferResult.error())));
+		}
+
+		const vk::SubmitInfo submitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandBuffer};
+
+		if (std::expected<void, vk::Result> submitResult = queue.submit(submitInfo, nullptr); !submitResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(submitResult.error())));
+		}
+		if (std::expected<void, vk::Result> waitResult = queue.waitIdle(); !waitResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CommandBufferCopyError, ToString(waitResult.error())));
+		}
+
+		return {};
+	}
+
+	void TransitionImageLayout(const vk::raii::CommandBuffer& commandBuffer,
+							   const vk::Image image,
+							   const vk::ImageLayout oldLayout,
+							   const vk::ImageLayout newLayout,
+							   const vk::AccessFlags2 srcAccessMask,
+							   const vk::AccessFlags2 dstAccessMask,
+							   const vk::PipelineStageFlags2 srcStageMask,
+							   const vk::PipelineStageFlags2 dstStageMask)
+	{
+		const vk::ImageMemoryBarrier2 barrier{
+			.srcStageMask = srcStageMask,
+			.srcAccessMask = srcAccessMask,
+			.dstStageMask = dstStageMask,
+			.dstAccessMask = dstAccessMask,
+			.oldLayout = oldLayout,
+			.newLayout = newLayout,
+			.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+			.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+			.image = image,
+			.subresourceRange = {
+				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+		const vk::DependencyInfo dependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
+
+		commandBuffer.pipelineBarrier2(dependencyInfo);
+	}
+
+	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
+						   const vk::raii::Buffer& buffer,
+						   const vk::raii::Image& image,
+						   const std::uint32_t width,
+						   const std::uint32_t height)
+	{
+		const vk::BufferImageCopy region{
+			.bufferOffset = 0,
+			.bufferRowLength = 0,
+			.bufferImageHeight = 0,
+			.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+			.imageOffset = {.x = 0, .y = 0, .z = 0},
+			.imageExtent = {.width = width, .height = height, .depth = 1}};
+
+		commandBuffer.copyBufferToImage(*buffer, *image, vk::ImageLayout::eTransferDstOptimal, region);
 	}
 }
