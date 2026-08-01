@@ -148,6 +148,38 @@ set_target_properties(
 )
 # --- stb setup --
 
+# --- tinyobjloader setup --
+# tinyobjloader ships a CMakeLists, but building it would mean overriding its CMAKE_CXX_STANDARD 11
+# (which the global -freflection does not survive), forcing SYSTEM onto its plain INTERFACE include
+# directory, and silencing its warnings: three reach-ins into someone else's target. In exchange it
+# adds unconditional install() rules with no opt-out, an export(), a find_package(Sanitizers) and an
+# uninstall target. SOURCE_SUBDIR names a directory that does not exist so MakeAvailable skips
+# add_subdirectory, and its implementation source is compiled here instead.
+FetchContent_Declare(tinyobjloader GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git GIT_TAG v2.0.0rc13 SOURCE_SUBDIR does-not-exist)
+
+FetchContent_MakeAvailable(tinyobjloader)
+
+# tiny_obj_loader.cc is upstream's own one-line implementation TU, so there is nothing to hand-write.
+# Kept at C++26 because the global -freflection breaks any C++ TU compiled below it.
+add_library(TinyObjLoader STATIC "${tinyobjloader_SOURCE_DIR}/tiny_obj_loader.cc")
+
+target_compile_features(TinyObjLoader PUBLIC cxx_std_26)
+
+target_include_directories(TinyObjLoader SYSTEM PUBLIC "${tinyobjloader_SOURCE_DIR}")
+
+target_compile_options(TinyObjLoader PRIVATE -w)
+
+set_target_properties(
+	TinyObjLoader
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			OFF
+		# Not a module unit, and the global CMAKE_CXX_SCAN_FOR_MODULES would have it scanned as one.
+		CXX_SCAN_FOR_MODULES
+			OFF
+)
+# --- tinyobjloader setup --
+
 # --- Vulkan setup --
 # The C++ bindings ship as a named module rather than a header, so they get their own target. The
 # configuration macros below must be set while that module is compiled: they bake into the BMI, and
@@ -277,6 +309,21 @@ set_property(
 )
 # --- Renderer texture setup --
 
+# --- Renderer model setup --
+# The renderer's own demo meshes, published exactly the way the textures above are: globbed with
+# CONFIGURE_DEPENDS so dropping an .obj into Models/ reaches the staging without editing this file,
+# and carried on a global property because a static library has nowhere to stage them itself.
+
+file(GLOB PGE_RENDERER_MODELS CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Models/*)
+
+set_property(
+	GLOBAL
+	PROPERTY
+		PlaygroundEngineModels_SOURCE_FILES
+			${PGE_RENDERER_MODELS}
+)
+# --- Renderer model setup --
+
 target_link_libraries(
 	PlaygroundEngine
 	PUBLIC
@@ -285,6 +332,7 @@ target_link_libraries(
 		glfw
 		glm::glm
 		StbImage
+		TinyObjLoader
 		VulkanModule
 )
 
@@ -304,6 +352,7 @@ target_sources(
 		src/Files.cpp
 		src/Paths.cpp
 		src/Image/Image.cpp
+		src/Model/Model.cpp
 		src/Window.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
@@ -326,6 +375,7 @@ target_sources(
 				src/Files.cppm
 				src/Paths.cppm
 				src/Image/Image.cppm
+				src/Model/Model.cppm
 				src/Window.cppm
 				src/WindowTypes.cppm
 				src/WindowBackend.GLFW.cppm

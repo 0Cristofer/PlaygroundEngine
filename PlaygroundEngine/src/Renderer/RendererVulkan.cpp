@@ -8,6 +8,9 @@ module PlaygroundEngine.Renderer.Vulkan;
 
 import std;
 import PlaygroundEngine.Reflection;
+import PlaygroundEngine.Paths;
+import PlaygroundEngine.Files;
+import PlaygroundEngine.Model;
 import PlaygroundEngine.Renderer.Vertex;
 
 import vulkan;
@@ -18,16 +21,47 @@ namespace PgE
 {
 	constexpr std::uint32_t MaxFramesInFlight = 2;
 	constexpr std::array RequiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
-	constexpr std::array Vertices = {Vertex{.Pos = {-0.5f, -0.5f, 0.0f}, .Color = {1.0f, 0.f, 0.0f}, .TexCoord = {1.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, -0.5f, 0.0f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, 0.5f, 0.0f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
-									 Vertex{.Pos = {-0.5f, 0.5f, 0.0f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}},
-									 Vertex{.Pos = {-0.5f, -0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.0f}, .TexCoord = {1.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, -0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, 0.5f, -0.5f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
-									 Vertex{.Pos = {-0.5f, 0.5f, -0.5f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}}};
-	constexpr std::array<std::uint16_t, 12> Indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
-	constexpr std::string_view PlaceholderTextureFileName = "placeholder.png";
+	constexpr std::string_view PlaceholderTextureFileName = "viking_room.png";
+	constexpr std::string_view PlaceholderModelFileName = "viking_room.obj";
+
+	static CreationResult<Mesh> LoadMesh(const std::string_view modelFileName)
+	{
+		const std::expected<std::filesystem::path, PathError> executableDirectoryResult = GetExecutableDirectory();
+		if (!executableDirectoryResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ModelLoadError, ToString(executableDirectoryResult.error())));
+		}
+
+		const std::expected<std::string, FileError> objectTextResult = ReadTextFile(executableDirectoryResult.value() / "Models" / modelFileName);
+		if (!objectTextResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ModelLoadError, ToString(objectTextResult.error())));
+		}
+
+		std::expected<Mesh, ModelError> meshResult = ParseWavefrontMesh(objectTextResult.value());
+		if (!meshResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ModelLoadError, ToString(meshResult.error())));
+		}
+
+		return std::move(meshResult.value());
+	}
+
+	static std::vector<Vertex> ToRendererVertices(const Mesh& mesh)
+	{
+		// Wavefront carries no vertex colour, and the fragment shader samples the texture rather than
+		// interpolating one, so white leaves the attribute inert.
+
+		std::vector<Vertex> vertices;
+		vertices.reserve(mesh.Vertices.size());
+
+		for (const MeshVertex& meshVertex : mesh.Vertices)
+		{
+			vertices.push_back(Vertex{.Pos = meshVertex.Position, .Color = {1.0f, 1.0f, 1.0f}, .TexCoord = meshVertex.TextureCoordinate});
+		}
+
+		return vertices;
+	}
 
 	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
 		const RendererSpecification& specification, const Window& window)
@@ -137,67 +171,29 @@ namespace PgE
 		}
 		vk::raii::CommandPool& commandPool = commandPoolResult.value();
 
-		CreationResult<BufferResource> stagingVertexBufferResourceResult =
-			CreateBufferResource(physicalDevice, logicalDevice, sizeof(Vertices), vk::BufferUsageFlagBits::eTransferSrc,
-								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		if (!stagingVertexBufferResourceResult)
+		CreationResult<Mesh> meshResult = LoadMesh(PlaceholderModelFileName);
+		if (!meshResult)
 		{
-			return std::unexpected(stagingVertexBufferResourceResult.error());
+			return std::unexpected(meshResult.error());
 		}
-		BufferResource& stagingVertexBufferResource = stagingVertexBufferResourceResult.value();
+		const Mesh& mesh = meshResult.value();
+		const std::vector<Vertex> vertices = ToRendererVertices(mesh);
 
-		if (CreationResult<void> uploadResult = UploadToDeviceMemory(stagingVertexBufferResource.DeviceMemory, std::as_bytes(std::span(Vertices)));
-			!uploadResult)
-		{
-			return std::unexpected(uploadResult.error());
-		}
-
-		CreationResult<BufferResource> vertexBufferResourceResult = CreateBufferResource(
-			physicalDevice, logicalDevice, sizeof(Vertices), vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-			vk::MemoryPropertyFlagBits::eDeviceLocal);
+		CreationResult<BufferResource> vertexBufferResourceResult = CreateDeviceLocalBuffer(
+			physicalDevice, logicalDevice, queue, commandPool, std::as_bytes(std::span(vertices)), vk::BufferUsageFlagBits::eVertexBuffer);
 		if (!vertexBufferResourceResult)
 		{
 			return std::unexpected(vertexBufferResourceResult.error());
 		}
 		BufferResource& vertexBufferResource = vertexBufferResourceResult.value();
 
-		CreationResult<void> vertexBufferCopyResult =
-			CopyBuffer(logicalDevice, queue, commandPool, stagingVertexBufferResource.Buffer, vertexBufferResource.Buffer, sizeof(Vertices));
-		if (!vertexBufferCopyResult)
-		{
-			return std::unexpected(vertexBufferCopyResult.error());
-		}
-
-		CreationResult<BufferResource> stagingIndexBufferResourceResult =
-			CreateBufferResource(physicalDevice, logicalDevice, sizeof(Indices), vk::BufferUsageFlagBits::eTransferSrc,
-								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		if (!stagingIndexBufferResourceResult)
-		{
-			return std::unexpected(stagingIndexBufferResourceResult.error());
-		}
-		BufferResource& stagingIndexBufferResource = stagingIndexBufferResourceResult.value();
-
-		if (CreationResult<void> uploadResult = UploadToDeviceMemory(stagingIndexBufferResource.DeviceMemory, std::as_bytes(std::span(Indices)));
-			!uploadResult)
-		{
-			return std::unexpected(uploadResult.error());
-		}
-
-		CreationResult<BufferResource> indexBufferResourceResult = CreateBufferResource(
-			physicalDevice, logicalDevice, sizeof(Indices), vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-			vk::MemoryPropertyFlagBits::eDeviceLocal);
+		CreationResult<BufferResource> indexBufferResourceResult = CreateDeviceLocalBuffer(
+			physicalDevice, logicalDevice, queue, commandPool, std::as_bytes(std::span(mesh.Indices)), vk::BufferUsageFlagBits::eIndexBuffer);
 		if (!indexBufferResourceResult)
 		{
 			return std::unexpected(indexBufferResourceResult.error());
 		}
 		BufferResource& indexBufferResource = indexBufferResourceResult.value();
-
-		CreationResult<void> indexBufferCopyResult =
-			CopyBuffer(logicalDevice, queue, commandPool, stagingIndexBufferResource.Buffer, indexBufferResource.Buffer, sizeof(Indices));
-		if (!indexBufferCopyResult)
-		{
-			return std::unexpected(indexBufferCopyResult.error());
-		}
 
 		CreationResult<ImageResource> textureImageResourceResult =
 			CreateTextureImage(physicalDevice, logicalDevice, queue, commandPool, PlaceholderTextureFileName);
@@ -305,10 +301,10 @@ namespace PgE
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
-			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(textureImageResource),
-			std::move(textureImageView), std::move(textureSampler), depthFormat, std::move(depthImageResource), std::move(depthImageView),
-			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
-			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), static_cast<std::uint32_t>(mesh.Indices.size()),
+			std::move(textureImageResource), std::move(textureImageView), std::move(textureSampler), depthFormat, std::move(depthImageResource),
+			std::move(depthImageView), std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets),
+			std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -537,14 +533,14 @@ namespace PgE
 
 		_commandBuffers[_frameIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, *_graphicsPipeline);
 		_commandBuffers[_frameIndex].bindVertexBuffers(0, *_vertexBufferResource.Buffer, {0});
-		_commandBuffers[_frameIndex].bindIndexBuffer(*_indexBufferResource.Buffer, 0, vk::IndexType::eUint16);
+		_commandBuffers[_frameIndex].bindIndexBuffer(*_indexBufferResource.Buffer, 0, vk::IndexType::eUint32);
 
 		_commandBuffers[_frameIndex].setViewport(
 			0, vk::Viewport(0.0f, 0.0f, static_cast<float>(_swapChainExtent.width), static_cast<float>(_swapChainExtent.height), 0.0f, 1.0f));
 		_commandBuffers[_frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChainExtent));
 
 		_commandBuffers[_frameIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, _pipelineLayout, 0, *_descriptorSets[_frameIndex], nullptr);
-		_commandBuffers[_frameIndex].drawIndexed(Indices.size(), 1, 0, 0, 0);
+		_commandBuffers[_frameIndex].drawIndexed(_indexCount, 1, 0, 0, 0);
 
 		_commandBuffers[_frameIndex].endRendering();
 

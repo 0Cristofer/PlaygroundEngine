@@ -45,6 +45,7 @@ namespace PgE
 					   vk::raii::CommandPool commandPool,
 					   BufferResource vertexBufferResource,
 					   BufferResource indexBufferResource,
+					   std::uint32_t indexCount,
 					   ImageResource textureImageResource,
 					   vk::raii::ImageView textureImageView,
 					   vk::raii::Sampler textureSampler,
@@ -64,7 +65,7 @@ namespace PgE
 			  _swapChainSurfaceFormat(std::move(swapChainSurfaceFormat)), _swapChainExtent(std::move(swapChainExtent)),
 			  _swapChainImageViews(std::move(swapChainImageViews)), _descriptorSetLayout(std::move(descriptorSetLayout)),
 			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
-			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)),
+			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)), _indexCount(indexCount),
 			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
 			  _textureSampler(std::move(textureSampler)), _depthFormat(depthFormat), _depthImageResource(std::move(depthImageResource)),
 			  _depthImageView(std::move(depthImageView)), _uniformBufferResources(std::move(uniformBufferResources)),
@@ -98,6 +99,7 @@ namespace PgE
 
 		BufferResource _vertexBufferResource;
 		BufferResource _indexBufferResource;
+		std::uint32_t _indexCount;
 
 		ImageResource _textureImageResource;
 		vk::raii::ImageView _textureImageView;

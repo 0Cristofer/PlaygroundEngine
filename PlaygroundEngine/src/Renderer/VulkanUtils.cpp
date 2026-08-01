@@ -675,6 +675,45 @@ namespace PgE
 		return {};
 	}
 
+	CreationResult<BufferResource> CreateDeviceLocalBuffer(const vk::raii::PhysicalDevice& physicalDevice,
+														   const vk::raii::Device& logicalDevice,
+														   const vk::raii::Queue& queue,
+														   const vk::raii::CommandPool& commandPool,
+														   const std::span<const std::byte> data,
+														   const vk::BufferUsageFlags usage)
+	{
+		CreationResult<BufferResource> stagingBufferResult =
+			CreateBufferResource(physicalDevice, logicalDevice, data.size_bytes(), vk::BufferUsageFlagBits::eTransferSrc,
+								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		if (!stagingBufferResult)
+		{
+			return std::unexpected(stagingBufferResult.error());
+		}
+		const BufferResource& stagingBuffer = stagingBufferResult.value();
+
+		if (CreationResult<void> uploadResult = UploadToDeviceMemory(stagingBuffer.DeviceMemory, data); !uploadResult)
+		{
+			return std::unexpected(uploadResult.error());
+		}
+
+		CreationResult<BufferResource> bufferResult =
+			CreateBufferResource(physicalDevice, logicalDevice, data.size_bytes(), usage | vk::BufferUsageFlagBits::eTransferDst,
+								 vk::MemoryPropertyFlagBits::eDeviceLocal);
+		if (!bufferResult)
+		{
+			return std::unexpected(bufferResult.error());
+		}
+		BufferResource& buffer = bufferResult.value();
+
+		if (CreationResult<void> copyResult = CopyBuffer(logicalDevice, queue, commandPool, stagingBuffer.Buffer, buffer.Buffer, data.size_bytes());
+			!copyResult)
+		{
+			return std::unexpected(copyResult.error());
+		}
+
+		return std::move(buffer);
+	}
+
 	CreationResult<void> CopyBuffer(const vk::raii::Device& logicalDevice,
 									const vk::raii::Queue& queue,
 									const vk::raii::CommandPool& commandPool,

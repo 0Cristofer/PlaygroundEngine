@@ -42,6 +42,7 @@ namespace PgE
 		ImageCreateError,
 		NoSupportedDepthFormat,
 		TextureLoadError,
+		ModelLoadError,
 		SamplerCreateError,
 		CommandPoolCreateError,
 		CommandBufferCreateError,

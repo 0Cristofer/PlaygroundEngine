@@ -67,6 +67,15 @@ namespace PgE
 														vk::BufferUsageFlags usage,
 														vk::MemoryPropertyFlags properties);
 	CreationResult<void> UploadToDeviceMemory(const vk::raii::DeviceMemory& deviceMemory, std::span<const std::byte> data);
+
+	// Staging buffer, upload, device-local buffer, copy. The staging buffer dies with the call.
+
+	CreationResult<BufferResource> CreateDeviceLocalBuffer(const vk::raii::PhysicalDevice& physicalDevice,
+														   const vk::raii::Device& logicalDevice,
+														   const vk::raii::Queue& queue,
+														   const vk::raii::CommandPool& commandPool,
+														   std::span<const std::byte> data,
+														   vk::BufferUsageFlags usage);
 	CreationResult<void> CopyBuffer(const vk::raii::Device& logicalDevice,
 									const vk::raii::Queue& queue,
 									const vk::raii::CommandPool& commandPool,
