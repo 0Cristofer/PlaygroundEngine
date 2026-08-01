@@ -45,6 +45,9 @@ namespace PgE
 					   vk::raii::CommandPool commandPool,
 					   BufferResource vertexBufferResource,
 					   BufferResource indexBufferResource,
+					   ImageResource textureImageResource,
+					   vk::raii::ImageView textureImageView,
+					   vk::raii::Sampler textureSampler,
 					   std::vector<UniformBufferResource> uniformBufferResources,
 					   vk::raii::DescriptorPool descriptorPool,
 					   std::vector<vk::raii::DescriptorSet> descriptorSets,
@@ -59,19 +62,13 @@ namespace PgE
 			  _swapChainImageViews(std::move(swapChainImageViews)), _descriptorSetLayout(std::move(descriptorSetLayout)),
 			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
 			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)),
-			  _uniformBufferResources(std::move(uniformBufferResources)), _descriptorPool(std::move(descriptorPool)),
-			  _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
+			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
+			  _textureSampler(std::move(textureSampler)), _uniformBufferResources(std::move(uniformBufferResources)),
+			  _descriptorPool(std::move(descriptorPool)), _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
 			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
 			  _inFlightFences(std::move(inFlightFences))
 		{}
 
-		void TransitionImageLayout(std::uint32_t imageIndex,
-								   vk::ImageLayout oldLayout,
-								   vk::ImageLayout newLayout,
-								   vk::AccessFlags2 srcAccessMask,
-								   vk::AccessFlags2 dstAccessMask,
-								   vk::PipelineStageFlags2 srcStageMask,
-								   vk::PipelineStageFlags2 dstStageMask) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
 		void UpdateUniformBuffer(std::uint32_t frameIndex) const;
@@ -94,6 +91,9 @@ namespace PgE
 		vk::raii::CommandPool _commandPool;
 		BufferResource _vertexBufferResource;
 		BufferResource _indexBufferResource;
+		ImageResource _textureImageResource;
+		vk::raii::ImageView _textureImageView;
+		vk::raii::Sampler _textureSampler;
 		std::vector<UniformBufferResource> _uniformBufferResources;
 		vk::raii::DescriptorPool _descriptorPool;
 		std::vector<vk::raii::DescriptorSet> _descriptorSets;

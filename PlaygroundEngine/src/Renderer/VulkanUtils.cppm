@@ -29,6 +29,12 @@ namespace PgE
 		void* BufferMapped;
 	};
 
+	struct ImageResource
+	{
+		vk::raii::Image Image;
+		vk::raii::DeviceMemory DeviceMemory;
+	};
+
 	CreationResult<vk::raii::Instance> CreateInstance(const vk::raii::Context& context,
 													  const RendererSpecification& specification,
 													  const Window& window);
@@ -80,4 +86,35 @@ namespace PgE
 																				std::uint32_t commandBufferCount);
 	CreationResult<std::vector<vk::raii::Semaphore>> CreateSemaphores(const vk::raii::Device& logicalDevice, std::size_t count);
 	CreationResult<std::vector<vk::raii::Fence>> CreateSignaledFences(const vk::raii::Device& logicalDevice, std::size_t count);
+	CreationResult<ImageResource> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
+													 const vk::raii::Device& logicalDevice,
+													 const vk::raii::Queue& queue,
+													 const vk::raii::CommandPool& commandPool,
+													 std::string_view textureFileName);
+	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format);
+	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
+	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
+											  const vk::raii::Device& logicalDevice,
+											  std::uint32_t width,
+											  std::uint32_t height,
+											  vk::Format format,
+											  vk::ImageTiling tiling,
+											  vk::ImageUsageFlags usage,
+											  vk::MemoryPropertyFlags properties);
+	CreationResult<vk::raii::CommandBuffer> BeginSingleTimeCommands(const vk::raii::Device& logicalDevice, const vk::raii::CommandPool& commandPool);
+	CreationResult<void> EndSingleTimeCommands(const vk::raii::Queue& queue, vk::raii::CommandBuffer&& commandBuffer);
+
+	void TransitionImageLayout(const vk::raii::CommandBuffer& commandBuffer,
+							   vk::Image image,
+							   vk::ImageLayout oldLayout,
+							   vk::ImageLayout newLayout,
+							   vk::AccessFlags2 srcAccessMask,
+							   vk::AccessFlags2 dstAccessMask,
+							   vk::PipelineStageFlags2 srcStageMask,
+							   vk::PipelineStageFlags2 dstStageMask);
+	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
+						   const vk::raii::Buffer& buffer,
+						   const vk::raii::Image& image,
+						   std::uint32_t width,
+						   std::uint32_t height);
 }

@@ -104,6 +104,50 @@ FetchContent_MakeAvailable(glm)
 target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 # --- GLM setup --
 
+# --- stb setup --
+# stb ships no CMakeLists and cuts no releases, so it is pinned by commit and SOURCE_SUBDIR names a
+# directory that does not exist, which is what stops MakeAvailable from calling add_subdirectory.
+FetchContent_Declare(
+	stb
+	GIT_REPOSITORY https://github.com/nothings/stb.git
+	GIT_TAG 31c1ad37456438565541f4919958214b6e762fb4
+	SOURCE_SUBDIR does-not-exist
+)
+
+FetchContent_MakeAvailable(stb)
+
+# The single-header implementation gets its own target for the same reason VulkanModule does: it is
+# third-party C that does not survive the engine's warning set. Kept at C++26 deliberately, since the
+# global -freflection breaks any C++ TU compiled below it.
+add_library(StbImage STATIC src/Image/StbImageImplementation.cpp)
+
+target_compile_features(StbImage PUBLIC cxx_std_26)
+
+target_include_directories(StbImage SYSTEM PUBLIC "${stb_SOURCE_DIR}")
+
+target_compile_options(StbImage PRIVATE -w)
+
+# STBI_NO_STDIO routes every load through PlaygroundEngine.Files instead of stb's own file handling,
+# keeping one I/O path and one file-error type.
+target_compile_definitions(
+	StbImage
+	PUBLIC
+		STBI_NO_STDIO
+		STBI_ONLY_JPEG
+		STBI_ONLY_PNG
+)
+
+set_target_properties(
+	StbImage
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			OFF
+		# Not a module unit, and the global CMAKE_CXX_SCAN_FOR_MODULES would have it scanned as one.
+		CXX_SCAN_FOR_MODULES
+			OFF
+)
+# --- stb setup --
+
 # --- Vulkan setup --
 # The C++ bindings ship as a named module rather than a header, so they get their own target. The
 # configuration macros below must be set while that module is compiled: they bake into the BMI, and
@@ -214,6 +258,25 @@ add_slang_shader_target(
 add_dependencies(PlaygroundEngine PlaygroundEngineShaders)
 # --- Slang shader setup --
 
+# --- Renderer texture setup --
+# The renderer's own demo textures, kept beside its shaders because the renderer is what names them.
+# Unlike the shaders there is no compile step, so the property carries the sources themselves; an
+# executable target stages them next to its binary, since a static library has nowhere to put them.
+
+# CONFIGURE_DEPENDS so dropping an image into Textures/ reaches the staging without editing this
+# file. It re-globs on every build, which is affordable for a handful of demo assets and goes away
+# with the asset system.
+
+file(GLOB PGE_RENDERER_TEXTURES CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Textures/*)
+
+set_property(
+	GLOBAL
+	PROPERTY
+		PlaygroundEngineTextures_SOURCE_FILES
+			${PGE_RENDERER_TEXTURES}
+)
+# --- Renderer texture setup --
+
 target_link_libraries(
 	PlaygroundEngine
 	PUBLIC
@@ -221,6 +284,7 @@ target_link_libraries(
 	PRIVATE
 		glfw
 		glm::glm
+		StbImage
 		VulkanModule
 )
 
@@ -239,6 +303,7 @@ target_sources(
 		src/main.cpp
 		src/Files.cpp
 		src/Paths.cpp
+		src/Image/Image.cpp
 		src/Window.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
@@ -260,6 +325,7 @@ target_sources(
 				src/World.cppm
 				src/Files.cppm
 				src/Paths.cppm
+				src/Image/Image.cppm
 				src/Window.cppm
 				src/WindowTypes.cppm
 				src/WindowBackend.GLFW.cppm
