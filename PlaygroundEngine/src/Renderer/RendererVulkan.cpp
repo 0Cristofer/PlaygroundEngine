@@ -18,11 +18,15 @@ namespace PgE
 {
 	constexpr std::uint32_t MaxFramesInFlight = 2;
 	constexpr std::array RequiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
-	constexpr std::array Vertices = {Vertex{.Pos = {-0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.f}, .TexCoord = {1.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
-									 Vertex{.Pos = {0.5f, 0.5f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
-									 Vertex{.Pos = {-0.5f, 0.5f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}}};
-	constexpr std::array<std::uint16_t, 6> Indices = {0, 1, 2, 2, 3, 0};
+	constexpr std::array Vertices = {Vertex{.Pos = {-0.5f, -0.5f, 0.0f}, .Color = {1.0f, 0.f, 0.0f}, .TexCoord = {1.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, -0.5f, 0.0f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, 0.5f, 0.0f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
+									 Vertex{.Pos = {-0.5f, 0.5f, 0.0f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}},
+									 Vertex{.Pos = {-0.5f, -0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.0f}, .TexCoord = {1.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, -0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, 0.5f, -0.5f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
+									 Vertex{.Pos = {-0.5f, 0.5f, -0.5f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}}};
+	constexpr std::array<std::uint16_t, 12> Indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 	constexpr std::string_view PlaceholderTextureFileName = "placeholder.png";
 
 	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
@@ -89,6 +93,21 @@ namespace PgE
 		}
 		SwapChainResources& swapChain = swapChainResult.value();
 
+		CreationResult<vk::Format> depthFormatResult = FindDepthFormat(physicalDevice);
+		if (!depthFormatResult)
+		{
+			return std::unexpected(depthFormatResult.error());
+		}
+		const vk::Format depthFormat = depthFormatResult.value();
+
+		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> depthResourcesResult =
+			CreateDepthResources(physicalDevice, logicalDevice, swapChain.Extent, depthFormat);
+		if (!depthResourcesResult)
+		{
+			return std::unexpected(depthResourcesResult.error());
+		}
+		auto& [depthImageResource, depthImageView] = depthResourcesResult.value();
+
 		CreationResult<vk::raii::DescriptorSetLayout> descriptorSetLayoutResult = CreateDescriptorSetLayout(logicalDevice);
 		if (!descriptorSetLayoutResult)
 		{
@@ -104,7 +123,7 @@ namespace PgE
 		vk::raii::PipelineLayout& pipelineLayout = pipelineLayoutResult.value();
 
 		CreationResult<vk::raii::Pipeline> graphicsPipelineResult =
-			CreateGraphicsPipeline(logicalDevice, pipelineLayout, swapChainSurfaceFormat.format);
+			CreateGraphicsPipeline(logicalDevice, pipelineLayout, swapChainSurfaceFormat.format, depthFormat);
 		if (!graphicsPipelineResult)
 		{
 			return std::unexpected(graphicsPipelineResult.error());
@@ -189,7 +208,7 @@ namespace PgE
 		ImageResource& textureImageResource = textureImageResourceResult.value();
 
 		CreationResult<vk::raii::ImageView> textureImageViewResult =
-			CreateImageView(logicalDevice, *textureImageResource.Image, vk::Format::eR8G8B8A8Srgb);
+			CreateImageView(logicalDevice, *textureImageResource.Image, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
 		if (!textureImageViewResult)
 		{
 			return std::unexpected(textureImageViewResult.error());
@@ -287,9 +306,9 @@ namespace PgE
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
 			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(textureImageResource),
-			std::move(textureImageView), std::move(textureSampler), std::move(uniformBufferResources), std::move(descriptorPool),
-			std::move(descriptorSets), std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores),
-			std::move(inFlightFences)));
+			std::move(textureImageView), std::move(textureSampler), depthFormat, std::move(depthImageResource), std::move(depthImageView),
+			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
+			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -418,6 +437,22 @@ namespace PgE
 		_swapChainImageViews = std::move(swapChainResult->ImageViews);
 		_swapChainExtent = swapChainResult->Extent;
 
+		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> depthResourcesResult =
+			CreateDepthResources(_physicalDevice, _logicalDevice, _swapChainExtent, _depthFormat);
+		if (!depthResourcesResult)
+		{
+			return std::unexpected(
+				RendererError(RendererRenderErrorKind::SwapChainRecreationError, std::string(depthResourcesResult.error().Message())));
+		}
+		auto& [depthImageResource, depthImageView] = depthResourcesResult.value();
+
+		// The old view goes first: assigning over the image resource would otherwise destroy a
+		// VkImage that the outgoing view still references.
+
+		_depthImageView = nullptr;
+		_depthImageResource = std::move(depthImageResource);
+		_depthImageView = std::move(depthImageView);
+
 		// Render-finished semaphores are indexed by swap chain image, so a changed image count
 		// would otherwise leave the vector too short to index during the next present.
 
@@ -468,8 +503,15 @@ namespace PgE
 							  vk::AccessFlagBits2::eNone,						  // srcAccessMask (no need to wait for previous operations)
 							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // dstAccessMask
 							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-							  vk::PipelineStageFlagBits2::eColorAttachmentOutput  // dstStage
-		);
+							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage
+							  vk::ImageAspectFlagBits::eColor);
+		TransitionImageLayout(_commandBuffers[_frameIndex], *_depthImageResource.Image, vk::ImageLayout::eUndefined,
+							  vk::ImageLayout::eDepthAttachmentOptimal,
+							  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												// srcAccessMask
+							  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												// dstAccessMask
+							  vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // srcStage
+							  vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // dstStage
+							  vk::ImageAspectFlagBits::eDepth);
 
 		constexpr vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::RenderingAttachmentInfo attachmentInfo = {.imageView = _swapChainImageViews[imageIndex],
@@ -477,10 +519,19 @@ namespace PgE
 													  .loadOp = vk::AttachmentLoadOp::eClear,
 													  .storeOp = vk::AttachmentStoreOp::eStore,
 													  .clearValue = clearColor};
+
+		constexpr vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+		vk::RenderingAttachmentInfo depthAttachmentInfo = {.imageView = _depthImageView,
+														   .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+														   .loadOp = vk::AttachmentLoadOp::eClear,
+														   .storeOp = vk::AttachmentStoreOp::eDontCare,
+														   .clearValue = clearDepth};
+
 		const vk::RenderingInfo renderingInfo = {.renderArea = {.offset = {.x = 0, .y = 0}, .extent = _swapChainExtent},
 												 .layerCount = 1,
 												 .colorAttachmentCount = 1,
-												 .pColorAttachments = &attachmentInfo};
+												 .pColorAttachments = &attachmentInfo,
+												 .pDepthAttachment = &depthAttachmentInfo};
 
 		_commandBuffers[_frameIndex].beginRendering(renderingInfo);
 
@@ -503,8 +554,8 @@ namespace PgE
 							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // srcAccessMask
 							  vk::AccessFlagBits2::eNone,						  // dstAccessMask
 							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-							  vk::PipelineStageFlagBits2::eBottomOfPipe			  // dstStage
-		);
+							  vk::PipelineStageFlagBits2::eBottomOfPipe,		  // dstStage
+							  vk::ImageAspectFlagBits::eColor);
 
 		if (std::expected<void, vk::Result> endResult = _commandBuffers[_frameIndex].end(); !endResult)
 		{

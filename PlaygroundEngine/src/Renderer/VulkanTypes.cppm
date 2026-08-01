@@ -40,6 +40,7 @@ namespace PgE
 		DeviceMemoryMapError,
 		CantFindMemoryType,
 		ImageCreateError,
+		NoSupportedDepthFormat,
 		TextureLoadError,
 		SamplerCreateError,
 		CommandPoolCreateError,

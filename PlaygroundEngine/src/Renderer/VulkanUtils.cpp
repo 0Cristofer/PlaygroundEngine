@@ -342,14 +342,16 @@ namespace PgE
 		return preferredFormat != availableFormats.end() ? *preferredFormat : availableFormats.front();
 	}
 
-	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, const vk::Image image, const vk::Format format)
+	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice,
+														const vk::Image image,
+														const vk::Format format,
+														const vk::ImageAspectFlags aspectMask)
 	{
 		const vk::ImageViewCreateInfo imageViewCreateInfo{
 			.image = image,
 			.viewType = vk::ImageViewType::e2D,
 			.format = format,
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+			.subresourceRange = {.aspectMask = aspectMask, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
 		std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
 		if (!imageViewResult)
@@ -369,7 +371,8 @@ namespace PgE
 
 		for (const vk::Image& image : swapChainImages)
 		{
-			CreationResult<vk::raii::ImageView> imageViewResult = CreateImageView(logicalDevice, image, swapChainSurfaceFormat.format);
+			CreationResult<vk::raii::ImageView> imageViewResult =
+				CreateImageView(logicalDevice, image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
 			if (!imageViewResult)
 			{
 				return std::unexpected(imageViewResult.error());
@@ -523,7 +526,8 @@ namespace PgE
 
 	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
 															  const vk::raii::PipelineLayout& pipelineLayout,
-															  const vk::Format colorAttachmentFormat)
+															  const vk::Format colorAttachmentFormat,
+															  const vk::Format depthAttachmentFormat)
 	{
 		// The shader module only has to outlive the pipeline creation call, so it stays local.
 
@@ -561,6 +565,11 @@ namespace PgE
 																	  .lineWidth = 1.0f};
 		constexpr vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = vk::SampleCountFlagBits::e1,
 																	   .sampleShadingEnable = vk::False};
+		constexpr vk::PipelineDepthStencilStateCreateInfo depthStencil{.depthTestEnable = vk::True,
+																	   .depthWriteEnable = vk::True,
+																	   .depthCompareOp = vk::CompareOp::eLess,
+																	   .depthBoundsTestEnable = vk::False,
+																	   .stencilTestEnable = vk::False};
 		constexpr vk::PipelineColorBlendAttachmentState colorBlendAttachment{.blendEnable = vk::False,
 																			 .colorWriteMask =
 																				 vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -576,11 +585,12 @@ namespace PgE
 			 .pViewportState = &viewportState,
 			 .pRasterizationState = &rasterizer,
 			 .pMultisampleState = &multisampling,
+			 .pDepthStencilState = &depthStencil,
 			 .pColorBlendState = &colorBlending,
 			 .pDynamicState = &dynamicState,
 			 .layout = pipelineLayout,
 			 .renderPass = nullptr},
-			{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colorAttachmentFormat}};
+			{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colorAttachmentFormat, .depthAttachmentFormat = depthAttachmentFormat}};
 
 		std::expected<vk::raii::Pipeline, vk::Result> graphicsPipelineResult =
 			logicalDevice.createGraphicsPipeline(nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
@@ -874,13 +884,13 @@ namespace PgE
 
 		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 							  vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eTransferWrite, vk::PipelineStageFlagBits2::eNone,
-							  vk::PipelineStageFlagBits2::eTransfer);
+							  vk::PipelineStageFlagBits2::eTransfer, vk::ImageAspectFlagBits::eColor);
 
 		CopyBufferToImage(commandBuffer, stagingBuffer.Buffer, imageResource.Image, decodedImage.Width, decodedImage.Height);
 
 		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 							  vk::AccessFlagBits2::eTransferWrite, vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eTransfer,
-							  vk::PipelineStageFlagBits2::eFragmentShader);
+							  vk::PipelineStageFlagBits2::eFragmentShader, vk::ImageAspectFlagBits::eColor);
 
 		if (CreationResult<void> endResult = EndSingleTimeCommands(queue, std::move(commandBuffer)); !endResult)
 		{
@@ -938,6 +948,67 @@ namespace PgE
 		return ImageResource{.Image = std::move(image), .DeviceMemory = std::move(deviceMemory)};
 	}
 
+	static std::optional<vk::Format> FindSupportedFormat(const vk::raii::PhysicalDevice& physicalDevice,
+														 const std::span<const vk::Format> candidates,
+														 const vk::ImageTiling tiling,
+														 const vk::FormatFeatureFlags features)
+	{
+		for (const vk::Format candidate : candidates)
+		{
+			const vk::FormatProperties formatProperties = physicalDevice.getFormatProperties(candidate);
+			const vk::FormatFeatureFlags supportedFeatures =
+				tiling == vk::ImageTiling::eLinear ? formatProperties.linearTilingFeatures : formatProperties.optimalTilingFeatures;
+
+			if ((supportedFeatures & features) == features)
+			{
+				return candidate;
+			}
+		}
+
+		return std::nullopt;
+	}
+
+	CreationResult<vk::Format> FindDepthFormat(const vk::raii::PhysicalDevice& physicalDevice)
+	{
+		// Ordered by preference: the depth-only format first, so the stencil aspect is only taken
+		// on when the device offers nothing else.
+
+		constexpr std::array candidates = {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint};
+
+		const std::optional<vk::Format> depthFormat =
+			FindSupportedFormat(physicalDevice, candidates, vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+		if (!depthFormat)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::NoSupportedDepthFormat));
+		}
+
+		return depthFormat.value();
+	}
+
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
+																						const vk::raii::Device& logicalDevice,
+																						const vk::Extent2D extent,
+																						const vk::Format depthFormat)
+	{
+		CreationResult<ImageResource> imageResult =
+			CreateImage(physicalDevice, logicalDevice, extent.width, extent.height, depthFormat, vk::ImageTiling::eOptimal,
+						vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		if (!imageResult)
+		{
+			return std::unexpected(imageResult.error());
+		}
+		ImageResource& imageResource = imageResult.value();
+
+		CreationResult<vk::raii::ImageView> imageViewResult =
+			CreateImageView(logicalDevice, *imageResource.Image, depthFormat, vk::ImageAspectFlagBits::eDepth);
+		if (!imageViewResult)
+		{
+			return std::unexpected(imageViewResult.error());
+		}
+
+		return std::tuple{std::move(imageResource), std::move(imageViewResult.value())};
+	}
+
 	CreationResult<vk::raii::CommandBuffer> BeginSingleTimeCommands(const vk::raii::Device& logicalDevice, const vk::raii::CommandPool& commandPool)
 	{
 		CreationResult<std::vector<vk::raii::CommandBuffer>> commandBufferResult = AllocateCommandBuffers(logicalDevice, commandPool, 1);
@@ -984,7 +1055,8 @@ namespace PgE
 							   const vk::AccessFlags2 srcAccessMask,
 							   const vk::AccessFlags2 dstAccessMask,
 							   const vk::PipelineStageFlags2 srcStageMask,
-							   const vk::PipelineStageFlags2 dstStageMask)
+							   const vk::PipelineStageFlags2 dstStageMask,
+							   const vk::ImageAspectFlags aspectMask)
 	{
 		const vk::ImageMemoryBarrier2 barrier{
 			.srcStageMask = srcStageMask,
@@ -996,8 +1068,7 @@ namespace PgE
 			.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
 			.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
 			.image = image,
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+			.subresourceRange = {.aspectMask = aspectMask, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 		const vk::DependencyInfo dependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
 
 		commandBuffer.pipelineBarrier2(dependencyInfo);

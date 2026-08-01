@@ -59,7 +59,8 @@ namespace PgE
 	CreationResult<vk::raii::DescriptorSetLayout> CreateDescriptorSetLayout(const vk::raii::Device& logicalDevice);
 	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
 															  const vk::raii::PipelineLayout& pipelineLayout,
-															  vk::Format colorAttachmentFormat);
+															  vk::Format colorAttachmentFormat,
+															  vk::Format depthAttachmentFormat);
 	CreationResult<BufferResource> CreateBufferResource(const vk::raii::PhysicalDevice& physicalDevice,
 														const vk::raii::Device& logicalDevice,
 														vk::DeviceSize size,
@@ -91,8 +92,16 @@ namespace PgE
 													 const vk::raii::Queue& queue,
 													 const vk::raii::CommandPool& commandPool,
 													 std::string_view textureFileName);
-	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format);
+	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice,
+														vk::Image image,
+														vk::Format format,
+														vk::ImageAspectFlags aspectMask);
 	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
+	CreationResult<vk::Format> FindDepthFormat(const vk::raii::PhysicalDevice& physicalDevice);
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
+																						const vk::raii::Device& logicalDevice,
+																						vk::Extent2D extent,
+																						vk::Format depthFormat);
 	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
 											  const vk::raii::Device& logicalDevice,
 											  std::uint32_t width,
@@ -111,7 +120,8 @@ namespace PgE
 							   vk::AccessFlags2 srcAccessMask,
 							   vk::AccessFlags2 dstAccessMask,
 							   vk::PipelineStageFlags2 srcStageMask,
-							   vk::PipelineStageFlags2 dstStageMask);
+							   vk::PipelineStageFlags2 dstStageMask,
+							   vk::ImageAspectFlags aspectMask);
 	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
 						   const vk::raii::Buffer& buffer,
 						   const vk::raii::Image& image,

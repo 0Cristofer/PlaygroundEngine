@@ -48,6 +48,9 @@ namespace PgE
 					   ImageResource textureImageResource,
 					   vk::raii::ImageView textureImageView,
 					   vk::raii::Sampler textureSampler,
+					   vk::Format depthFormat,
+					   ImageResource depthImageResource,
+					   vk::raii::ImageView depthImageView,
 					   std::vector<UniformBufferResource> uniformBufferResources,
 					   vk::raii::DescriptorPool descriptorPool,
 					   std::vector<vk::raii::DescriptorSet> descriptorSets,
@@ -63,7 +66,8 @@ namespace PgE
 			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
 			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)),
 			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
-			  _textureSampler(std::move(textureSampler)), _uniformBufferResources(std::move(uniformBufferResources)),
+			  _textureSampler(std::move(textureSampler)), _depthFormat(depthFormat), _depthImageResource(std::move(depthImageResource)),
+			  _depthImageView(std::move(depthImageView)), _uniformBufferResources(std::move(uniformBufferResources)),
 			  _descriptorPool(std::move(descriptorPool)), _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
 			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
 			  _inFlightFences(std::move(inFlightFences))
@@ -80,24 +84,35 @@ namespace PgE
 		vk::raii::PhysicalDevice _physicalDevice;
 		vk::raii::Device _logicalDevice;
 		vk::raii::Queue _queue;
+
 		vk::raii::SwapchainKHR _swapChain;
 		std::vector<vk::Image> _swapChainImages;
 		vk::SurfaceFormatKHR _swapChainSurfaceFormat;
 		vk::Extent2D _swapChainExtent;
 		std::vector<vk::raii::ImageView> _swapChainImageViews;
+
 		vk::raii::DescriptorSetLayout _descriptorSetLayout;
 		vk::raii::PipelineLayout _pipelineLayout;
 		vk::raii::Pipeline _graphicsPipeline;
 		vk::raii::CommandPool _commandPool;
+
 		BufferResource _vertexBufferResource;
 		BufferResource _indexBufferResource;
+
 		ImageResource _textureImageResource;
 		vk::raii::ImageView _textureImageView;
 		vk::raii::Sampler _textureSampler;
+
+		vk::Format _depthFormat;
+		ImageResource _depthImageResource;
+		vk::raii::ImageView _depthImageView;
+
 		std::vector<UniformBufferResource> _uniformBufferResources;
 		vk::raii::DescriptorPool _descriptorPool;
 		std::vector<vk::raii::DescriptorSet> _descriptorSets;
+
 		std::vector<vk::raii::CommandBuffer> _commandBuffers;
+
 		std::vector<vk::raii::Semaphore> _presentCompleteSemaphores;
 		std::vector<vk::raii::Semaphore> _renderFinishedSemaphores;
 		std::vector<vk::raii::Fence> _inFlightFences;
