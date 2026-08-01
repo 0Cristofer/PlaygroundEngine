@@ -41,6 +41,7 @@ namespace PgE
 		CantFindMemoryType,
 		ImageCreateError,
 		TextureLoadError,
+		SamplerCreateError,
 		CommandPoolCreateError,
 		CommandBufferCreateError,
 		UniformBufferCreateError,

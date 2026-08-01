@@ -91,6 +91,8 @@ namespace PgE
 													 const vk::raii::Queue& queue,
 													 const vk::raii::CommandPool& commandPool,
 													 std::string_view textureFileName);
+	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format);
+	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
 	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
 											  const vk::raii::Device& logicalDevice,
 											  std::uint32_t width,

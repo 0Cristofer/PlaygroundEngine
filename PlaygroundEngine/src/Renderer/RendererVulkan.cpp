@@ -187,6 +187,21 @@ namespace PgE
 		}
 		ImageResource& textureImageResource = textureImageResourceResult.value();
 
+		CreationResult<vk::raii::ImageView> textureImageViewResult =
+			CreateImageView(logicalDevice, *textureImageResource.Image, vk::Format::eR8G8B8A8Srgb);
+		if (!textureImageViewResult)
+		{
+			return std::unexpected(textureImageViewResult.error());
+		}
+		vk::raii::ImageView& textureImageView = textureImageViewResult.value();
+
+		CreationResult<vk::raii::Sampler> textureSamplerResult = CreateTextureSampler(physicalDevice, logicalDevice);
+		if (!textureSamplerResult)
+		{
+			return std::unexpected(textureSamplerResult.error());
+		}
+		vk::raii::Sampler& textureSampler = textureSamplerResult.value();
+
 		std::vector<UniformBufferResource> uniformBufferResources;
 		for (std::size_t i = 0; i < MaxFramesInFlight; ++i)
 		{
@@ -263,8 +278,9 @@ namespace PgE
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
 			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), std::move(textureImageResource),
-			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
-			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+			std::move(textureImageView), std::move(textureSampler), std::move(uniformBufferResources), std::move(descriptorPool),
+			std::move(descriptorSets), std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores),
+			std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const

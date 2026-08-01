@@ -231,7 +231,8 @@ namespace PgE
 
 		const auto features = physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
 														  vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-		const bool supportsRequiredFeatures = features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
+		const bool supportsRequiredFeatures = features.get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
+											  features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
 											  features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
 											  features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
@@ -298,7 +299,7 @@ namespace PgE
 		const vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features,
 								 vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
 			featureChain = {
-				{},													  // vk::PhysicalDeviceFeatures2
+				{.features = {.samplerAnisotropy = true}},			  // vk::PhysicalDeviceFeatures2
 				{.shaderDrawParameters = true},						  // vk::PhysicalDeviceVulkan11Features
 				{.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
 				{.extendedDynamicState = true}						  // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
@@ -341,26 +342,37 @@ namespace PgE
 		return preferredFormat != availableFormats.end() ? *preferredFormat : availableFormats.front();
 	}
 
+	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, const vk::Image image, const vk::Format format)
+	{
+		const vk::ImageViewCreateInfo imageViewCreateInfo{
+			.image = image,
+			.viewType = vk::ImageViewType::e2D,
+			.format = format,
+			.subresourceRange = {
+				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+
+		std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
+		if (!imageViewResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::ImageViewCreationError, ToString(imageViewResult.error())));
+		}
+
+		return std::move(imageViewResult.value());
+	}
+
 	static CreationResult<std::vector<vk::raii::ImageView>> CreateImageViews(const vk::raii::Device& logicalDevice,
 																			 const vk::SurfaceFormatKHR& swapChainSurfaceFormat,
 																			 const std::vector<vk::Image>& swapChainImages)
 	{
-		vk::ImageViewCreateInfo imageViewCreateInfo{
-			.viewType = vk::ImageViewType::e2D,
-			.format = swapChainSurfaceFormat.format,
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
-
 		std::vector<vk::raii::ImageView> swapChainImageViews;
 		swapChainImageViews.reserve(swapChainImages.size());
 
 		for (const vk::Image& image : swapChainImages)
 		{
-			imageViewCreateInfo.image = image;
-			std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
+			CreationResult<vk::raii::ImageView> imageViewResult = CreateImageView(logicalDevice, image, swapChainSurfaceFormat.format);
 			if (!imageViewResult)
 			{
-				return std::unexpected(RendererError(RendererCreationErrorKind::ImageViewCreationError, ToString(imageViewResult.error())));
+				return std::unexpected(imageViewResult.error());
 			}
 
 			swapChainImageViews.push_back(std::move(imageViewResult.value()));
@@ -980,6 +992,35 @@ namespace PgE
 		const vk::DependencyInfo dependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
 
 		commandBuffer.pipelineBarrier2(dependencyInfo);
+	}
+
+	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice)
+	{
+		const vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
+
+		const vk::SamplerCreateInfo samplerCreateInfo{.magFilter = vk::Filter::eLinear,
+													  .minFilter = vk::Filter::eLinear,
+													  .mipmapMode = vk::SamplerMipmapMode::eLinear,
+													  .addressModeU = vk::SamplerAddressMode::eRepeat,
+													  .addressModeV = vk::SamplerAddressMode::eRepeat,
+													  .addressModeW = vk::SamplerAddressMode::eRepeat,
+													  .mipLodBias = 0.0f,
+													  .anisotropyEnable = vk::True,
+													  .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+													  .compareEnable = vk::False,
+													  .compareOp = vk::CompareOp::eAlways,
+													  .minLod = 0.0f,
+													  .maxLod = 0.0f,
+													  .borderColor = vk::BorderColor::eIntOpaqueBlack,
+													  .unnormalizedCoordinates = vk::False};
+
+		std::expected<vk::raii::Sampler, vk::Result> samplerResult = logicalDevice.createSampler(samplerCreateInfo);
+		if (!samplerResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::SamplerCreateError, ToString(samplerResult.error())));
+		}
+
+		return std::move(samplerResult.value());
 	}
 
 	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
