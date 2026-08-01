@@ -474,9 +474,15 @@ namespace PgE
 
 	CreationResult<vk::raii::DescriptorSetLayout> CreateDescriptorSetLayout(const vk::raii::Device& logicalDevice)
 	{
-		vk::DescriptorSetLayoutBinding uboLayoutBinding{
-			.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex};
-		const vk::DescriptorSetLayoutCreateInfo layoutInfo{.bindingCount = 1, .pBindings = &uboLayoutBinding};
+		std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{{.binding = 0,
+																 .descriptorType = vk::DescriptorType::eUniformBuffer,
+																 .descriptorCount = 1,
+																 .stageFlags = vk::ShaderStageFlagBits::eVertex},
+																{.binding = 1,
+																 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+																 .descriptorCount = 1,
+																 .stageFlags = vk::ShaderStageFlagBits::eFragment}}};
+		const vk::DescriptorSetLayoutCreateInfo layoutInfo{.bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data()};
 
 		std::expected<vk::raii::DescriptorSetLayout, vk::Result> descriptorSetLayoutResult = logicalDevice.createDescriptorSetLayout(layoutInfo);
 		if (!descriptorSetLayoutResult)
@@ -537,7 +543,7 @@ namespace PgE
 															  .pDynamicStates = dynamicStates.data()};
 
 		const vk::VertexInputBindingDescription bindingDescription = Vertex::GetBindingDescription();
-		const std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions = Vertex::GetAttributeDescriptions();
+		const std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions = Vertex::GetAttributeDescriptions();
 		const vk::PipelineVertexInputStateCreateInfo vertexInputInfo{.vertexBindingDescriptionCount = 1,
 																	 .pVertexBindingDescriptions = &bindingDescription,
 																	 .vertexAttributeDescriptionCount =
@@ -721,9 +727,12 @@ namespace PgE
 
 	CreationResult<vk::raii::DescriptorPool> CreateDescriptorPool(const vk::raii::Device& logicalDevice, const std::uint32_t descriptorCount)
 	{
-		vk::DescriptorPoolSize poolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = descriptorCount};
-		const vk::DescriptorPoolCreateInfo poolInfo{
-			.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, .maxSets = descriptorCount, .poolSizeCount = 1, .pPoolSizes = &poolSize};
+		std::array<vk::DescriptorPoolSize, 2> poolSize{{{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = descriptorCount},
+														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = descriptorCount}}};
+		const vk::DescriptorPoolCreateInfo poolInfo{.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+													.maxSets = descriptorCount,
+													.poolSizeCount = static_cast<uint32_t>(poolSize.size()),
+													.pPoolSizes = poolSize.data()};
 
 		std::expected<vk::raii::DescriptorPool, vk::Result> poolCreationResult = logicalDevice.createDescriptorPool(poolInfo);
 		if (!poolCreationResult)
@@ -1001,9 +1010,9 @@ namespace PgE
 		const vk::SamplerCreateInfo samplerCreateInfo{.magFilter = vk::Filter::eLinear,
 													  .minFilter = vk::Filter::eLinear,
 													  .mipmapMode = vk::SamplerMipmapMode::eLinear,
-													  .addressModeU = vk::SamplerAddressMode::eRepeat,
-													  .addressModeV = vk::SamplerAddressMode::eRepeat,
-													  .addressModeW = vk::SamplerAddressMode::eRepeat,
+													  .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+													  .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+													  .addressModeW = vk::SamplerAddressMode::eClampToEdge,
 													  .mipLodBias = 0.0f,
 													  .anisotropyEnable = vk::True,
 													  .maxAnisotropy = properties.limits.maxSamplerAnisotropy,

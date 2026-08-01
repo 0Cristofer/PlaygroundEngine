@@ -18,9 +18,10 @@ namespace PgE
 {
 	constexpr std::uint32_t MaxFramesInFlight = 2;
 	constexpr std::array RequiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
-	constexpr std::array Vertices = {
-		Vertex{.Pos = {-0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.f}}, Vertex{.Pos = {0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}},
-		Vertex{.Pos = {0.5f, 0.5f}, .Color = {0.0f, 0.0f, 1.0f}}, Vertex{.Pos = {-0.5f, 0.5f}, .Color = {0.0f, 1.0f, 1.0f}}};
+	constexpr std::array Vertices = {Vertex{.Pos = {-0.5f, -0.5f}, .Color = {1.0f, 0.f, 0.f}, .TexCoord = {1.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, -0.5f}, .Color = {0.0f, 1.0f, 0.0f}, .TexCoord = {0.0f, 0.0f}},
+									 Vertex{.Pos = {0.5f, 0.5f}, .Color = {0.0f, 0.0f, 1.0f}, .TexCoord = {0.0f, 1.0f}},
+									 Vertex{.Pos = {-0.5f, 0.5f}, .Color = {0.0f, 1.0f, 1.0f}, .TexCoord = {1.0f, 1.0f}}};
 	constexpr std::array<std::uint16_t, 6> Indices = {0, 1, 2, 2, 3, 0};
 	constexpr std::string_view PlaceholderTextureFileName = "placeholder.png";
 
@@ -232,13 +233,21 @@ namespace PgE
 		for (std::size_t i = 0; i < MaxFramesInFlight; i++)
 		{
 			vk::DescriptorBufferInfo bufferInfo{.buffer = uniformBufferResources[i].Buffer.Buffer, .offset = 0, .range = sizeof(UniformBufferObject)};
-			vk::WriteDescriptorSet descriptorWrite{.dstSet = descriptorSets[i],
-												   .dstBinding = 0,
-												   .dstArrayElement = 0,
-												   .descriptorCount = 1,
-												   .descriptorType = vk::DescriptorType::eUniformBuffer,
-												   .pBufferInfo = &bufferInfo};
-			logicalDevice.updateDescriptorSets(descriptorWrite, {});
+			vk::DescriptorImageInfo imageInfo{
+				.sampler = textureSampler, .imageView = textureImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+			std::array<vk::WriteDescriptorSet, 2> descriptorWrites{{{.dstSet = descriptorSets[i],
+																	 .dstBinding = 0,
+																	 .dstArrayElement = 0,
+																	 .descriptorCount = 1,
+																	 .descriptorType = vk::DescriptorType::eUniformBuffer,
+																	 .pBufferInfo = &bufferInfo},
+																	{.dstSet = descriptorSets[i],
+																	 .dstBinding = 1,
+																	 .dstArrayElement = 0,
+																	 .descriptorCount = 1,
+																	 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+																	 .pImageInfo = &imageInfo}}};
+			logicalDevice.updateDescriptorSets(descriptorWrites, {});
 		}
 
 		CreationResult<std::vector<vk::raii::CommandBuffer>> commandBuffersResult =
