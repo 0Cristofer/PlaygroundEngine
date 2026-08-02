@@ -96,15 +96,17 @@ namespace PgE
 																				std::uint32_t commandBufferCount);
 	CreationResult<std::vector<vk::raii::Semaphore>> CreateSemaphores(const vk::raii::Device& logicalDevice, std::size_t count);
 	CreationResult<std::vector<vk::raii::Fence>> CreateSignaledFences(const vk::raii::Device& logicalDevice, std::size_t count);
-	CreationResult<ImageResource> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
-													 const vk::raii::Device& logicalDevice,
-													 const vk::raii::Queue& queue,
-													 const vk::raii::CommandPool& commandPool,
-													 std::string_view textureFileName);
-	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice,
-														vk::Image image,
-														vk::Format format,
-														vk::ImageAspectFlags aspectMask);
+
+	// Yields the image with its full mip chain already generated and every level left in
+	// eShaderReadOnlyOptimal, alongside the level count the image view has to cover.
+
+	CreationResult<std::tuple<ImageResource, std::uint32_t>> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
+																				const vk::raii::Device& logicalDevice,
+																				const vk::raii::Queue& queue,
+																				const vk::raii::CommandPool& commandPool,
+																				std::string_view textureFileName);
+	CreationResult<vk::raii::ImageView> CreateImageView(
+		const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectMask, std::uint32_t mipLevels);
 	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
 	CreationResult<vk::Format> FindDepthFormat(const vk::raii::PhysicalDevice& physicalDevice);
 	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
@@ -115,6 +117,7 @@ namespace PgE
 											  const vk::raii::Device& logicalDevice,
 											  std::uint32_t width,
 											  std::uint32_t height,
+											  std::uint32_t mipLevels,
 											  vk::Format format,
 											  vk::ImageTiling tiling,
 											  vk::ImageUsageFlags usage,
@@ -130,7 +133,13 @@ namespace PgE
 							   vk::AccessFlags2 dstAccessMask,
 							   vk::PipelineStageFlags2 srcStageMask,
 							   vk::PipelineStageFlags2 dstStageMask,
-							   vk::ImageAspectFlags aspectMask);
+							   const vk::ImageSubresourceRange& subresourceRange);
+
+	// Fills levels 1..mipLevels-1 by halving blits from the level above and leaves every level in
+	// eShaderReadOnlyOptimal. Level 0 must already hold the source image in eTransferDstOptimal.
+
+	void GenerateMipmaps(
+		const vk::raii::CommandBuffer& commandBuffer, vk::Image image, std::int32_t width, std::int32_t height, std::uint32_t mipLevels);
 	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
 						   const vk::raii::Buffer& buffer,
 						   const vk::raii::Image& image,

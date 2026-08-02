@@ -345,13 +345,14 @@ namespace PgE
 	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice,
 														const vk::Image image,
 														const vk::Format format,
-														const vk::ImageAspectFlags aspectMask)
+														const vk::ImageAspectFlags aspectMask,
+														const std::uint32_t mipLevels)
 	{
 		const vk::ImageViewCreateInfo imageViewCreateInfo{
 			.image = image,
 			.viewType = vk::ImageViewType::e2D,
 			.format = format,
-			.subresourceRange = {.aspectMask = aspectMask, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+			.subresourceRange = {.aspectMask = aspectMask, .baseMipLevel = 0, .levelCount = mipLevels, .baseArrayLayer = 0, .layerCount = 1}};
 
 		std::expected<vk::raii::ImageView, vk::Result> imageViewResult = logicalDevice.createImageView(imageViewCreateInfo);
 		if (!imageViewResult)
@@ -372,7 +373,7 @@ namespace PgE
 		for (const vk::Image& image : swapChainImages)
 		{
 			CreationResult<vk::raii::ImageView> imageViewResult =
-				CreateImageView(logicalDevice, image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
+				CreateImageView(logicalDevice, image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor, 1);
 			if (!imageViewResult)
 			{
 				return std::unexpected(imageViewResult.error());
@@ -865,11 +866,11 @@ namespace PgE
 		return fences;
 	}
 
-	CreationResult<ImageResource> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
-													 const vk::raii::Device& logicalDevice,
-													 const vk::raii::Queue& queue,
-													 const vk::raii::CommandPool& commandPool,
-													 const std::string_view textureFileName)
+	CreationResult<std::tuple<ImageResource, std::uint32_t>> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
+																				const vk::raii::Device& logicalDevice,
+																				const vk::raii::Queue& queue,
+																				const vk::raii::CommandPool& commandPool,
+																				const std::string_view textureFileName)
 	{
 		const std::expected<std::filesystem::path, PathError> executableDirectoryResult = GetExecutableDirectory();
 		if (!executableDirectoryResult)
@@ -905,9 +906,27 @@ namespace PgE
 			return std::unexpected(uploadResult.error());
 		}
 
+		constexpr auto textureFormat = vk::Format::eR8G8B8A8Srgb;
+
+		// Blitting is what fills the smaller levels, and linear filtering during a blit is an optional
+		// format feature rather than a guarantee. Checked before the image exists, since a fallback
+		// would have to load pre-baked levels instead of generating them.
+
+		if (const vk::FormatProperties formatProperties = physicalDevice.getFormatProperties(textureFormat);
+			!(formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear))
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::LinearBlitUnsupported, to_string(textureFormat)));
+		}
+
+		// Levels halve until one of the axes reaches a single texel, so the chain length comes from the
+		// longer side: a 1024x1024 image gets 11 levels, 1024 down to 1x1.
+
+		const std::uint32_t mipLevels = static_cast<std::uint32_t>(std::floor(std::log2(std::max(decodedImage.Width, decodedImage.Height)))) + 1;
+
 		CreationResult<ImageResource> imageResult =
-			CreateImage(physicalDevice, logicalDevice, decodedImage.Width, decodedImage.Height, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
-						vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal);
+			CreateImage(physicalDevice, logicalDevice, decodedImage.Width, decodedImage.Height, mipLevels, textureFormat, vk::ImageTiling::eOptimal,
+						vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+						vk::MemoryPropertyFlagBits::eDeviceLocal);
 		if (!imageResult)
 		{
 			return std::unexpected(imageResult.error());
@@ -921,28 +940,93 @@ namespace PgE
 		}
 		vk::raii::CommandBuffer& commandBuffer = commandBufferResult.value();
 
-		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-							  vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eTransferWrite, vk::PipelineStageFlagBits2::eNone,
-							  vk::PipelineStageFlagBits2::eTransfer, vk::ImageAspectFlagBits::eColor);
+		// Every level goes to eTransferDstOptimal up front, not just level 0: GenerateMipmaps expects
+		// to find each destination level already in that layout before it blits into it.
+
+		TransitionImageLayout(
+			commandBuffer, *imageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits2::eNone,
+			vk::AccessFlagBits2::eTransferWrite, vk::PipelineStageFlagBits2::eNone, vk::PipelineStageFlagBits2::eTransfer,
+			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = mipLevels, .baseArrayLayer = 0, .layerCount = 1});
 
 		CopyBufferToImage(commandBuffer, stagingBuffer.Buffer, imageResource.Image, decodedImage.Width, decodedImage.Height);
 
-		TransitionImageLayout(commandBuffer, *imageResource.Image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-							  vk::AccessFlagBits2::eTransferWrite, vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eTransfer,
-							  vk::PipelineStageFlagBits2::eFragmentShader, vk::ImageAspectFlagBits::eColor);
+		GenerateMipmaps(commandBuffer, *imageResource.Image, static_cast<std::int32_t>(decodedImage.Width),
+						static_cast<std::int32_t>(decodedImage.Height), mipLevels);
 
 		if (CreationResult<void> endResult = EndSingleTimeCommands(queue, std::move(commandBuffer)); !endResult)
 		{
 			return std::unexpected(endResult.error());
 		}
 
-		return std::move(imageResource);
+		return std::tuple{std::move(imageResource), mipLevels};
+	}
+
+	void GenerateMipmaps(const vk::raii::CommandBuffer& commandBuffer,
+						 const vk::Image image,
+						 const std::int32_t width,
+						 const std::int32_t height,
+						 const std::uint32_t mipLevels)
+	{
+		auto levelRange = [](const std::uint32_t level) {
+			return vk::ImageSubresourceRange{
+				.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = level, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
+		};
+
+		std::int32_t mipWidth = width;
+		std::int32_t mipHeight = height;
+
+		for (std::uint32_t level = 1; level < mipLevels; level++)
+		{
+			// The source stage is eTransfer rather than eBlit because level 0 was written by the buffer
+			// copy while every later level was written by the preceding blit, and one barrier serves both.
+
+			TransitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+								  vk::AccessFlagBits2::eTransferWrite, vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eTransfer,
+								  vk::PipelineStageFlagBits2::eBlit, levelRange(level - 1));
+
+			const std::int32_t nextWidth = mipWidth > 1 ? mipWidth / 2 : 1;
+			const std::int32_t nextHeight = mipHeight > 1 ? mipHeight / 2 : 1;
+
+			const vk::ImageBlit2 region{
+				.srcSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = level - 1, .baseArrayLayer = 0, .layerCount = 1},
+				.srcOffsets = {{vk::Offset3D{.x = 0, .y = 0, .z = 0}, vk::Offset3D{.x = mipWidth, .y = mipHeight, .z = 1}}},
+				.dstSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = level, .baseArrayLayer = 0, .layerCount = 1},
+				.dstOffsets = {{vk::Offset3D{.x = 0, .y = 0, .z = 0}, vk::Offset3D{.x = nextWidth, .y = nextHeight, .z = 1}}}};
+
+			const vk::BlitImageInfo2 blitInfo{.srcImage = image,
+											  .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
+											  .dstImage = image,
+											  .dstImageLayout = vk::ImageLayout::eTransferDstOptimal,
+											  .regionCount = 1,
+											  .pRegions = &region,
+											  .filter = vk::Filter::eLinear};
+
+			commandBuffer.blitImage2(blitInfo);
+
+			// The level just read is finished with, so it moves to its final layout here rather than in
+			// a sweep at the end, which would need a second pass over the chain.
+
+			TransitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+								  vk::AccessFlagBits2::eTransferRead, vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eBlit,
+								  vk::PipelineStageFlagBits2::eFragmentShader, levelRange(level - 1));
+
+			mipWidth = nextWidth;
+			mipHeight = nextHeight;
+		}
+
+		// The smallest level is never a blit source, so it is still in eTransferDstOptimal. eTransfer
+		// covers both the blit that wrote it and, when the chain is one level, the buffer copy.
+
+		TransitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+							  vk::AccessFlagBits2::eTransferWrite, vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eTransfer,
+							  vk::PipelineStageFlagBits2::eFragmentShader, levelRange(mipLevels - 1));
 	}
 
 	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
 											  const vk::raii::Device& logicalDevice,
 											  const std::uint32_t width,
 											  const std::uint32_t height,
+											  const std::uint32_t mipLevels,
 											  const vk::Format format,
 											  const vk::ImageTiling tiling,
 											  const vk::ImageUsageFlags usage,
@@ -951,7 +1035,7 @@ namespace PgE
 		const vk::ImageCreateInfo imageInfo{.imageType = vk::ImageType::e2D,
 											.format = format,
 											.extent = {.width = width, .height = height, .depth = 1},
-											.mipLevels = 1,
+											.mipLevels = mipLevels,
 											.arrayLayers = 1,
 											.samples = vk::SampleCountFlagBits::e1,
 											.tiling = tiling,
@@ -1030,7 +1114,7 @@ namespace PgE
 																						const vk::Format depthFormat)
 	{
 		CreationResult<ImageResource> imageResult =
-			CreateImage(physicalDevice, logicalDevice, extent.width, extent.height, depthFormat, vk::ImageTiling::eOptimal,
+			CreateImage(physicalDevice, logicalDevice, extent.width, extent.height, 1, depthFormat, vk::ImageTiling::eOptimal,
 						vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		if (!imageResult)
 		{
@@ -1039,7 +1123,7 @@ namespace PgE
 		ImageResource& imageResource = imageResult.value();
 
 		CreationResult<vk::raii::ImageView> imageViewResult =
-			CreateImageView(logicalDevice, *imageResource.Image, depthFormat, vk::ImageAspectFlagBits::eDepth);
+			CreateImageView(logicalDevice, *imageResource.Image, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 		if (!imageViewResult)
 		{
 			return std::unexpected(imageViewResult.error());
@@ -1095,19 +1179,18 @@ namespace PgE
 							   const vk::AccessFlags2 dstAccessMask,
 							   const vk::PipelineStageFlags2 srcStageMask,
 							   const vk::PipelineStageFlags2 dstStageMask,
-							   const vk::ImageAspectFlags aspectMask)
+							   const vk::ImageSubresourceRange& subresourceRange)
 	{
-		const vk::ImageMemoryBarrier2 barrier{
-			.srcStageMask = srcStageMask,
-			.srcAccessMask = srcAccessMask,
-			.dstStageMask = dstStageMask,
-			.dstAccessMask = dstAccessMask,
-			.oldLayout = oldLayout,
-			.newLayout = newLayout,
-			.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-			.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-			.image = image,
-			.subresourceRange = {.aspectMask = aspectMask, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+		const vk::ImageMemoryBarrier2 barrier{.srcStageMask = srcStageMask,
+											  .srcAccessMask = srcAccessMask,
+											  .dstStageMask = dstStageMask,
+											  .dstAccessMask = dstAccessMask,
+											  .oldLayout = oldLayout,
+											  .newLayout = newLayout,
+											  .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+											  .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+											  .image = image,
+											  .subresourceRange = subresourceRange};
 		const vk::DependencyInfo dependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier};
 
 		commandBuffer.pipelineBarrier2(dependencyInfo);
@@ -1129,7 +1212,9 @@ namespace PgE
 													  .compareEnable = vk::False,
 													  .compareOp = vk::CompareOp::eAlways,
 													  .minLod = 0.0f,
-													  .maxLod = 0.0f,
+													  // Left unclamped so one sampler serves images with different chain lengths: the view's
+													  // levelCount already bounds which levels a sample can reach.
+													  .maxLod = vk::LodClampNone,
 													  .borderColor = vk::BorderColor::eIntOpaqueBlack,
 													  .unnormalizedCoordinates = vk::False};
 

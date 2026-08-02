@@ -195,16 +195,16 @@ namespace PgE
 		}
 		BufferResource& indexBufferResource = indexBufferResourceResult.value();
 
-		CreationResult<ImageResource> textureImageResourceResult =
+		CreationResult<std::tuple<ImageResource, std::uint32_t>> textureImageResourceResult =
 			CreateTextureImage(physicalDevice, logicalDevice, queue, commandPool, PlaceholderTextureFileName);
 		if (!textureImageResourceResult)
 		{
 			return std::unexpected(textureImageResourceResult.error());
 		}
-		ImageResource& textureImageResource = textureImageResourceResult.value();
+		auto& [textureImageResource, textureMipLevels] = textureImageResourceResult.value();
 
 		CreationResult<vk::raii::ImageView> textureImageViewResult =
-			CreateImageView(logicalDevice, *textureImageResource.Image, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
+			CreateImageView(logicalDevice, *textureImageResource.Image, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, textureMipLevels);
 		if (!textureImageViewResult)
 		{
 			return std::unexpected(textureImageViewResult.error());
@@ -494,20 +494,20 @@ namespace PgE
 		}
 
 		// Before starting rendering, transition the swapchain image to vk::ImageLayout::eColorAttachmentOptimal
-		TransitionImageLayout(_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eUndefined,
-							  vk::ImageLayout::eColorAttachmentOptimal,
-							  vk::AccessFlagBits2::eNone,						  // srcAccessMask (no need to wait for previous operations)
-							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // dstAccessMask
-							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage
-							  vk::ImageAspectFlagBits::eColor);
-		TransitionImageLayout(_commandBuffers[_frameIndex], *_depthImageResource.Image, vk::ImageLayout::eUndefined,
-							  vk::ImageLayout::eDepthAttachmentOptimal,
-							  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												// srcAccessMask
-							  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												// dstAccessMask
-							  vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // srcStage
-							  vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // dstStage
-							  vk::ImageAspectFlagBits::eDepth);
+		TransitionImageLayout(
+			_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+			vk::AccessFlagBits2::eNone,							// srcAccessMask (no need to wait for previous operations)
+			vk::AccessFlagBits2::eColorAttachmentWrite,			// dstAccessMask
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage
+			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
+		TransitionImageLayout(
+			_commandBuffers[_frameIndex], *_depthImageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthAttachmentOptimal,
+			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												  // srcAccessMask
+			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												  // dstAccessMask
+			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // srcStage
+			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // dstStage
+			{.aspectMask = vk::ImageAspectFlagBits::eDepth, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
 
 		constexpr vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
 		vk::RenderingAttachmentInfo attachmentInfo = {.imageView = _swapChainImageViews[imageIndex],
@@ -545,13 +545,13 @@ namespace PgE
 		_commandBuffers[_frameIndex].endRendering();
 
 		// After rendering, transition the swapchain image to vk::ImageLayout::ePresentSrcKHR
-		TransitionImageLayout(_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal,
-							  vk::ImageLayout::ePresentSrcKHR,
-							  vk::AccessFlagBits2::eColorAttachmentWrite,		  // srcAccessMask
-							  vk::AccessFlagBits2::eNone,						  // dstAccessMask
-							  vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-							  vk::PipelineStageFlagBits2::eBottomOfPipe,		  // dstStage
-							  vk::ImageAspectFlagBits::eColor);
+		TransitionImageLayout(
+			_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
+			vk::AccessFlagBits2::eColorAttachmentWrite,			// srcAccessMask
+			vk::AccessFlagBits2::eNone,							// dstAccessMask
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+			vk::PipelineStageFlagBits2::eBottomOfPipe,			// dstStage
+			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
 
 		if (std::expected<void, vk::Result> endResult = _commandBuffers[_frameIndex].end(); !endResult)
 		{
