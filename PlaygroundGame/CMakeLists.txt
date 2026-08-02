@@ -124,3 +124,31 @@ endforeach()
 add_custom_target(PlaygroundGameTextures DEPENDS ${STAGED_TEXTURES})
 
 add_dependencies(PlaygroundGame PlaygroundGameTextures)
+
+# Models are staged exactly like the textures above, into a Models folder beside the executable.
+
+get_property(MODEL_SOURCES GLOBAL PROPERTY PlaygroundEngineModels_SOURCE_FILES)
+
+set(STAGED_MODELS "")
+
+foreach(MODEL_SOURCE IN LISTS MODEL_SOURCES)
+	get_filename_component(MODEL_NAME ${MODEL_SOURCE} NAME)
+	set(STAGED_MODEL ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/Models/${MODEL_NAME})
+
+	add_custom_command(
+		OUTPUT
+			${STAGED_MODEL}
+		COMMAND
+			${CMAKE_COMMAND} -E copy_if_different ${MODEL_SOURCE} ${STAGED_MODEL}
+		DEPENDS
+			${MODEL_SOURCE}
+		COMMENT "Staging ${MODEL_NAME} next to PlaygroundGame"
+		VERBATIM
+	)
+
+	list(APPEND STAGED_MODELS ${STAGED_MODEL})
+endforeach()
+
+add_custom_target(PlaygroundGameModels DEPENDS ${STAGED_MODELS})
+
+add_dependencies(PlaygroundGame PlaygroundGameModels)

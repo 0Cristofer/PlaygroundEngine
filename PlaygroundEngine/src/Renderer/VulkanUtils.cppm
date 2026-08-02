@@ -59,13 +59,24 @@ namespace PgE
 	CreationResult<vk::raii::DescriptorSetLayout> CreateDescriptorSetLayout(const vk::raii::Device& logicalDevice);
 	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
 															  const vk::raii::PipelineLayout& pipelineLayout,
-															  vk::Format colorAttachmentFormat);
+															  vk::Format colorAttachmentFormat,
+															  vk::Format depthAttachmentFormat,
+															  vk::SampleCountFlagBits sampleCount);
 	CreationResult<BufferResource> CreateBufferResource(const vk::raii::PhysicalDevice& physicalDevice,
 														const vk::raii::Device& logicalDevice,
 														vk::DeviceSize size,
 														vk::BufferUsageFlags usage,
 														vk::MemoryPropertyFlags properties);
 	CreationResult<void> UploadToDeviceMemory(const vk::raii::DeviceMemory& deviceMemory, std::span<const std::byte> data);
+
+	// Staging buffer, upload, device-local buffer, copy. The staging buffer dies with the call.
+
+	CreationResult<BufferResource> CreateDeviceLocalBuffer(const vk::raii::PhysicalDevice& physicalDevice,
+														   const vk::raii::Device& logicalDevice,
+														   const vk::raii::Queue& queue,
+														   const vk::raii::CommandPool& commandPool,
+														   std::span<const std::byte> data,
+														   vk::BufferUsageFlags usage);
 	CreationResult<void> CopyBuffer(const vk::raii::Device& logicalDevice,
 									const vk::raii::Queue& queue,
 									const vk::raii::CommandPool& commandPool,
@@ -86,17 +97,45 @@ namespace PgE
 																				std::uint32_t commandBufferCount);
 	CreationResult<std::vector<vk::raii::Semaphore>> CreateSemaphores(const vk::raii::Device& logicalDevice, std::size_t count);
 	CreationResult<std::vector<vk::raii::Fence>> CreateSignaledFences(const vk::raii::Device& logicalDevice, std::size_t count);
-	CreationResult<ImageResource> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
-													 const vk::raii::Device& logicalDevice,
-													 const vk::raii::Queue& queue,
-													 const vk::raii::CommandPool& commandPool,
-													 std::string_view textureFileName);
-	CreationResult<vk::raii::ImageView> CreateImageView(const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format);
+
+	// Yields the image with its full mip chain already generated and every level left in
+	// eShaderReadOnlyOptimal, alongside the level count the image view has to cover.
+
+	CreationResult<std::tuple<ImageResource, std::uint32_t>> CreateTextureImage(const vk::raii::PhysicalDevice& physicalDevice,
+																				const vk::raii::Device& logicalDevice,
+																				const vk::raii::Queue& queue,
+																				const vk::raii::CommandPool& commandPool,
+																				std::string_view textureFileName);
+	CreationResult<vk::raii::ImageView> CreateImageView(
+		const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectMask, std::uint32_t mipLevels);
 	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
+	CreationResult<vk::Format> FindDepthFormat(const vk::raii::PhysicalDevice& physicalDevice);
+
+	// The highest count colour and depth attachments both support, since a pipeline needs one figure
+	// for all of its attachments.
+
+	vk::SampleCountFlagBits GetMaxUsableSampleCount(const vk::raii::PhysicalDevice& physicalDevice);
+
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
+																						const vk::raii::Device& logicalDevice,
+																						vk::Extent2D extent,
+																						vk::Format depthFormat,
+																						vk::SampleCountFlagBits sampleCount);
+
+	// The multisampled image the pipeline renders into, resolved down to a swap chain image at the
+	// end of the render. Transient: nothing reads it once the resolve has run.
+
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateMultisampleColorResources(const vk::raii::PhysicalDevice& physicalDevice,
+																								   const vk::raii::Device& logicalDevice,
+																								   vk::Extent2D extent,
+																								   vk::Format colorFormat,
+																								   vk::SampleCountFlagBits sampleCount);
 	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
 											  const vk::raii::Device& logicalDevice,
 											  std::uint32_t width,
 											  std::uint32_t height,
+											  std::uint32_t mipLevels,
+											  vk::SampleCountFlagBits sampleCount,
 											  vk::Format format,
 											  vk::ImageTiling tiling,
 											  vk::ImageUsageFlags usage,
@@ -111,7 +150,14 @@ namespace PgE
 							   vk::AccessFlags2 srcAccessMask,
 							   vk::AccessFlags2 dstAccessMask,
 							   vk::PipelineStageFlags2 srcStageMask,
-							   vk::PipelineStageFlags2 dstStageMask);
+							   vk::PipelineStageFlags2 dstStageMask,
+							   const vk::ImageSubresourceRange& subresourceRange);
+
+	// Fills levels 1..mipLevels-1 by halving blits from the level above and leaves every level in
+	// eShaderReadOnlyOptimal. Level 0 must already hold the source image in eTransferDstOptimal.
+
+	void GenerateMipmaps(
+		const vk::raii::CommandBuffer& commandBuffer, vk::Image image, std::int32_t width, std::int32_t height, std::uint32_t mipLevels);
 	void CopyBufferToImage(const vk::raii::CommandBuffer& commandBuffer,
 						   const vk::raii::Buffer& buffer,
 						   const vk::raii::Image& image,
