@@ -60,7 +60,8 @@ namespace PgE
 	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
 															  const vk::raii::PipelineLayout& pipelineLayout,
 															  vk::Format colorAttachmentFormat,
-															  vk::Format depthAttachmentFormat);
+															  vk::Format depthAttachmentFormat,
+															  vk::SampleCountFlagBits sampleCount);
 	CreationResult<BufferResource> CreateBufferResource(const vk::raii::PhysicalDevice& physicalDevice,
 														const vk::raii::Device& logicalDevice,
 														vk::DeviceSize size,
@@ -109,15 +110,32 @@ namespace PgE
 		const vk::raii::Device& logicalDevice, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectMask, std::uint32_t mipLevels);
 	CreationResult<vk::raii::Sampler> CreateTextureSampler(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& logicalDevice);
 	CreationResult<vk::Format> FindDepthFormat(const vk::raii::PhysicalDevice& physicalDevice);
+
+	// The highest count colour and depth attachments both support, since a pipeline needs one figure
+	// for all of its attachments.
+
+	vk::SampleCountFlagBits GetMaxUsableSampleCount(const vk::raii::PhysicalDevice& physicalDevice);
+
 	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
 																						const vk::raii::Device& logicalDevice,
 																						vk::Extent2D extent,
-																						vk::Format depthFormat);
+																						vk::Format depthFormat,
+																						vk::SampleCountFlagBits sampleCount);
+
+	// The multisampled image the pipeline renders into, resolved down to a swap chain image at the
+	// end of the render. Transient: nothing reads it once the resolve has run.
+
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateMultisampleColorResources(const vk::raii::PhysicalDevice& physicalDevice,
+																								   const vk::raii::Device& logicalDevice,
+																								   vk::Extent2D extent,
+																								   vk::Format colorFormat,
+																								   vk::SampleCountFlagBits sampleCount);
 	CreationResult<ImageResource> CreateImage(const vk::raii::PhysicalDevice& physicalDevice,
 											  const vk::raii::Device& logicalDevice,
 											  std::uint32_t width,
 											  std::uint32_t height,
 											  std::uint32_t mipLevels,
+											  vk::SampleCountFlagBits sampleCount,
 											  vk::Format format,
 											  vk::ImageTiling tiling,
 											  vk::ImageUsageFlags usage,

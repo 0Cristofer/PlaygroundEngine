@@ -134,8 +134,18 @@ namespace PgE
 		}
 		const vk::Format depthFormat = depthFormatResult.value();
 
+		const vk::SampleCountFlagBits sampleCount = GetMaxUsableSampleCount(physicalDevice);
+
+		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
+			CreateMultisampleColorResources(physicalDevice, logicalDevice, swapChain.Extent, swapChainSurfaceFormat.format, sampleCount);
+		if (!multisampleColorResourcesResult)
+		{
+			return std::unexpected(multisampleColorResourcesResult.error());
+		}
+		auto& [multisampleColorImageResource, multisampleColorImageView] = multisampleColorResourcesResult.value();
+
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> depthResourcesResult =
-			CreateDepthResources(physicalDevice, logicalDevice, swapChain.Extent, depthFormat);
+			CreateDepthResources(physicalDevice, logicalDevice, swapChain.Extent, depthFormat, sampleCount);
 		if (!depthResourcesResult)
 		{
 			return std::unexpected(depthResourcesResult.error());
@@ -157,7 +167,7 @@ namespace PgE
 		vk::raii::PipelineLayout& pipelineLayout = pipelineLayoutResult.value();
 
 		CreationResult<vk::raii::Pipeline> graphicsPipelineResult =
-			CreateGraphicsPipeline(logicalDevice, pipelineLayout, swapChainSurfaceFormat.format, depthFormat);
+			CreateGraphicsPipeline(logicalDevice, pipelineLayout, swapChainSurfaceFormat.format, depthFormat, sampleCount);
 		if (!graphicsPipelineResult)
 		{
 			return std::unexpected(graphicsPipelineResult.error());
@@ -302,7 +312,8 @@ namespace PgE
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
 			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), static_cast<std::uint32_t>(mesh.Indices.size()),
-			std::move(textureImageResource), std::move(textureImageView), std::move(textureSampler), depthFormat, std::move(depthImageResource),
+			std::move(textureImageResource), std::move(textureImageView), std::move(textureSampler), sampleCount,
+			std::move(multisampleColorImageResource), std::move(multisampleColorImageView), depthFormat, std::move(depthImageResource),
 			std::move(depthImageView), std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets),
 			std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
@@ -433,8 +444,21 @@ namespace PgE
 		_swapChainImageViews = std::move(swapChainResult->ImageViews);
 		_swapChainExtent = swapChainResult->Extent;
 
+		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
+			CreateMultisampleColorResources(_physicalDevice, _logicalDevice, _swapChainExtent, _swapChainSurfaceFormat.format, _sampleCount);
+		if (!multisampleColorResourcesResult)
+		{
+			return std::unexpected(
+				RendererError(RendererRenderErrorKind::SwapChainRecreationError, std::string(multisampleColorResourcesResult.error().Message())));
+		}
+		auto& [multisampleColorImageResource, multisampleColorImageView] = multisampleColorResourcesResult.value();
+
+		_multisampleColorImageView = nullptr;
+		_multisampleColorImageResource = std::move(multisampleColorImageResource);
+		_multisampleColorImageView = std::move(multisampleColorImageView);
+
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> depthResourcesResult =
-			CreateDepthResources(_physicalDevice, _logicalDevice, _swapChainExtent, _depthFormat);
+			CreateDepthResources(_physicalDevice, _logicalDevice, _swapChainExtent, _depthFormat, _sampleCount);
 		if (!depthResourcesResult)
 		{
 			return std::unexpected(
@@ -501,6 +525,18 @@ namespace PgE
 			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
 			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage
 			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
+
+		// The multisampled target is cleared on load and never stored, so eUndefined is the honest old
+		// layout here for the same reason it is on the depth buffer.
+
+		TransitionImageLayout(
+			_commandBuffers[_frameIndex], *_multisampleColorImageResource.Image, vk::ImageLayout::eUndefined,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::AccessFlagBits2::eColorAttachmentWrite,			// srcAccessMask
+			vk::AccessFlagBits2::eColorAttachmentWrite,			// dstAccessMask
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage
+			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
 		TransitionImageLayout(
 			_commandBuffers[_frameIndex], *_depthImageResource.Image, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthAttachmentOptimal,
 			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,												  // srcAccessMask
@@ -509,11 +545,18 @@ namespace PgE
 			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests, // dstStage
 			{.aspectMask = vk::ImageAspectFlagBits::eDepth, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
 
+		// Rendering targets the multisampled image and resolves into the swap chain image as the render
+		// ends, which is where dynamic rendering replaces a render pass's pResolveAttachments. storeOp
+		// is eDontCare because only the resolved result is ever presented.
+
 		constexpr vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-		vk::RenderingAttachmentInfo attachmentInfo = {.imageView = _swapChainImageViews[imageIndex],
+		vk::RenderingAttachmentInfo attachmentInfo = {.imageView = _multisampleColorImageView,
 													  .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+													  .resolveMode = vk::ResolveModeFlagBits::eAverage,
+													  .resolveImageView = _swapChainImageViews[imageIndex],
+													  .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
 													  .loadOp = vk::AttachmentLoadOp::eClear,
-													  .storeOp = vk::AttachmentStoreOp::eStore,
+													  .storeOp = vk::AttachmentStoreOp::eDontCare,
 													  .clearValue = clearColor};
 
 		constexpr vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);

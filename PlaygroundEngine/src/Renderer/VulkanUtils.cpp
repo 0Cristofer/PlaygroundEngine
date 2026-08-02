@@ -528,7 +528,8 @@ namespace PgE
 	CreationResult<vk::raii::Pipeline> CreateGraphicsPipeline(const vk::raii::Device& logicalDevice,
 															  const vk::raii::PipelineLayout& pipelineLayout,
 															  const vk::Format colorAttachmentFormat,
-															  const vk::Format depthAttachmentFormat)
+															  const vk::Format depthAttachmentFormat,
+															  const vk::SampleCountFlagBits sampleCount)
 	{
 		// The shader module only has to outlive the pipeline creation call, so it stays local.
 
@@ -564,8 +565,11 @@ namespace PgE
 																	  .frontFace = vk::FrontFace::eCounterClockwise,
 																	  .depthBiasEnable = vk::False,
 																	  .lineWidth = 1.0f};
-		constexpr vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = vk::SampleCountFlagBits::e1,
-																	   .sampleShadingEnable = vk::False};
+		// sampleShadingEnable stays off: it would run the fragment shader per sample instead of per
+		// pixel, which anti-aliases shading and texture interiors too, at close to the cost of
+		// supersampling. Mipmaps already cover the texture case.
+
+		const vk::PipelineMultisampleStateCreateInfo multisampling{.rasterizationSamples = sampleCount, .sampleShadingEnable = vk::False};
 		constexpr vk::PipelineDepthStencilStateCreateInfo depthStencil{.depthTestEnable = vk::True,
 																	   .depthWriteEnable = vk::True,
 																	   .depthCompareOp = vk::CompareOp::eLess,
@@ -923,10 +927,10 @@ namespace PgE
 
 		const std::uint32_t mipLevels = static_cast<std::uint32_t>(std::floor(std::log2(std::max(decodedImage.Width, decodedImage.Height)))) + 1;
 
-		CreationResult<ImageResource> imageResult =
-			CreateImage(physicalDevice, logicalDevice, decodedImage.Width, decodedImage.Height, mipLevels, textureFormat, vk::ImageTiling::eOptimal,
-						vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-						vk::MemoryPropertyFlagBits::eDeviceLocal);
+		CreationResult<ImageResource> imageResult = CreateImage(
+			physicalDevice, logicalDevice, decodedImage.Width, decodedImage.Height, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
+			vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+			vk::MemoryPropertyFlagBits::eDeviceLocal);
 		if (!imageResult)
 		{
 			return std::unexpected(imageResult.error());
@@ -1027,6 +1031,7 @@ namespace PgE
 											  const std::uint32_t width,
 											  const std::uint32_t height,
 											  const std::uint32_t mipLevels,
+											  const vk::SampleCountFlagBits sampleCount,
 											  const vk::Format format,
 											  const vk::ImageTiling tiling,
 											  const vk::ImageUsageFlags usage,
@@ -1037,7 +1042,7 @@ namespace PgE
 											.extent = {.width = width, .height = height, .depth = 1},
 											.mipLevels = mipLevels,
 											.arrayLayers = 1,
-											.samples = vk::SampleCountFlagBits::e1,
+											.samples = sampleCount,
 											.tiling = tiling,
 											.usage = usage,
 											.sharingMode = vk::SharingMode::eExclusive};
@@ -1108,13 +1113,27 @@ namespace PgE
 		return depthFormat.value();
 	}
 
+	vk::SampleCountFlagBits GetMaxUsableSampleCount(const vk::raii::PhysicalDevice& physicalDevice)
+	{
+		const vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
+		const vk::SampleCountFlags counts = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
+
+		constexpr std::array candidates = {vk::SampleCountFlagBits::e64, vk::SampleCountFlagBits::e32, vk::SampleCountFlagBits::e16,
+										   vk::SampleCountFlagBits::e8,	 vk::SampleCountFlagBits::e4,  vk::SampleCountFlagBits::e2};
+
+		const auto supported = std::ranges::find_if(candidates, [counts](const vk::SampleCountFlagBits candidate) { return !!(counts & candidate); });
+
+		return supported != candidates.end() ? *supported : vk::SampleCountFlagBits::e1;
+	}
+
 	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateDepthResources(const vk::raii::PhysicalDevice& physicalDevice,
 																						const vk::raii::Device& logicalDevice,
 																						const vk::Extent2D extent,
-																						const vk::Format depthFormat)
+																						const vk::Format depthFormat,
+																						const vk::SampleCountFlagBits sampleCount)
 	{
 		CreationResult<ImageResource> imageResult =
-			CreateImage(physicalDevice, logicalDevice, extent.width, extent.height, 1, depthFormat, vk::ImageTiling::eOptimal,
+			CreateImage(physicalDevice, logicalDevice, extent.width, extent.height, 1, sampleCount, depthFormat, vk::ImageTiling::eOptimal,
 						vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
 		if (!imageResult)
 		{
@@ -1124,6 +1143,35 @@ namespace PgE
 
 		CreationResult<vk::raii::ImageView> imageViewResult =
 			CreateImageView(logicalDevice, *imageResource.Image, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+		if (!imageViewResult)
+		{
+			return std::unexpected(imageViewResult.error());
+		}
+
+		return std::tuple{std::move(imageResource), std::move(imageViewResult.value())};
+	}
+
+	CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> CreateMultisampleColorResources(const vk::raii::PhysicalDevice& physicalDevice,
+																								   const vk::raii::Device& logicalDevice,
+																								   const vk::Extent2D extent,
+																								   const vk::Format colorFormat,
+																								   const vk::SampleCountFlagBits sampleCount)
+	{
+		// eTransientAttachment tells the driver the contents never leave the render, which lets a
+		// tiler keep them on chip. Harmless where that does not apply, and truthful either way since
+		// the resolve consumes the image before the render ends.
+
+		CreationResult<ImageResource> imageResult = CreateImage(
+			physicalDevice, logicalDevice, extent.width, extent.height, 1, sampleCount, colorFormat, vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		if (!imageResult)
+		{
+			return std::unexpected(imageResult.error());
+		}
+		ImageResource& imageResource = imageResult.value();
+
+		CreationResult<vk::raii::ImageView> imageViewResult =
+			CreateImageView(logicalDevice, *imageResource.Image, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
 		if (!imageViewResult)
 		{
 			return std::unexpected(imageViewResult.error());

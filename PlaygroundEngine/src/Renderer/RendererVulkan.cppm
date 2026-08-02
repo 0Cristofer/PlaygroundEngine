@@ -49,6 +49,9 @@ namespace PgE
 					   ImageResource textureImageResource,
 					   vk::raii::ImageView textureImageView,
 					   vk::raii::Sampler textureSampler,
+					   vk::SampleCountFlagBits sampleCount,
+					   ImageResource multisampleColorImageResource,
+					   vk::raii::ImageView multisampleColorImageView,
 					   vk::Format depthFormat,
 					   ImageResource depthImageResource,
 					   vk::raii::ImageView depthImageView,
@@ -67,9 +70,12 @@ namespace PgE
 			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
 			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)), _indexCount(indexCount),
 			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
-			  _textureSampler(std::move(textureSampler)), _depthFormat(depthFormat), _depthImageResource(std::move(depthImageResource)),
-			  _depthImageView(std::move(depthImageView)), _uniformBufferResources(std::move(uniformBufferResources)),
-			  _descriptorPool(std::move(descriptorPool)), _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
+			  _textureSampler(std::move(textureSampler)), _sampleCount(sampleCount),
+			  _multisampleColorImageResource(std::move(multisampleColorImageResource)),
+			  _multisampleColorImageView(std::move(multisampleColorImageView)), _depthFormat(depthFormat),
+			  _depthImageResource(std::move(depthImageResource)), _depthImageView(std::move(depthImageView)),
+			  _uniformBufferResources(std::move(uniformBufferResources)), _descriptorPool(std::move(descriptorPool)),
+			  _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
 			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
 			  _inFlightFences(std::move(inFlightFences))
 		{}
@@ -104,6 +110,10 @@ namespace PgE
 		ImageResource _textureImageResource;
 		vk::raii::ImageView _textureImageView;
 		vk::raii::Sampler _textureSampler;
+
+		vk::SampleCountFlagBits _sampleCount;
+		ImageResource _multisampleColorImageResource;
+		vk::raii::ImageView _multisampleColorImageView;
 
 		vk::Format _depthFormat;
 		ImageResource _depthImageResource;
