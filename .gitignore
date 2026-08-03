@@ -10,3 +10,6 @@ riderModule.iml
 todo.txt
 # Ignore worktrees' IDE settings under this name
 .idea/.idea.PGE*
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/

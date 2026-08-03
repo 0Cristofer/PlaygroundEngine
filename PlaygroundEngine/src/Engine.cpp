@@ -15,26 +15,41 @@ namespace PgE
 
 	std::expected<void, BootError> Engine::BootPresentation()
 	{
-		auto window = Window::Create(WindowSpecification{});
+		auto windowServer = WindowServer::Create();
+		if (!windowServer)
+		{
+			PGE_LOG(Error, "Presentation bootstrap failed: window server error {}", ToString(windowServer.error()));
+			return std::unexpected(BootError::Platform);
+		}
+
+		_windowServer = std::move(*windowServer);
+
+		const std::expected<Window*, WindowError> window = _windowServer->GetWindows().Create(WindowSpecification{});
 		if (!window)
 		{
 			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
 			return std::unexpected(BootError::Platform);
 		}
 
-		_window = std::move(*window);
+		_window = window.value();
+
+		// Which close request ends the application (last window versus main window) is root policy,
+		// not the window server's; the server only reports that one was asked for.
+
+		_closeRequestedSubscription = _windowServer->OnCloseRequested().Subscribe([this] { RequestStop(); });
+
 		return {};
 	}
 
 	std::expected<void, BootError> Engine::BootRendering()
 	{
-		if (!_window)
+		if (!_windowServer || !_window)
 		{
 			PGE_LOG(Error, "Rendering bootstrap failed: can't create renderer without window");
 			return std::unexpected(BootError::Rendering);
 		}
 
-		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_window);
+		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_windowServer, *_window);
 
 		if (!renderer)
 		{
@@ -44,10 +59,12 @@ namespace PgE
 
 		_rendererVulkan = std::move(*renderer);
 
-		// Wired at the root rather than the renderer subscribing itself: the window is the event
-		// source and the renderer only consumes, so neither has to know how the other is built.
+		// Wired at the root rather than the renderer subscribing itself: the window server is the
+		// event source and the renderer only consumes, so neither has to know how the other is
+		// built.
 
-		_window->SetFramebufferResizedCallback([this](const FramebufferSize) { _rendererVulkan->NotifyFramebufferResized(); });
+		_windowResizedSubscription =
+			_windowServer->OnWindowResized().Subscribe([this](FramebufferSize) { _rendererVulkan->NotifyFramebufferResized(); });
 
 		return {};
 	}
@@ -81,8 +98,6 @@ namespace PgE
 		}
 		_world = std::make_unique<World>();
 
-		// TODO: WireSignals() once the first signal exists.
-
 		_app = _appDescriptor.GetApp();
 
 		EngineContext engineContext;
@@ -111,10 +126,14 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
 	{
-		if (_window)
+		if (_windowServer)
 		{
-			_window->PollEvents();
+			_windowServer->Pump(_platformEvents);
+			_windowServer->DispatchWindowEvents(_platformEvents);
 		}
+
+		// TODO: the debug overlay adapter and the input state layer both read _platformEvents here,
+		// as a read-only span over the same batch.
 
 		_world->Run();
 
@@ -128,14 +147,7 @@ namespace PgE
 			}
 		}
 
-		if (_window)
-		{
-			if (_window->ShouldClose())
-			{
-				RequestStop();
-			}
-		}
-		else
+		if (!_windowServer)
 		{
 			// Headless (presentation disabled): nothing drives lifetime yet, so run a
 			// single frame. Replaced when a headless target grows its own exit condition
@@ -160,19 +172,19 @@ namespace PgE
 		_app.reset();
 		_world.reset();
 
-		// Dropped before the renderer it points at, so a late resize event cannot reach a
-		// destroyed subscriber.
-
-		if (_window)
-		{
-			_window->SetFramebufferResizedCallback({});
-		}
+		_closeRequestedSubscription.Reset();
+		_windowResizedSubscription.Reset();
 
 		if (_rendererVulkan)
 		{
 			_rendererVulkan->Teardown();
 		}
 		_rendererVulkan.reset();
-		_window.reset();
+
+		// The renderer holds a surface referencing the window, so windows outlive it and the
+		// connection outlives them.
+
+		_window = nullptr;
+		_windowServer.reset();
 	}
 }

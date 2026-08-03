@@ -353,7 +353,7 @@ target_sources(
 		src/Paths.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
-		src/Window.cpp
+		src/WindowServer.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
 		src/Reflection/Core/FunctionInfo.cpp
@@ -376,9 +376,11 @@ target_sources(
 				src/Paths.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
-				src/Window.cppm
-				src/WindowTypes.cppm
-				src/WindowBackend.GLFW.cppm
+				src/Signal.cppm
+				src/WindowServer.cppm
+				src/WindowServerTypes.cppm
+				src/WindowServerEvents.cppm
+				src/WindowServerBackend.GLFW.cppm
 				src/Component/Components.cppm
 				src/Component/ComponentBase.cppm
 				src/Component/TransformComponent.cppm
