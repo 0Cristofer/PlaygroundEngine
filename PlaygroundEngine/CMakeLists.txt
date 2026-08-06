@@ -353,7 +353,11 @@ target_sources(
 		src/Paths.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
-		src/WindowServer.cpp
+		src/WindowServer/WindowServer.cpp
+		src/WindowServer/Window.cpp
+		src/WindowServer/Backend/WindowServerBackend.GLFW.cpp
+		src/WindowServer/Backend/WindowBackend.GLFW.cpp
+		src/WindowServer/Backend/GlfwInputTranslation.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
 		src/Reflection/Core/FunctionInfo.cpp
@@ -376,11 +380,22 @@ target_sources(
 				src/Paths.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
-				src/Signal.cppm
-				src/WindowServer.cppm
-				src/WindowServerTypes.cppm
-				src/WindowServerEvents.cppm
-				src/WindowServerBackend.GLFW.cppm
+				src/PlatformEvents/PlatformEvents.cppm
+				src/PlatformEvents/InputCode.cppm
+				src/PlatformEvents/InputModifiers.cppm
+				src/PlatformEvents/InputLockState.cppm
+				src/PlatformEvents/PlatformKeyToken.cppm
+				src/PlatformEvents/PlatformEvent.cppm
+				src/PlatformEvents/PlatformEventRecord.cppm
+				src/WindowServer/WindowServer.cppm
+				src/WindowServer/Window.cppm
+				src/WindowServer/WindowSizes.cppm
+				src/WindowServer/WindowSpecification.cppm
+				src/WindowServer/WindowServerErrors.cppm
+				src/WindowServer/BackendDeclarations.cppm
+				src/WindowServer/Backend/WindowServerBackend.GLFW.cppm
+				src/WindowServer/Backend/WindowBackend.GLFW.cppm
+				src/WindowServer/Backend/GlfwInputTranslation.cppm
 				src/Component/Components.cppm
 				src/Component/ComponentBase.cppm
 				src/Component/TransformComponent.cppm

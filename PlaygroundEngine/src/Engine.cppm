@@ -62,7 +62,6 @@ namespace PgE
 		explicit Engine(AppDescriptorBase& appDescriptor);
 
 		[[nodiscard]] std::expected<void, BootError> Boot();
-		// pre: a successful Boot() ran first, so the app and world exist.
 		void StartRun() pre(_app != nullptr && _world != nullptr);
 		void Shutdown();
 
@@ -78,25 +77,12 @@ namespace PgE
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;
 
-		// Members double as the construction-order record: L1 first, then L2,
-		// app last; Shutdown() resets in reverse.
+		PlatformEventRecord _platformEvents;
+
 		std::unique_ptr<WindowServer> _windowServer;
 		Window* _window = nullptr;
 
-		// The root owns the record and hands it to the pump, so a test can fill one by hand and
-		// drive every consumer with no window, and a replay producer is a swap here rather than an
-		// injection into somebody else's buffer.
-
-		PlatformEventRecord _platformEvents;
-
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
-
-		// Declared after the renderer so they are dropped before it: a subscription outliving its
-		// subscriber would deliver a resize into a destroyed object.
-
-		SignalSubscription _windowResizedSubscription;
-		SignalSubscription _closeRequestedSubscription;
-
 		std::unique_ptr<World> _world;
 		std::unique_ptr<AppBase> _app;
 	};

@@ -24,7 +24,7 @@ namespace PgE
 
 		_windowServer = std::move(*windowServer);
 
-		const std::expected<Window*, WindowError> window = _windowServer->GetWindows().Create(WindowSpecification{});
+		const std::expected<Window*, WindowError> window = _windowServer->CreateWindow(WindowSpecification{});
 		if (!window)
 		{
 			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
@@ -32,11 +32,6 @@ namespace PgE
 		}
 
 		_window = window.value();
-
-		// Which close request ends the application (last window versus main window) is root policy,
-		// not the window server's; the server only reports that one was asked for.
-
-		_closeRequestedSubscription = _windowServer->OnCloseRequested().Subscribe([this] { RequestStop(); });
 
 		return {};
 	}
@@ -59,13 +54,6 @@ namespace PgE
 
 		_rendererVulkan = std::move(*renderer);
 
-		// Wired at the root rather than the renderer subscribing itself: the window server is the
-		// event source and the renderer only consumes, so neither has to know how the other is
-		// built.
-
-		_windowResizedSubscription =
-			_windowServer->OnWindowResized().Subscribe([this](FramebufferSize) { _rendererVulkan->NotifyFramebufferResized(); });
-
 		return {};
 	}
 
@@ -77,7 +65,7 @@ namespace PgE
 		Log::Configure();
 
 		const AppCapabilities capabilities = _appDescriptor.GetCapabilities();
-		PGE_LOG(Info, "Booting with capabilities: {}", PgE::ToString(capabilities));
+		PGE_LOG(Info, "Booting with capabilities: {}", ToString(capabilities));
 
 		if (capabilities.Presentation)
 		{
@@ -86,8 +74,6 @@ namespace PgE
 				return std::unexpected(presented.error());
 			}
 		}
-
-		// TODO L2: systems in explicit dependency order, constructor injection.
 
 		if (capabilities.Rendering)
 		{
@@ -126,14 +112,27 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
 	{
+		_platformEvents.Clear();
+
 		if (_windowServer)
 		{
 			_windowServer->Pump(_platformEvents);
-			_windowServer->DispatchWindowEvents(_platformEvents);
 		}
 
-		// TODO: the debug overlay adapter and the input state layer both read _platformEvents here,
-		// as a read-only span over the same batch.
+		for (auto& event : _platformEvents.GetEvents())
+		{
+			PGE_LOG(Trace, ToString(event));
+		}
+
+		if (_rendererVulkan && _platformEvents.HasEvent(PlatformEventType::WindowResized))
+		{
+			_rendererVulkan->NotifyFramebufferResized();
+		}
+
+		if (_platformEvents.HasEvent(PlatformEventType::CloseRequested))
+		{
+			RequestStop();
+		}
 
 		_world->Run();
 
@@ -171,9 +170,6 @@ namespace PgE
 
 		_app.reset();
 		_world.reset();
-
-		_closeRequestedSubscription.Reset();
-		_windowResizedSubscription.Reset();
 
 		if (_rendererVulkan)
 		{

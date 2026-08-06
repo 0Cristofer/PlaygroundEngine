@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
 import std;
-import PlaygroundEngine.WindowServer;
+import PlaygroundEngine.PlatformEvents;
 
 namespace
 {
@@ -174,6 +174,95 @@ TEST_CASE("The keyboard, pointer and gamepad ranges do not overlap")
 
 		REQUIRE(matchingRangeCount <= 1);
 	}
+}
+
+TEST_CASE("Appending a batch preserves order and leaves earlier events alone")
+{
+	// The producer contract: a producer that cannot write straight into the record hands over what
+	// it accumulated, and a second producer's batch lands after the first rather than replacing it.
+
+	PgE::PlatformEventRecord record;
+	PgE::PlatformEventRecord firstProducerBatch;
+	PgE::PlatformEventRecord secondProducerBatch;
+
+	firstProducerBatch.Append(MakeKeyEvent(PgE::PlatformEventType::KeyPressed, PgE::InputCode::KeyW, 1));
+	firstProducerBatch.Append(MakeKeyEvent(PgE::PlatformEventType::KeyReleased, PgE::InputCode::KeyW, 2));
+	secondProducerBatch.Append(MakeKeyEvent(PgE::PlatformEventType::KeyPressed, PgE::InputCode::KeyS, 3));
+
+	record.Append(firstProducerBatch.GetEvents());
+	record.Append(secondProducerBatch.GetEvents());
+
+	const std::span<const PgE::PlatformEvent> events = record.GetEvents();
+
+	REQUIRE(events.size() == 3);
+	CHECK(events[0].Timestamp == 1);
+	CHECK(events[1].Timestamp == 2);
+	CHECK(events[2].Code == PgE::InputCode::KeyS);
+
+	// Appending an empty batch is a no-op rather than a reset.
+
+	record.Append(PgE::PlatformEventRecord{}.GetEvents());
+
+	CHECK(record.GetEvents().size() == 3);
+}
+
+TEST_CASE("Lock state and held modifiers are independent facts")
+{
+	// A lock key is bindable as an ordinary key, which is why its press arrives as a KeyPressed with
+	// its own InputCode. The latched state is separate, and a consumer reading one must not
+	// accidentally read the other.
+
+	PgE::PlatformEventRecord record;
+
+	record.Append(PgE::PlatformEvent{
+		.Type = PgE::PlatformEventType::KeyPressed, .Code = PgE::InputCode::KeyCapsLock, .Locks = PgE::InputLockState{.CapsLock = false}});
+	record.Append(PgE::PlatformEvent{.Type = PgE::PlatformEventType::KeyPressed,
+									 .Code = PgE::InputCode::KeyS,
+									 .Modifiers = PgE::InputModifiers{.Control = true},
+									 .Locks = PgE::InputLockState{.CapsLock = true}});
+
+	int capsLockBindingActivations = 0;
+	int saveBindingActivations = 0;
+
+	for (const PgE::PlatformEvent& event : record.GetEvents())
+	{
+		if (event.Code == PgE::InputCode::KeyCapsLock)
+		{
+			++capsLockBindingActivations;
+		}
+
+		if (event.Code == PgE::InputCode::KeyS && event.Modifiers.Control)
+		{
+			++saveBindingActivations;
+		}
+	}
+
+	CHECK(capsLockBindingActivations == 1);
+	CHECK(saveBindingActivations == 1);
+
+	CHECK_FALSE(record.GetEvents()[0].Locks.CapsLock);
+	CHECK(record.GetEvents()[1].Locks.CapsLock);
+}
+
+TEST_CASE("HasEvent answers for the batch without exposing the payload")
+{
+	// What the root uses in place of a notification mechanism: the batch is already the data seam,
+	// so noticing a close request is a query over it rather than a subscription.
+
+	PgE::PlatformEventRecord record;
+
+	CHECK_FALSE(record.HasEvent(PgE::PlatformEventType::CloseRequested));
+
+	record.Append(PgE::PlatformEvent{.Type = PgE::PlatformEventType::PointerMoved, .X = 1.0f, .Y = 2.0f});
+	record.Append(PgE::PlatformEvent{.Type = PgE::PlatformEventType::CloseRequested});
+
+	CHECK(record.HasEvent(PgE::PlatformEventType::CloseRequested));
+	CHECK(record.HasEvent(PgE::PlatformEventType::PointerMoved));
+	CHECK_FALSE(record.HasEvent(PgE::PlatformEventType::WindowResized));
+
+	record.Clear();
+
+	CHECK_FALSE(record.HasEvent(PgE::PlatformEventType::CloseRequested));
 }
 
 TEST_CASE("PlatformEvent stays a flat, trivially copyable POD")
