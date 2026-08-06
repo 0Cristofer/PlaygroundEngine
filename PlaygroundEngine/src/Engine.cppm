@@ -2,7 +2,7 @@ export module PlaygroundEngine;
 
 export import PlaygroundEngine.World;
 export import PlaygroundEngine.GameObject;
-export import PlaygroundEngine.Window;
+export import PlaygroundEngine.WindowServer;
 
 import PlaygroundEngine.App;
 import PlaygroundEngine.Renderer.Vulkan;
@@ -62,7 +62,6 @@ namespace PgE
 		explicit Engine(AppDescriptorBase& appDescriptor);
 
 		[[nodiscard]] std::expected<void, BootError> Boot();
-		// pre: a successful Boot() ran first, so the app and world exist.
 		void StartRun() pre(_app != nullptr && _world != nullptr);
 		void Shutdown();
 
@@ -78,9 +77,11 @@ namespace PgE
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;
 
-		// Members double as the construction-order record: L1 first, then L2,
-		// app last; Shutdown() resets in reverse.
-		std::unique_ptr<Window> _window;
+		PlatformEventRecord _platformEvents;
+
+		std::unique_ptr<WindowServer> _windowServer;
+		Window* _window = nullptr;
+
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<World> _world;
 		std::unique_ptr<AppBase> _app;

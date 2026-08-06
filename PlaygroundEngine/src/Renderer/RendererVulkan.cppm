@@ -1,6 +1,6 @@
 ﻿export module PlaygroundEngine.Renderer.Vulkan;
 
-import PlaygroundEngine.Window;
+import PlaygroundEngine.WindowServer;
 
 export import :VulkanTypes;
 
@@ -18,7 +18,7 @@ namespace PgE
 	{
 	public:
 		[[nodiscard]] static std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> Create(
-			const RendererSpecification& specification, const Window& window);
+			const RendererSpecification& specification, const WindowServer& windowServer, const Window& window);
 
 		void Teardown() const;
 

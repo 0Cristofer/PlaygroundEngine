@@ -9,7 +9,7 @@ module PlaygroundEngine.Renderer.Vulkan;
 import std;
 import vulkan;
 import PlaygroundEngine.Log;
-import PlaygroundEngine.Window;
+import PlaygroundEngine.WindowServer;
 import PlaygroundEngine.Reflection;
 import PlaygroundEngine.Paths;
 import PlaygroundEngine.Files;
@@ -62,9 +62,10 @@ namespace PgE
 	}
 #endif
 
-	static CreationResult<std::vector<const char*>> CollectRequiredInstanceExtensions(const vk::raii::Context& context, const Window& window)
+	static CreationResult<std::vector<const char*>> CollectRequiredInstanceExtensions(const vk::raii::Context& context,
+																					  const WindowServer& windowServer)
 	{
-		std::expected<std::span<const char* const>, VulkanWindowError> requiredWindowExtensionsResult = window.GetRequiredVulkanExtensions();
+		std::expected<std::span<const char* const>, VulkanWindowError> requiredWindowExtensionsResult = windowServer.GetRequiredVulkanExtensions();
 		if (!requiredWindowExtensionsResult)
 		{
 			return std::unexpected(
@@ -127,7 +128,7 @@ namespace PgE
 
 	CreationResult<vk::raii::Instance> CreateInstance(const vk::raii::Context& context,
 													  const RendererSpecification& specification,
-													  const Window& window)
+													  const WindowServer& windowServer)
 	{
 		const vk::ApplicationInfo applicationInfo{.pApplicationName = specification.ApplicationName.c_str(),
 												  .applicationVersion = vk::makeVersion(1, 0, 0),
@@ -135,7 +136,7 @@ namespace PgE
 												  .engineVersion = vk::makeVersion(1, 0, 0),
 												  .apiVersion = vk::ApiVersion14};
 
-		CreationResult<std::vector<const char*>> requiredExtensionsResult = CollectRequiredInstanceExtensions(context, window);
+		CreationResult<std::vector<const char*>> requiredExtensionsResult = CollectRequiredInstanceExtensions(context, windowServer);
 		if (!requiredExtensionsResult)
 		{
 			return std::unexpected(requiredExtensionsResult.error());

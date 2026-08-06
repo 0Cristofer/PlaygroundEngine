@@ -15,26 +15,36 @@ namespace PgE
 
 	std::expected<void, BootError> Engine::BootPresentation()
 	{
-		auto window = Window::Create(WindowSpecification{});
+		auto windowServer = WindowServer::Create();
+		if (!windowServer)
+		{
+			PGE_LOG(Error, "Presentation bootstrap failed: window server error {}", ToString(windowServer.error()));
+			return std::unexpected(BootError::Platform);
+		}
+
+		_windowServer = std::move(*windowServer);
+
+		const std::expected<Window*, WindowError> window = _windowServer->CreateWindow(WindowSpecification{});
 		if (!window)
 		{
 			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
 			return std::unexpected(BootError::Platform);
 		}
 
-		_window = std::move(*window);
+		_window = window.value();
+
 		return {};
 	}
 
 	std::expected<void, BootError> Engine::BootRendering()
 	{
-		if (!_window)
+		if (!_windowServer || !_window)
 		{
 			PGE_LOG(Error, "Rendering bootstrap failed: can't create renderer without window");
 			return std::unexpected(BootError::Rendering);
 		}
 
-		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_window);
+		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_windowServer, *_window);
 
 		if (!renderer)
 		{
@@ -43,11 +53,6 @@ namespace PgE
 		}
 
 		_rendererVulkan = std::move(*renderer);
-
-		// Wired at the root rather than the renderer subscribing itself: the window is the event
-		// source and the renderer only consumes, so neither has to know how the other is built.
-
-		_window->SetFramebufferResizedCallback([this](const FramebufferSize) { _rendererVulkan->NotifyFramebufferResized(); });
 
 		return {};
 	}
@@ -60,7 +65,7 @@ namespace PgE
 		Log::Configure();
 
 		const AppCapabilities capabilities = _appDescriptor.GetCapabilities();
-		PGE_LOG(Info, "Booting with capabilities: {}", PgE::ToString(capabilities));
+		PGE_LOG(Info, "Booting with capabilities: {}", ToString(capabilities));
 
 		if (capabilities.Presentation)
 		{
@@ -70,8 +75,6 @@ namespace PgE
 			}
 		}
 
-		// TODO L2: systems in explicit dependency order, constructor injection.
-
 		if (capabilities.Rendering)
 		{
 			if (const auto rendering = BootRendering(); !rendering)
@@ -80,8 +83,6 @@ namespace PgE
 			}
 		}
 		_world = std::make_unique<World>();
-
-		// TODO: WireSignals() once the first signal exists.
 
 		_app = _appDescriptor.GetApp();
 
@@ -111,9 +112,26 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
 	{
-		if (_window)
+		_platformEvents.Clear();
+
+		if (_windowServer)
 		{
-			_window->PollEvents();
+			_windowServer->Pump(_platformEvents);
+		}
+
+		for (auto& event : _platformEvents.GetEvents())
+		{
+			PGE_LOG(Trace, ToString(event));
+		}
+
+		if (_rendererVulkan && _platformEvents.HasEvent(PlatformEventType::WindowResized))
+		{
+			_rendererVulkan->NotifyFramebufferResized();
+		}
+
+		if (_platformEvents.HasEvent(PlatformEventType::CloseRequested))
+		{
+			RequestStop();
 		}
 
 		_world->Run();
@@ -128,14 +146,7 @@ namespace PgE
 			}
 		}
 
-		if (_window)
-		{
-			if (_window->ShouldClose())
-			{
-				RequestStop();
-			}
-		}
-		else
+		if (!_windowServer)
 		{
 			// Headless (presentation disabled): nothing drives lifetime yet, so run a
 			// single frame. Replaced when a headless target grows its own exit condition
@@ -160,19 +171,16 @@ namespace PgE
 		_app.reset();
 		_world.reset();
 
-		// Dropped before the renderer it points at, so a late resize event cannot reach a
-		// destroyed subscriber.
-
-		if (_window)
-		{
-			_window->SetFramebufferResizedCallback({});
-		}
-
 		if (_rendererVulkan)
 		{
 			_rendererVulkan->Teardown();
 		}
 		_rendererVulkan.reset();
-		_window.reset();
+
+		// The renderer holds a surface referencing the window, so windows outlive it and the
+		// connection outlives them.
+
+		_window = nullptr;
+		_windowServer.reset();
 	}
 }

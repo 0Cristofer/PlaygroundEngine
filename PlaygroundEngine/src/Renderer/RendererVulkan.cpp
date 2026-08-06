@@ -64,11 +64,11 @@ namespace PgE
 	}
 
 	std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> RendererVulkan::Create(
-		const RendererSpecification& specification, const Window& window)
+		const RendererSpecification& specification, const WindowServer& windowServer, const Window& window)
 	{
 		vk::raii::Context context;
 
-		CreationResult<vk::raii::Instance> instanceResult = CreateInstance(context, specification, window);
+		CreationResult<vk::raii::Instance> instanceResult = CreateInstance(context, specification, windowServer);
 		if (!instanceResult)
 		{
 			return std::unexpected(instanceResult.error());

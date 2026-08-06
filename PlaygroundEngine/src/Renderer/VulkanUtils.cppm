@@ -3,7 +3,7 @@ export module PlaygroundEngine.Renderer.Vulkan:VulkanUtils;
 import std;
 import vulkan;
 
-import PlaygroundEngine.Window;
+import PlaygroundEngine.WindowServer;
 
 import :VulkanTypes;
 
@@ -37,7 +37,7 @@ namespace PgE
 
 	CreationResult<vk::raii::Instance> CreateInstance(const vk::raii::Context& context,
 													  const RendererSpecification& specification,
-													  const Window& window);
+													  const WindowServer& windowServer);
 	CreationResult<vk::raii::DebugUtilsMessengerEXT> CreateDebugMessenger(const vk::raii::Instance& instance);
 	CreationResult<vk::raii::SurfaceKHR> CreateSurface(const vk::raii::Instance& instance, const Window& window);
 	CreationResult<vk::raii::PhysicalDevice> SelectPhysicalDevice(const vk::raii::Instance& instance,
