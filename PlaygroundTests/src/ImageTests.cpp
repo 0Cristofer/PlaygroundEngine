@@ -68,3 +68,59 @@ TEST_CASE("DecodeImage reports a failure for an empty span")
 	REQUIRE_FALSE(result.has_value());
 	CHECK(result.error() == PgE::ImageError::DecodeFailed);
 }
+
+TEST_CASE("EncodeImagePng round-trips through DecodeImage")
+{
+	// PNG is lossless, so the decoded pixels have to match what was encoded byte for byte. A
+	// non-uniform image with a varying alpha channel, so a dropped or reordered channel shows up
+	// rather than being masked by symmetry.
+
+	const PgE::Image original{.Pixels = {std::byte{10}, std::byte{20}, std::byte{30}, std::byte{255}, std::byte{40}, std::byte{50}, std::byte{60},
+										 std::byte{128}, std::byte{70}, std::byte{80}, std::byte{90}, std::byte{64}, std::byte{100}, std::byte{110},
+										 std::byte{120}, std::byte{255}},
+							  .Width = 2,
+							  .Height = 2};
+
+	const std::expected<std::vector<std::byte>, PgE::ImageError> encoded = PgE::EncodeImagePng(original);
+	REQUIRE(encoded.has_value());
+
+	const std::expected<PgE::Image, PgE::ImageError> decoded = PgE::DecodeImage(encoded.value());
+	REQUIRE(decoded.has_value());
+
+	CHECK(decoded->Width == original.Width);
+	CHECK(decoded->Height == original.Height);
+	CHECK(decoded->Pixels == original.Pixels);
+}
+
+TEST_CASE("EncodeImagePng rejects a pixel buffer that does not match the dimensions")
+{
+	// The guard that matters for a GPU readback: a buffer sized for a stale extent would otherwise
+	// be encoded as a skewed image rather than reported.
+
+	const PgE::Image mismatched{.Pixels = std::vector<std::byte>(2 * 2 * PgE::Image::BytesPerPixel), .Width = 4, .Height = 4};
+
+	const std::expected<std::vector<std::byte>, PgE::ImageError> result = PgE::EncodeImagePng(mismatched);
+
+	REQUIRE_FALSE(result.has_value());
+	CHECK(result.error() == PgE::ImageError::PixelCountMismatch);
+}
+
+TEST_CASE("EncodeImagePng rejects dimensions that overflow the encoder's own arithmetic")
+{
+	// Neither axis alone overflows stb's int sizing; their product does. Rejected before the pixel
+	// count is looked at, so the case costs no allocation.
+
+	const std::expected<std::vector<std::byte>, PgE::ImageError> result =
+		PgE::EncodeImagePng(PgE::Image{.Pixels = {}, .Width = 65536, .Height = 16384});
+
+	REQUIRE_FALSE(result.has_value());
+	CHECK(result.error() == PgE::ImageError::DimensionsTooLarge);
+}
+
+TEST_CASE("EncodeImagePng rejects a zero-extent image")
+{
+	const std::expected<std::vector<std::byte>, PgE::ImageError> result = PgE::EncodeImagePng(PgE::Image{});
+
+	REQUIRE_FALSE(result.has_value());
+	CHECK(result.error() == PgE::ImageError::EncodeFailed);
+}

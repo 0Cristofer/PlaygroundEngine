@@ -69,6 +69,7 @@ target_sources(
 		src/Reflection/ReflectionNamespaceTests.cpp
 		src/LogTests.cpp
 		src/ImageTests.cpp
+		src/FilesTests.cpp
 		src/ModelTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp

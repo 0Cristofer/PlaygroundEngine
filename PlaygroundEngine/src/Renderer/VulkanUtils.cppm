@@ -15,6 +15,12 @@ namespace PgE
 		std::vector<vk::Image> Images;
 		std::vector<vk::raii::ImageView> ImageViews;
 		vk::Extent2D Extent;
+
+		// Whether the images were created able to be copied out of. Reported rather than required:
+		// only frame capture wants it, and the specification guarantees nothing beyond colour
+		// attachment, so a surface without it still renders.
+
+		bool SupportsTransferSource;
 	};
 
 	struct BufferResource
@@ -68,6 +74,24 @@ namespace PgE
 														vk::BufferUsageFlags usage,
 														vk::MemoryPropertyFlags properties);
 	CreationResult<void> UploadToDeviceMemory(const vk::raii::DeviceMemory& deviceMemory, std::span<const std::byte> data);
+
+	// Pulls a colour image back into host memory, four bytes per pixel in the image's own channel
+	// order. The destination is a buffer, not a host-visible image, because a buffer copy is tightly
+	// packed by definition where an image carries an implementation-defined row pitch.
+
+	// currentLayout is both the layout the image is in on entry and the one it is restored to, so
+	// the caller's own layout tracking is untouched. Waits for the copy to finish before returning.
+
+	// The four-bytes-per-pixel size is assumed, not derived: the format is not a parameter, so a
+	// caller holding a wider one must reject it before calling rather than after.
+
+	CreationResult<std::vector<std::byte>> ReadImageToHost(const vk::raii::PhysicalDevice& physicalDevice,
+														   const vk::raii::Device& logicalDevice,
+														   const vk::raii::Queue& queue,
+														   const vk::raii::CommandPool& commandPool,
+														   vk::Image image,
+														   vk::ImageLayout currentLayout,
+														   vk::Extent2D extent);
 
 	// Staging buffer, upload, device-local buffer, copy. The staging buffer dies with the call.
 

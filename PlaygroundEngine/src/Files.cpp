@@ -51,4 +51,29 @@ namespace PgE
 	{
 		return ReadWholeFile<std::string>(path);
 	}
+
+	std::expected<void, FileError> WriteBinaryFile(const std::filesystem::path& path, const std::span<const std::byte> bytes)
+	{
+		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		if (!stream)
+		{
+			return std::unexpected(FileError::UnableToOpen);
+		}
+
+		if (!bytes.empty() && !stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())))
+		{
+			return std::unexpected(FileError::UnableToWrite);
+		}
+
+		// The write above only fills the stream buffer, so a full disk or a closed pipe surfaces at
+		// the flush. Explicit rather than left to the destructor, which would discard the failure.
+
+		stream.flush();
+		if (!stream)
+		{
+			return std::unexpected(FileError::UnableToWrite);
+		}
+
+		return {};
+	}
 }

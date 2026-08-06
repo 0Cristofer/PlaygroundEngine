@@ -127,14 +127,15 @@ target_include_directories(StbImage SYSTEM PUBLIC "${stb_SOURCE_DIR}")
 
 target_compile_options(StbImage PRIVATE -w)
 
-# STBI_NO_STDIO routes every load through PlaygroundEngine.Files instead of stb's own file handling,
-# keeping one I/O path and one file-error type.
+# STBI_NO_STDIO and STBI_WRITE_NO_STDIO route every load and store through PlaygroundEngine.Files
+# instead of stb's own file handling, keeping one I/O path and one file-error type.
 target_compile_definitions(
 	StbImage
 	PUBLIC
 		STBI_NO_STDIO
 		STBI_ONLY_JPEG
 		STBI_ONLY_PNG
+		STBI_WRITE_NO_STDIO
 )
 
 set_target_properties(

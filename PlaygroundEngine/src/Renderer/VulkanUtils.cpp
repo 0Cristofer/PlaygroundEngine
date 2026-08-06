@@ -415,6 +415,18 @@ namespace PgE
 									 .height = std::clamp<std::uint32_t>(framebufferSize.Height, surfaceCapabilities.minImageExtent.height,
 																		 surfaceCapabilities.maxImageExtent.height)};
 
+		// eTransferSrc is what lets a presented frame be copied back out for a capture, and only the
+		// capture path wants it. Requested when the surface offers it and dropped when it does not,
+		// so a surface offering the specification's bare minimum still renders.
+
+		const bool supportsTransferSource = static_cast<bool>(surfaceCapabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc);
+
+		vk::ImageUsageFlags imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+		if (supportsTransferSource)
+		{
+			imageUsage |= vk::ImageUsageFlagBits::eTransferSrc;
+		}
+
 		unsigned minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
 		if (0 < surfaceCapabilities.maxImageCount && surfaceCapabilities.maxImageCount < minImageCount)
 		{
@@ -427,7 +439,7 @@ namespace PgE
 													   .imageColorSpace = swapChainSurfaceFormat.colorSpace,
 													   .imageExtent = swapChainExtent,
 													   .imageArrayLayers = 1,
-													   .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+													   .imageUsage = imageUsage,
 													   .imageSharingMode = vk::SharingMode::eExclusive,
 													   .preTransform = surfaceCapabilities.currentTransform,
 													   .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
@@ -458,7 +470,8 @@ namespace PgE
 		return SwapChainResources{.SwapChain = std::move(swapChain),
 								  .Images = std::move(swapChainImages),
 								  .ImageViews = std::move(swapChainImageViewsResult.value()),
-								  .Extent = swapChainExtent};
+								  .Extent = swapChainExtent,
+								  .SupportsTransferSource = supportsTransferSource};
 	}
 
 	CreationResult<vk::raii::PipelineLayout> CreatePipelineLayout(const vk::raii::Device& logicalDevice,
@@ -678,6 +691,78 @@ namespace PgE
 		deviceMemory.unmapMemory();
 
 		return {};
+	}
+
+	CreationResult<std::vector<std::byte>> ReadImageToHost(const vk::raii::PhysicalDevice& physicalDevice,
+														   const vk::raii::Device& logicalDevice,
+														   const vk::raii::Queue& queue,
+														   const vk::raii::CommandPool& commandPool,
+														   const vk::Image image,
+														   const vk::ImageLayout currentLayout,
+														   const vk::Extent2D extent)
+	{
+		constexpr vk::DeviceSize bytesPerPixel = 4;
+		const vk::DeviceSize bufferSize = static_cast<vk::DeviceSize>(extent.width) * extent.height * bytesPerPixel;
+
+		CreationResult<BufferResource> readbackBufferResult =
+			CreateBufferResource(physicalDevice, logicalDevice, bufferSize, vk::BufferUsageFlagBits::eTransferDst,
+								 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		if (!readbackBufferResult)
+		{
+			return std::unexpected(readbackBufferResult.error());
+		}
+		const BufferResource& readbackBuffer = readbackBufferResult.value();
+
+		CreationResult<vk::raii::CommandBuffer> commandBufferResult = BeginSingleTimeCommands(logicalDevice, commandPool);
+		if (!commandBufferResult)
+		{
+			return std::unexpected(commandBufferResult.error());
+		}
+		vk::raii::CommandBuffer& commandBuffer = commandBufferResult.value();
+
+		constexpr vk::ImageSubresourceRange subresourceRange{
+			.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
+
+		// eAllCommands on the outer side of both barriers: the caller's layout is arbitrary, so there
+		// is no narrower stage that is known to cover whatever last wrote the image.
+
+		TransitionImageLayout(commandBuffer, image, currentLayout, vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits2::eNone,
+							  vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eAllCommands, vk::PipelineStageFlagBits2::eTransfer,
+							  subresourceRange);
+
+		// Zeroed bufferRowLength and bufferImageHeight mean "tightly packed to imageExtent".
+
+		const vk::BufferImageCopy region{
+			.bufferOffset = 0,
+			.bufferRowLength = 0,
+			.bufferImageHeight = 0,
+			.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+			.imageOffset = {.x = 0, .y = 0, .z = 0},
+			.imageExtent = {.width = extent.width, .height = extent.height, .depth = 1}};
+
+		commandBuffer.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, *readbackBuffer.Buffer, region);
+
+		TransitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferSrcOptimal, currentLayout, vk::AccessFlagBits2::eTransferRead,
+							  vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eTransfer, vk::PipelineStageFlagBits2::eAllCommands,
+							  subresourceRange);
+
+		if (CreationResult<void> endResult = EndSingleTimeCommands(queue, std::move(commandBuffer)); !endResult)
+		{
+			return std::unexpected(endResult.error());
+		}
+
+		std::expected<void*, vk::Result> mappedResult = readbackBuffer.DeviceMemory.mapMemory(0, bufferSize);
+		if (!mappedResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::DeviceMemoryMapError, ToString(mappedResult.error())));
+		}
+
+		const auto* const mappedBytes = static_cast<const std::byte*>(mappedResult.value());
+		std::vector pixels(mappedBytes, mappedBytes + bufferSize);
+
+		readbackBuffer.DeviceMemory.unmapMemory();
+
+		return pixels;
 	}
 
 	CreationResult<BufferResource> CreateDeviceLocalBuffer(const vk::raii::PhysicalDevice& physicalDevice,

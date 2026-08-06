@@ -26,6 +26,10 @@ namespace PgE
 
 		void NotifyFramebufferResized();
 
+		/// Queues a capture of the next presented frame, writing it to path as a PNG.
+		/// Fire and forget. The frame is not failed if the capture is.
+		void RequestCapture(std::filesystem::path path);
+
 	private:
 		RendererVulkan(vk::raii::Context context,
 					   vk::raii::Instance instance,
@@ -38,6 +42,7 @@ namespace PgE
 					   std::vector<vk::Image> swapChainImages,
 					   vk::SurfaceFormatKHR swapChainSurfaceFormat,
 					   vk::Extent2D swapChainExtent,
+					   bool swapChainSupportsTransferSource,
 					   std::vector<vk::raii::ImageView> swapChainImageViews,
 					   vk::raii::DescriptorSetLayout descriptorSetLayout,
 					   vk::raii::PipelineLayout pipelineLayout,
@@ -66,8 +71,9 @@ namespace PgE
 			  _physicalDevice(std::move(physicalDevice)), _logicalDevice(std::move(logicalDevice)), _queue(std::move(queue)),
 			  _swapChain(std::move(swapChain)), _swapChainImages(std::move(swapChainImages)),
 			  _swapChainSurfaceFormat(std::move(swapChainSurfaceFormat)), _swapChainExtent(std::move(swapChainExtent)),
-			  _swapChainImageViews(std::move(swapChainImageViews)), _descriptorSetLayout(std::move(descriptorSetLayout)),
-			  _pipelineLayout(std::move(pipelineLayout)), _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
+			  _swapChainSupportsTransferSource(swapChainSupportsTransferSource), _swapChainImageViews(std::move(swapChainImageViews)),
+			  _descriptorSetLayout(std::move(descriptorSetLayout)), _pipelineLayout(std::move(pipelineLayout)),
+			  _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
 			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)), _indexCount(indexCount),
 			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
 			  _textureSampler(std::move(textureSampler)), _sampleCount(sampleCount),
@@ -81,6 +87,7 @@ namespace PgE
 		{}
 
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex) const;
+		CreationResult<void> CaptureSwapChainImage(std::uint32_t imageIndex, const std::filesystem::path& path) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
 		void UpdateUniformBuffer(std::uint32_t frameIndex) const;
 
@@ -96,6 +103,7 @@ namespace PgE
 		std::vector<vk::Image> _swapChainImages;
 		vk::SurfaceFormatKHR _swapChainSurfaceFormat;
 		vk::Extent2D _swapChainExtent;
+		bool _swapChainSupportsTransferSource;
 		std::vector<vk::raii::ImageView> _swapChainImageViews;
 
 		vk::raii::DescriptorSetLayout _descriptorSetLayout;
@@ -131,5 +139,6 @@ namespace PgE
 
 		std::uint32_t _frameIndex = 0;
 		bool _framebufferResized = false;
+		std::optional<std::filesystem::path> _pendingCapturePath;
 	};
 }

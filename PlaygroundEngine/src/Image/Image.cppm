@@ -8,6 +8,9 @@ namespace PgE
 	{
 		EncodedDataTooLarge,
 		DecodeFailed,
+		DimensionsTooLarge,
+		PixelCountMismatch,
+		EncodeFailed,
 	};
 
 	export struct Image
@@ -24,4 +27,10 @@ namespace PgE
 	// archive or the network needing no separate entry point.
 
 	export std::expected<Image, ImageError> DecodeImage(std::span<const std::byte> encodedBytes);
+
+	// Encoding only, symmetric with decoding: the PNG bytes come back to the caller, who writes them
+	// through PlaygroundEngine.Files. Rows are assumed tightly packed at Width * BytesPerPixel, which
+	// is what a buffer copied off the GPU with copyImageToBuffer already gives.
+
+	export std::expected<std::vector<std::byte>, ImageError> EncodeImagePng(const Image& image);
 }
