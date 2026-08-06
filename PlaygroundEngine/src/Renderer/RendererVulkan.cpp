@@ -1,5 +1,7 @@
 ﻿module;
 
+#include "PlaygroundEngine/Log.h"
+
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,6 +12,8 @@ import std;
 import PlaygroundEngine.Reflection;
 import PlaygroundEngine.Paths;
 import PlaygroundEngine.Files;
+import PlaygroundEngine.Image;
+import PlaygroundEngine.Log;
 import PlaygroundEngine.Model;
 import PlaygroundEngine.Renderer.Vertex;
 
@@ -310,12 +314,13 @@ namespace PgE
 		return std::unique_ptr<RendererVulkan>(new RendererVulkan(
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
-			swapChain.Extent, std::move(swapChain.ImageViews), std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline),
-			std::move(commandPool), std::move(vertexBufferResource), std::move(indexBufferResource), static_cast<std::uint32_t>(mesh.Indices.size()),
-			std::move(textureImageResource), std::move(textureImageView), std::move(textureSampler), sampleCount,
-			std::move(multisampleColorImageResource), std::move(multisampleColorImageView), depthFormat, std::move(depthImageResource),
-			std::move(depthImageView), std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets),
-			std::move(commandBuffers), std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+			swapChain.Extent, swapChain.SupportsTransferSource, std::move(swapChain.ImageViews), std::move(descriptorSetLayout),
+			std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool), std::move(vertexBufferResource),
+			std::move(indexBufferResource), static_cast<std::uint32_t>(mesh.Indices.size()), std::move(textureImageResource),
+			std::move(textureImageView), std::move(textureSampler), sampleCount, std::move(multisampleColorImageResource),
+			std::move(multisampleColorImageView), depthFormat, std::move(depthImageResource), std::move(depthImageView),
+			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
+			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
 	}
 
 	void RendererVulkan::Teardown() const
@@ -388,6 +393,26 @@ namespace PgE
 			return std::unexpected(RendererError(RendererRenderErrorKind::QueueSubmitError, ToString(submitResult.error())));
 		}
 
+		// Serviced after the submit and before the present, the one window where the frame is finished
+		// and the image is still owned by the application.
+		if (_pendingCapturePath)
+		{
+			const std::filesystem::path capturePath = *std::exchange(_pendingCapturePath, std::nullopt);
+
+			if (const std::expected<void, vk::Result> waitResult = _logicalDevice.waitIdle(); !waitResult)
+			{
+				PGE_LOG(Error, "Frame capture to {} failed: device wait error {}", capturePath.display_string(), ToString(waitResult.error()));
+			}
+			else if (const CreationResult<void> captureResult = CaptureSwapChainImage(imageIndex, capturePath); !captureResult)
+			{
+				PGE_LOG(Error, "Frame capture to {} failed: {}", capturePath.display_string(), captureResult.error().Message());
+			}
+			else
+			{
+				PGE_LOG(Info, "Frame captured to {}", capturePath.display_string());
+			}
+		}
+
 		const vk::PresentInfoKHR presentInfoKHR{.waitSemaphoreCount = 1,
 												.pWaitSemaphores = &*_renderFinishedSemaphores[imageIndex],
 												.swapchainCount = 1,
@@ -417,6 +442,99 @@ namespace PgE
 		_framebufferResized = true;
 	}
 
+	void RendererVulkan::RequestCapture(std::filesystem::path path)
+	{
+		// Only one request can be outstanding, and a caller learns the outcome by looking for the
+		// file, so a displaced path would otherwise be waited on forever with nothing written.
+
+		if (_pendingCapturePath)
+		{
+			PGE_LOG(Warn, "Frame capture to {} displaced by a newer request before any frame served it", _pendingCapturePath->display_string());
+		}
+
+		_pendingCapturePath = std::move(path);
+	}
+
+	CreationResult<void> RendererVulkan::CaptureSwapChainImage(const std::uint32_t imageIndex, const std::filesystem::path& path) const
+	{
+		if (!_swapChainSupportsTransferSource)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::SwapChainTransferSourceUnsupported,
+												 "the surface does not support transfer-source swap chain images"));
+		}
+
+		// Resolved before the readback, not after: ReadImageToHost sizes its buffer for four bytes per
+		// pixel, so a wider format has to be rejected before a copy is issued against it rather than
+		// once the pixels are already in hand.
+
+		// SelectSurfaceFormat prefers BGRA but falls back to whatever the surface offers first, so the
+		// channel order is a runtime fact. Only the 8-bit four-channel families are handled; anything
+		// else would need a real format conversion table.
+
+		bool swapRedAndBlue = false;
+
+		switch (_swapChainSurfaceFormat.format)
+		{
+		case vk::Format::eB8G8R8A8Unorm:
+		case vk::Format::eB8G8R8A8Srgb:
+			swapRedAndBlue = true;
+			break;
+
+		case vk::Format::eR8G8B8A8Unorm:
+		case vk::Format::eR8G8B8A8Srgb:
+			break;
+
+		default:
+			return std::unexpected(RendererError(RendererCreationErrorKind::CaptureFormatUnsupported,
+												 std::string("unhandled swap chain format ") + to_string(_swapChainSurfaceFormat.format)));
+		}
+
+		// The presented image is the resolve target of the multisampled pass, so it already holds
+		// exactly the pixels the compositor was handed. Nothing has to be re-rendered to capture it.
+
+		CreationResult<std::vector<std::byte>> pixelsResult = ReadImageToHost(
+			_physicalDevice, _logicalDevice, _queue, _commandPool, _swapChainImages[imageIndex], vk::ImageLayout::ePresentSrcKHR, _swapChainExtent);
+		if (!pixelsResult)
+		{
+			return std::unexpected(pixelsResult.error());
+		}
+		std::vector<std::byte>& pixels = pixelsResult.value();
+
+		if (swapRedAndBlue)
+		{
+			for (std::size_t offset = 0; offset < pixels.size(); offset += Image::BytesPerPixel)
+			{
+				std::swap(pixels[offset], pixels[offset + 2]);
+			}
+		}
+
+		// Forced opaque rather than trusting the swap chain's alpha: compositeAlpha is eOpaque, so
+		// nothing downstream of the render ever constrained that channel, and a PNG that honoured it
+		// could come out invisible in a viewer.
+
+		for (std::size_t offset = Image::BytesPerPixel - 1; offset < pixels.size(); offset += Image::BytesPerPixel)
+		{
+			pixels[offset] = std::byte{0xFF};
+		}
+
+		// An sRGB swap chain holds bytes that are already sRGB-encoded, which is what a PNG stores,
+		// so there is no gamma step here for either format family.
+
+		const std::expected<std::vector<std::byte>, ImageError> encodedResult =
+			EncodeImagePng(Image{.Pixels = std::move(pixels), .Width = _swapChainExtent.width, .Height = _swapChainExtent.height});
+		if (!encodedResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CaptureEncodeError, ToString(encodedResult.error())));
+		}
+
+		if (const std::expected<void, FileError> writeResult = WriteBinaryFile(path, encodedResult.value()); !writeResult)
+		{
+			return std::unexpected(RendererError(RendererCreationErrorKind::CaptureWriteError, ToString(writeResult.error())));
+		}
+
+		return {};
+	}
+
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecreateSwapChain(const FramebufferSize framebufferSize)
 	{
 		if (const std::expected<void, vk::Result> waitResult = _logicalDevice.waitIdle(); !waitResult)
@@ -443,6 +561,7 @@ namespace PgE
 		_swapChainImages = std::move(swapChainResult->Images);
 		_swapChainImageViews = std::move(swapChainResult->ImageViews);
 		_swapChainExtent = swapChainResult->Extent;
+		_swapChainSupportsTransferSource = swapChainResult->SupportsTransferSource;
 
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
 			CreateMultisampleColorResources(_physicalDevice, _logicalDevice, _swapChainExtent, _swapChainSurfaceFormat.format, _sampleCount);

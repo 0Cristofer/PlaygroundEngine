@@ -70,6 +70,7 @@ target_sources(
 		src/LogTests.cpp
 		src/PlatformEventsTests.cpp
 		src/ImageTests.cpp
+		src/FilesTests.cpp
 		src/ModelTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp

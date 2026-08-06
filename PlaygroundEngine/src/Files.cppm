@@ -9,6 +9,7 @@ namespace PgE
 		UnableToOpen,
 		UnableToDetermineSize,
 		UnableToRead,
+		UnableToWrite,
 	};
 
 	// Whole-file reads for content small enough to sit in memory at once, which covers compiled
@@ -17,4 +18,10 @@ namespace PgE
 
 	export std::expected<std::vector<std::byte>, FileError> ReadBinaryFile(const std::filesystem::path& path);
 	export std::expected<std::string, FileError> ReadTextFile(const std::filesystem::path& path);
+
+	// Whole-file write, truncating an existing file. Parent directories are expected to exist; a
+	// missing one surfaces as UnableToOpen rather than being created, so a mistyped path fails
+	// instead of littering the filesystem.
+
+	export std::expected<void, FileError> WriteBinaryFile(const std::filesystem::path& path, std::span<const std::byte> bytes);
 }

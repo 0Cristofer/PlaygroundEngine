@@ -26,6 +26,7 @@ namespace PgE
 		UnableToCreateWindowSurface,
 		SuitableQueueNotFound,
 		SurfaceCapabilitiesFormatsError,
+		SwapChainTransferSourceUnsupported,
 		SwapChainCreationError,
 		SwapChainImagesCreationError,
 		ImageViewCreationError,
@@ -53,6 +54,9 @@ namespace PgE
 		CommandBufferCopyError,
 		SemaphoreCreateError,
 		FenceCreateError,
+		CaptureFormatUnsupported,
+		CaptureEncodeError,
+		CaptureWriteError,
 	};
 
 	export enum class RendererRenderErrorKind
