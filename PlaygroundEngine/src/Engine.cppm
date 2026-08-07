@@ -4,6 +4,7 @@ export import PlaygroundEngine.World;
 export import PlaygroundEngine.GameObject;
 export import PlaygroundEngine.WindowServer;
 
+import PlaygroundEngine.AgentChannel;
 import PlaygroundEngine.App;
 import PlaygroundEngine.Renderer.Vulkan;
 
@@ -73,6 +74,8 @@ namespace PgE
 
 		void Run();
 		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame();
+		void LogPlatformEvents() const;
+		void ServiceFrameCapture() const;
 
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;
@@ -81,6 +84,8 @@ namespace PgE
 
 		std::unique_ptr<WindowServer> _windowServer;
 		Window* _window = nullptr;
+
+		AgentChannelHost _agentChannel;
 
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<World> _world;

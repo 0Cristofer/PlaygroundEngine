@@ -354,6 +354,7 @@ target_sources(
 		src/Paths.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
+		src/AgentChannel/AgentChannel.cpp
 		src/WindowServer/WindowServer.cpp
 		src/WindowServer/Window.cpp
 		src/WindowServer/Backend/WindowServerBackend.GLFW.cpp
@@ -388,6 +389,7 @@ target_sources(
 				src/PlatformEvents/PlatformKeyToken.cppm
 				src/PlatformEvents/PlatformEvent.cppm
 				src/PlatformEvents/PlatformEventRecord.cppm
+				src/AgentChannel/AgentChannel.cppm
 				src/WindowServer/WindowServer.cppm
 				src/WindowServer/Window.cppm
 				src/WindowServer/WindowSizes.cppm
