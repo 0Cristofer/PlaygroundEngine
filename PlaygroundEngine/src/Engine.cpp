@@ -147,7 +147,7 @@ namespace PgE
 		if (_rendererVulkan && _window)
 		{
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =
-					_rendererVulkan->DrawFrame(_window->GetFramebufferSize());
+					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize());
 				!drawResult)
 			{
 				return drawResult;

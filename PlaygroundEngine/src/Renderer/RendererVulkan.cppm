@@ -1,4 +1,9 @@
-﻿export module PlaygroundEngine.Renderer.Vulkan;
+﻿module;
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+export module PlaygroundEngine.Renderer.Vulkan;
 
 import PlaygroundEngine.WindowServer;
 
@@ -11,6 +16,7 @@ export import :VulkanUtils;
 
 import vulkan;
 import std;
+import PlaygroundEngine.Renderer.Vertex;
 
 namespace PgE
 {
@@ -22,7 +28,8 @@ namespace PgE
 
 		void Teardown() const;
 
-		std::expected<void, RendererError<RendererRenderErrorKind>> DrawFrame(FramebufferSize framebufferSize);
+		std::expected<void, RendererError<RendererRenderErrorKind>> DrawFrame(const PlatformEventRecord& platformEventRecord,
+																			  FramebufferSize framebufferSize);
 
 		void NotifyFramebufferResized();
 
@@ -84,12 +91,45 @@ namespace PgE
 			  _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
 			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
 			  _inFlightFences(std::move(inFlightFences))
-		{}
+		{
+			// The model is authored Z-up, so it is rotated into the engine's Y-up world once, here.
+			// Everything downstream (camera, movement) is plain Y-up.
+
+			const glm::mat4 zUpToYUp = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+			_ubo.Model = glm::rotate(zUpToYUp, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			_ubo.Proj = glm::perspective(glm::radians(45.0f),
+										 static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height), 0.1f, 10.0f);
+
+			_ubo.Proj[1][1] *= -1;
+
+			RebuildViewMatrix();
+		}
 
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex) const;
 		CreationResult<void> CaptureSwapChainImage(std::uint32_t imageIndex, const std::filesystem::path& path) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
 		void UpdateUniformBuffer(std::uint32_t frameIndex) const;
+
+		/// Throwaway free-look camera, here only to give the platform event path something real to drive.
+		/// WASD moves relative to where the camera looks, arrow keys turn it. Delete along with the demo.
+
+		struct CameraInputState
+		{
+			bool MoveForward = false;
+			bool MoveBackward = false;
+			bool StrafeLeft = false;
+			bool StrafeRight = false;
+			bool TurnLeft = false;
+			bool TurnRight = false;
+			bool LookUp = false;
+			bool LookDown = false;
+		};
+
+		static CameraInputState ReadCameraInput(const PlatformEventRecord& platformEventRecord, CameraInputState previousState);
+		void MoveCamera(CameraInputState cameraInput, float deltaTimeSeconds);
+		void RebuildViewMatrix();
+		glm::vec3 GetCameraForward() const;
 
 		vk::raii::Context _context;
 		vk::raii::Instance _instance;
@@ -140,5 +180,16 @@ namespace PgE
 		std::uint32_t _frameIndex = 0;
 		bool _framebufferResized = false;
 		std::optional<std::filesystem::path> _pendingCapturePath;
+
+		UniformBufferObject _ubo;
+
+		// Yaw and pitch are the (2,2,2)-looking-at-the-origin framing the demo started from,
+		// expressed in the angles GetCameraForward() consumes.
+
+		glm::vec3 _cameraPosition{2.0f, 2.0f, 2.0f};
+		float _cameraYaw = glm::radians(-45.0f);
+		float _cameraPitch = glm::radians(-35.264f);
+		CameraInputState _cameraInput;
+		std::chrono::steady_clock::time_point _previousFrameTime = std::chrono::steady_clock::now();
 	};
 }

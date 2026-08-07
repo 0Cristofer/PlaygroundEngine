@@ -328,7 +328,8 @@ namespace PgE
 		[[maybe_unused]] auto waitResult = _logicalDevice.waitIdle();
 	}
 
-	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const FramebufferSize framebufferSize)
+	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const PlatformEventRecord& platformEventRecord,
+																						  const FramebufferSize framebufferSize)
 	{
 		// A minimized window reports a zero framebuffer, and no swap chain can be built for one.
 
@@ -365,6 +366,13 @@ namespace PgE
 		{
 			return std::unexpected(RendererError(RendererRenderErrorKind::FenceResetError, ToString(fenceResetResult)));
 		}
+
+		const auto currentFrameTime = std::chrono::steady_clock::now();
+		const float deltaTimeSeconds = std::chrono::duration<float>(currentFrameTime - _previousFrameTime).count();
+		_previousFrameTime = currentFrameTime;
+
+		_cameraInput = ReadCameraInput(platformEventRecord, _cameraInput);
+		MoveCamera(_cameraInput, deltaTimeSeconds);
 
 		UpdateUniformBuffer(_frameIndex);
 
@@ -610,23 +618,102 @@ namespace PgE
 			_renderFinishedSemaphores = std::move(semaphoresResult.value());
 		}
 
+		_ubo.Proj = glm::perspective(glm::radians(45.0f), static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height),
+									 0.1f, 10.0f);
+		_ubo.Proj[1][1] *= -1;
+
 		return {};
+	}
+
+	RendererVulkan::CameraInputState RendererVulkan::ReadCameraInput(const PlatformEventRecord& platformEventRecord, CameraInputState previousState)
+	{
+		for (const auto& event : platformEventRecord.GetEvents())
+		{
+			if (event.Type != PlatformEventType::KeyPressed && event.Type != PlatformEventType::KeyReleased)
+			{
+				continue;
+			}
+
+			const bool isPressed = event.Type == PlatformEventType::KeyPressed;
+			switch (event.Code)
+			{
+			case InputCode::KeyW:
+				previousState.MoveForward = isPressed;
+				break;
+			case InputCode::KeyS:
+				previousState.MoveBackward = isPressed;
+				break;
+			case InputCode::KeyA:
+				previousState.StrafeLeft = isPressed;
+				break;
+			case InputCode::KeyD:
+				previousState.StrafeRight = isPressed;
+				break;
+			case InputCode::KeyLeft:
+				previousState.TurnLeft = isPressed;
+				break;
+			case InputCode::KeyRight:
+				previousState.TurnRight = isPressed;
+				break;
+			case InputCode::KeyUp:
+				previousState.LookUp = isPressed;
+				break;
+			case InputCode::KeyDown:
+				previousState.LookDown = isPressed;
+				break;
+			default:
+				break;
+			}
+		}
+
+		return previousState;
+	}
+
+	void RendererVulkan::MoveCamera(const CameraInputState cameraInput, const float deltaTimeSeconds)
+	{
+		constexpr float moveSpeed = 1.5f;
+		constexpr float turnSpeed = 1.5f;
+
+		// Pitch stops just short of straight up or down, where forward would become parallel to the
+		// world up axis and the right-vector cross product would collapse to zero.
+
+		constexpr float pitchLimit = 1.5f;
+
+		const auto axisFromKeys = [](const bool positive, const bool negative) {
+			return static_cast<float>(positive) - static_cast<float>(negative);
+		};
+
+		_cameraYaw += axisFromKeys(cameraInput.TurnRight, cameraInput.TurnLeft) * turnSpeed * deltaTimeSeconds;
+		_cameraPitch =
+			std::clamp(_cameraPitch + axisFromKeys(cameraInput.LookUp, cameraInput.LookDown) * turnSpeed * deltaTimeSeconds, -pitchLimit, pitchLimit);
+
+		const glm::vec3 forward = GetCameraForward();
+		const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+		const glm::vec3 movement = forward * axisFromKeys(cameraInput.MoveForward, cameraInput.MoveBackward) +
+								   right * axisFromKeys(cameraInput.StrafeRight, cameraInput.StrafeLeft);
+
+		if (glm::length(movement) > 0.0f)
+		{
+			_cameraPosition += glm::normalize(movement) * moveSpeed * deltaTimeSeconds;
+		}
+
+		RebuildViewMatrix();
+	}
+
+	glm::vec3 RendererVulkan::GetCameraForward() const
+	{
+		return glm::vec3(std::cos(_cameraPitch) * std::sin(_cameraYaw), std::sin(_cameraPitch), -std::cos(_cameraPitch) * std::cos(_cameraYaw));
+	}
+
+	void RendererVulkan::RebuildViewMatrix()
+	{
+		_ubo.View = lookAt(_cameraPosition, _cameraPosition + GetCameraForward(), glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 
 	void RendererVulkan::UpdateUniformBuffer(const std::uint32_t frameIndex) const
 	{
-		static auto startTime = std::chrono::high_resolution_clock::now();
-
-		const auto currentTime = std::chrono::high_resolution_clock::now();
-		const float timeSeconds = std::chrono::duration<float>(currentTime - startTime).count();
-
-		UniformBufferObject ubo;
-		ubo.Model = glm::rotate(glm::mat4(1.0f), timeSeconds * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.View = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.Proj = glm::perspective(glm::radians(45.0f), static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height),
-									0.1f, 10.0f);
-		ubo.Proj[1][1] *= -1;
-		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &ubo, sizeof(ubo));
+		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &_ubo, sizeof(_ubo));
 	}
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex) const
