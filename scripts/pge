@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Drive a running PlaygroundGame over its development agent channel.
+
+One invocation is one command, because an agent's tool calls are one-shot processes and cannot hold
+a connection open across them. Start the game with --agent-channel first.
+
+  scripts/pge PointerMoved 200 300
+  scripts/pge KeyPressed KeyF12
+  scripts/pge screenshot          -> injects F12, prints the PNG path once the file is on disk
+  scripts/pge CloseRequested      -> quits the app
+
+Verbs are the PlatformEventType enumerators and arguments are the InputCode enumerators, spelled
+exactly as the engine's enums spell them, so the vocabulary tracks the enums instead of drifting.
+
+`screenshot` is a convenience in this script, not a command the engine knows: it injects the same
+F12 the capture binding watches for, then waits for the new file. There is one capture entry point.
+"""
+
+import os
+import socket
+import sys
+import time
+
+SOCKET_PATH = os.environ.get("PGE_AGENT_SOCKET", "/tmp/pge-agent.sock")
+
+REPOSITORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+CAPTURE_DIRECTORY = os.environ.get(
+    "PGE_CAPTURES_DIR",
+    os.path.join(REPOSITORY_ROOT, "build/linux/PlaygroundGame/Debug/captures"),
+)
+
+CAPTURE_KEY = "KeyF12"
+
+CAPTURE_TIMEOUT_SECONDS = 5.0
+CAPTURE_POLL_SECONDS = 0.05
+
+# An agent tool call is a one-shot process, so hanging forever is worse than failing: a wedged
+# engine has to surface as a nonzero exit rather than a command that never returns.
+REQUEST_TIMEOUT_SECONDS = 10.0
+
+EXAMPLES = """\
+usage: pge <verb> [args...]
+
+  PointerMoved <x> <y>              PointerMovedRelative <dx> <dy>
+  PointerScrolled <dx> <dy>         PointerButtonPressed <InputCode>
+  PointerButtonReleased <InputCode> KeyPressed <InputCode> [repeat]
+  KeyReleased <InputCode>           CharacterTyped <codepoint>
+  FocusGained | FocusLost | CloseRequested
+  screenshot                        (injects %s and waits for the file)
+
+  InputCode examples: KeyA, KeyF12, KeyEscape, PointerButtonLeft
+  socket:   %s (override with PGE_AGENT_SOCKET)
+  captures: %s (override with PGE_CAPTURES_DIR)
+""" % (CAPTURE_KEY, SOCKET_PATH, CAPTURE_DIRECTORY)
+
+
+def send_command(argv):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(REQUEST_TIMEOUT_SECONDS)
+
+        try:
+            connection.connect(SOCKET_PATH)
+        except (FileNotFoundError, ConnectionRefusedError):
+            sys.exit(
+                "pge: no agent channel at %s\n"
+                "     start the game with --agent-channel" % SOCKET_PATH
+            )
+
+        try:
+            connection.sendall((" ".join(argv) + "\n").encode())
+
+            reply = b""
+            while not reply.endswith(b"\n"):
+                chunk = connection.recv(4096)
+                if not chunk:
+                    break
+                reply += chunk
+        except (socket.timeout, TimeoutError):
+            sys.exit("pge: engine did not answer within %gs" % REQUEST_TIMEOUT_SECONDS)
+
+    return reply.decode().strip()
+
+
+def is_complete_png(path):
+    """A PNG is finished exactly when it ends with its IEND chunk.
+
+    WriteBinaryFile writes in place with no atomic rename, so a file that exists is not necessarily
+    a file that is finished. Checking the terminator is exact, where watching the size settle can
+    report a stall at a buffer boundary as completion and hand back a truncated image.
+    """
+    try:
+        with open(path, "rb") as image:
+            if image.read(8) != b"\x89PNG\r\n\x1a\n":
+                return False
+
+            # The IEND chunk is 12 bytes: a zero length, the type, then the CRC. Seeking back only
+            # the type and CRC would land inside it and never match.
+            image.seek(-12, os.SEEK_END)
+            return image.read(12)[4:8] == b"IEND"
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def list_captures():
+    try:
+        return set(os.listdir(CAPTURE_DIRECTORY))
+    except FileNotFoundError:
+        return set()
+
+
+def take_screenshot():
+    """Inject the capture key, then wait for the file the engine names.
+
+    The engine hands back no path, because the capture goes through the same key binding a person
+    uses. So the file is identified by watching the directory: snapshot it first, so a capture from
+    an earlier run can never be mistaken for this one.
+    """
+    before = list_captures()
+
+    reply = send_command(["KeyPressed", CAPTURE_KEY])
+
+    if not reply.startswith("ok"):
+        print(reply or "pge: no reply", file=sys.stderr)
+        return None
+
+    deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
+
+    while time.monotonic() < deadline:
+        for name in sorted(list_captures() - before):
+            candidate = os.path.join(CAPTURE_DIRECTORY, name)
+            if is_complete_png(candidate):
+                return candidate
+
+        time.sleep(CAPTURE_POLL_SECONDS)
+
+    return None
+
+
+def main():
+    argv = sys.argv[1:]
+
+    if not argv or argv[0] in ("-h", "--help"):
+        print(EXAMPLES, end="")
+        return 0
+
+    if argv[0] == "screenshot":
+        if len(argv) > 1:
+            print("pge: screenshot takes no arguments", file=sys.stderr)
+            return 1
+
+        capture = take_screenshot()
+
+        if capture is None:
+            print(
+                "pge: no new capture appeared in %s within %gs "
+                "(is the renderer running?)" % (CAPTURE_DIRECTORY, CAPTURE_TIMEOUT_SECONDS),
+                file=sys.stderr,
+            )
+            return 1
+
+        print(capture)
+        return 0
+
+    reply = send_command(argv)
+
+    if not reply.startswith("ok"):
+        print(reply or "pge: no reply", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

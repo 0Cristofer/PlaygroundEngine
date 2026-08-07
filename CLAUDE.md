@@ -114,6 +114,10 @@ cmake --build --preset linux-debug   # or linux-dev (RelWithDebInfo) / linux-rel
 
 Build output is under `build/linux/<Target>/<Config>/`. In-source builds are blocked by a `FATAL_ERROR` guard.
 
+### Driving the running game
+
+To see a change working in the real app, run the game with `--agent-channel` and drive it over the development agent channel with `scripts/pge` (inject input, take a screenshot, quit cleanly), reading the game's redirected log alongside. **Read [docs/AgentChannel.md](docs/AgentChannel.md) before running the game by hand**: launching it and sleeping on a guessed timeout tells you almost nothing, where the channel gives you input, a PNG you can look at, and the engine's own error output. Development builds only; compiled out under `PGE_RELEASE`.
+
 Tests use **doctest** + **CTest** (`PlaygroundTests` target). Build with `cmake --build --preset linux-debug --target PlaygroundTests`, then `cd build/linux && ctest -C Debug` (or `ctest -R <name>` for one). See [docs/TestingSystem.md](docs/TestingSystem.md) for the workflow, how to write a test, and constraints (read it before adding tests). Note: tests run from CLion or terminal `ctest`, **Rider cannot run them** (its C++ test runner is MSBuild-bound and fails on this CMake/WSL project).
 
 ### Testing expectations

@@ -6,6 +6,7 @@ module PlaygroundEngine;
 
 import PlaygroundEngine.App;
 import PlaygroundEngine.Log;
+import PlaygroundEngine.Paths;
 import PlaygroundEngine.Reflection;
 
 namespace PgE
@@ -82,6 +83,9 @@ namespace PgE
 				return std::unexpected(rendering.error());
 			}
 		}
+		const CommandLine& commandLine = _appDescriptor.GetCommandLine();
+		_agentChannel.StartIfRequested(commandLine.Argc, commandLine.Argv);
+
 		_world = std::make_unique<World>();
 
 		_app = _appDescriptor.GetApp();
@@ -119,15 +123,19 @@ namespace PgE
 			_windowServer->Pump(_platformEvents);
 		}
 
-		for (auto& event : _platformEvents.GetEvents())
-		{
-			PGE_LOG(Trace, ToString(event));
-		}
+		// Straight after the pump, so injected events land in the same batch as real ones and every
+		// consumer below reads one record without caring which producer filled it.
+
+		_agentChannel.DrainInto(_platformEvents);
+
+		LogPlatformEvents();
 
 		if (_rendererVulkan && _platformEvents.HasEvent(PlatformEventType::WindowResized))
 		{
 			_rendererVulkan->NotifyFramebufferResized();
 		}
+
+		ServiceFrameCapture();
 
 		if (_platformEvents.HasEvent(PlatformEventType::CloseRequested))
 		{
@@ -157,6 +165,44 @@ namespace PgE
 		return {};
 	}
 
+	void Engine::LogPlatformEvents() const
+	{
+		for (auto& event : _platformEvents.GetEvents())
+		{
+			PGE_LOG(Trace, ToString(event));
+		}
+	}
+
+	void Engine::ServiceFrameCapture() const
+	{
+		// Which input means "capture" is root policy, so the key lives here rather than in the renderer.
+		// The one entry point: an agent asking for a screenshot injects this same key, so it exercises
+		// the path a person at the keyboard takes rather than a parallel one that could rot unnoticed.
+
+		if (!_rendererVulkan)
+		{
+			return;
+		}
+
+		const bool captureRequested = std::ranges::any_of(_platformEvents.GetEvents(), [](const PlatformEvent& event) {
+			return event.Type == PlatformEventType::KeyPressed && event.Code == InputCode::KeyF12 && !event.Repeat;
+		});
+
+		if (!captureRequested)
+		{
+			return;
+		}
+
+		if (const std::expected<std::filesystem::path, PathError> capturePath = GenerateCapturePath())
+		{
+			_rendererVulkan->RequestCapture(*capturePath);
+		}
+		else
+		{
+			PGE_LOG(Error, "Frame capture skipped: no usable capture path");
+		}
+	}
+
 	void Engine::RequestStop()
 	{
 		PGE_LOG(Info);
@@ -167,6 +213,11 @@ namespace PgE
 	void Engine::Shutdown()
 	{
 		PGE_LOG(Info);
+
+		// First, and stated here rather than left to member declaration order: the reader thread must
+		// be joined before anything it could still be handing work to goes away.
+
+		_agentChannel.Stop();
 
 		_app.reset();
 		_world.reset();
