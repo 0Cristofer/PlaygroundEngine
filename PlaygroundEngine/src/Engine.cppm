@@ -62,20 +62,21 @@ namespace PgE
 	public:
 		explicit Engine(AppDescriptorBase& appDescriptor);
 
-		[[nodiscard]] std::expected<void, BootError> Boot();
+		[[nodiscard]] std::expected<void, BootError> Boot() pre(_app == nullptr);
 		void StartRun() pre(_app != nullptr && _world != nullptr);
 		void Shutdown();
 
 		void RequestStop();
 
 	private:
-		[[nodiscard]] std::expected<void, BootError> BootPresentation();
-		[[nodiscard]] std::expected<void, BootError> BootRendering();
-
 		void Run();
-		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame();
+		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame() pre(_world != nullptr);
+
 		void LogPlatformEvents() const;
 		void ServiceFrameCapture() const;
+
+		std::expected<void, BootError> BootPresentation();
+		std::expected<void, BootError> BootRendering();
 
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;

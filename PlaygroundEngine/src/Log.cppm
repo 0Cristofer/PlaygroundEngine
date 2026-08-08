@@ -29,14 +29,30 @@ namespace PgE
 
 	namespace detail
 	{
+		// Exported (despite being detail) so importer-side Print instantiations link across module boundaries.
+
 		export void LogDispatch(LogLevel level, const std::source_location& location, std::string_view message);
 		export std::string ExtractQualifiedName(std::string_view signature);
 	}
 
+	export constexpr std::string_view LOG_FILE_PREFIX = "PlaygroundEngine";
+
+	export struct LogConfiguration
+	{
+		// Empty selects the default, one timestamped file per run under the executable's log directory.
+		std::filesystem::path FilePath;
+
+		// Runs of log history kept on disk, this one included; the oldest go first.
+		std::size_t MaximumFiles = 10;
+	};
+
 	export class Log
 	{
 	public:
-		static void Configure();
+		static void Configure(const LogConfiguration& configuration) pre(configuration.MaximumFiles > 0);
+
+		// Writes out whatever is still buffered. Warnings and worse flush themselves;
+		static void Flush();
 
 		template <typename... Arguments>
 		static void Print(const LogLevel level,
