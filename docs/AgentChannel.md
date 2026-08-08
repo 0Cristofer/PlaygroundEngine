@@ -53,8 +53,8 @@ swapchain recreate.
 
 ## Screenshots have one entry point
 
-The capture binding is F12, handled in `Engine::RunFrame`. `scripts/pge screenshot` **injects that
-same key** and then waits for the new file; the engine has no capture command of its own. So an
+The capture binding is F12, handled in `FrameCapture::ServiceRequests`, which `Engine::RunFrame`
+calls once a frame before drawing. `scripts/pge screenshot` **injects that same key** and then waits for the new file; the engine has no capture command of its own. So an
 agent taking a screenshot exercises exactly the path a person at the keyboard takes, and there is no
 second path that could rot unnoticed.
 

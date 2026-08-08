@@ -6,6 +6,7 @@ export import PlaygroundEngine.WindowServer;
 
 import PlaygroundEngine.AgentChannel;
 import PlaygroundEngine.App;
+import PlaygroundEngine.FrameCapture;
 import PlaygroundEngine.Renderer.Vulkan;
 
 import std;
@@ -73,7 +74,6 @@ namespace PgE
 		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame() pre(_world != nullptr);
 
 		void LogPlatformEvents() const;
-		void ServiceFrameCapture() const;
 
 		std::expected<void, BootError> BootPresentation();
 		std::expected<void, BootError> BootRendering();
@@ -87,6 +87,7 @@ namespace PgE
 		Window* _window = nullptr;
 
 		AgentChannelHost _agentChannel;
+		FrameCapture _frameCapture;
 
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<World> _world;

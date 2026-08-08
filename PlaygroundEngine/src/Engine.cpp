@@ -6,7 +6,6 @@ module PlaygroundEngine;
 
 import PlaygroundEngine.App;
 import PlaygroundEngine.Log;
-import PlaygroundEngine.Paths;
 import PlaygroundEngine.Reflection;
 
 namespace PgE
@@ -132,7 +131,10 @@ namespace PgE
 			_rendererVulkan->NotifyFramebufferResized();
 		}
 
-		ServiceFrameCapture();
+		if (_rendererVulkan)
+		{
+			_frameCapture.ServiceRequests(_platformEvents, *_rendererVulkan);
+		}
 
 		if (_platformEvents.HasEvent(PlatformEventType::CloseRequested))
 		{
@@ -167,33 +169,6 @@ namespace PgE
 		for (auto& event : _platformEvents.GetEvents())
 		{
 			PGE_LOG(Trace, ToString(event));
-		}
-	}
-
-	void Engine::ServiceFrameCapture() const
-	{
-		if (!_rendererVulkan)
-		{
-			return;
-		}
-
-		const bool captureRequested = std::ranges::any_of(_platformEvents.GetEvents(), [](const PlatformEvent& event) {
-			return event.Type == PlatformEventType::KeyPressed && event.Code == InputCode::KeyF12 && !event.Repeat;
-		});
-
-		if (!captureRequested)
-		{
-			return;
-		}
-
-		PGE_LOG(Trace, "Frame capture requested");
-		if (const std::expected<std::filesystem::path, PathError> capturePath = GenerateCapturePath())
-		{
-			_rendererVulkan->RequestCapture(*capturePath);
-		}
-		else
-		{
-			PGE_LOG(Error, "Frame capture skipped: no usable capture path");
 		}
 	}
 

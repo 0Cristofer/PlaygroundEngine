@@ -352,6 +352,7 @@ target_sources(
 		src/main.cpp
 		src/Files.cpp
 		src/Paths.cpp
+		src/FrameCapture.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
 		src/AgentChannel/AgentChannel.cpp
@@ -380,6 +381,7 @@ target_sources(
 				src/World.cppm
 				src/Files.cppm
 				src/Paths.cppm
+				src/FrameCapture.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm
