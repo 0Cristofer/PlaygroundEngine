@@ -14,56 +14,14 @@ namespace PgE
 	Engine::Engine(AppDescriptorBase& appDescriptor) : _appDescriptor(appDescriptor)
 	{}
 
-	std::expected<void, BootError> Engine::BootPresentation()
-	{
-		auto windowServer = WindowServer::Create();
-		if (!windowServer)
-		{
-			PGE_LOG(Error, "Presentation bootstrap failed: window server error {}", ToString(windowServer.error()));
-			return std::unexpected(BootError::Platform);
-		}
-
-		_windowServer = std::move(*windowServer);
-
-		const std::expected<Window*, WindowError> window = _windowServer->CreateWindow(WindowSpecification{});
-		if (!window)
-		{
-			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
-			return std::unexpected(BootError::Platform);
-		}
-
-		_window = window.value();
-
-		return {};
-	}
-
-	std::expected<void, BootError> Engine::BootRendering()
-	{
-		if (!_windowServer || !_window)
-		{
-			PGE_LOG(Error, "Rendering bootstrap failed: can't create renderer without window");
-			return std::unexpected(BootError::Rendering);
-		}
-
-		auto renderer = RendererVulkan::Create(RendererSpecification{}, *_windowServer, *_window);
-
-		if (!renderer)
-		{
-			PGE_LOG(Error, "Rendering bootstrap failed: renderer creation error {}", ToString(renderer.error()));
-			return std::unexpected(BootError::Rendering);
-		}
-
-		_rendererVulkan = std::move(*renderer);
-
-		return {};
-	}
-
 	std::expected<void, BootError> Engine::Boot()
 	{
-		PGE_LOG(Info);
+		PGE_LOG(Info, "Booting...");
+
+		const CommandLine& commandLine = _appDescriptor.GetCommandLine();
 
 		// Global facilities: logging, profiling, etc.
-		Log::Configure();
+		Log::Configure(LogConfiguration{});
 
 		const AppCapabilities capabilities = _appDescriptor.GetCapabilities();
 		PGE_LOG(Info, "Booting with capabilities: {}", ToString(capabilities));
@@ -83,7 +41,7 @@ namespace PgE
 				return std::unexpected(rendering.error());
 			}
 		}
-		const CommandLine& commandLine = _appDescriptor.GetCommandLine();
+
 		_agentChannel.StartIfRequested(commandLine.Argc, commandLine.Argv);
 
 		_world = std::make_unique<World>();
@@ -92,6 +50,8 @@ namespace PgE
 
 		EngineContext engineContext;
 		_app->OnBooted(engineContext);
+
+		PGE_LOG(Info, "Finished boot");
 
 		return {};
 	}
@@ -102,8 +62,46 @@ namespace PgE
 		Run();
 	}
 
+	void Engine::Shutdown()
+	{
+		PGE_LOG(Info, "Shutting down...");
+
+		// First, and stated here rather than left to member declaration order: the reader thread must
+		// be joined before anything it could still be handing work to goes away.
+
+		_agentChannel.Stop();
+
+		_app.reset();
+		_world.reset();
+
+		if (_rendererVulkan)
+		{
+			_rendererVulkan->Teardown();
+		}
+		_rendererVulkan.reset();
+
+		// The renderer holds a surface referencing the window, so windows outlive it and the
+		// connection outlives them.
+
+		_window = nullptr;
+		_windowServer.reset();
+
+		// Last, so the trace tail of everything above reaches the file.
+
+		Log::Flush();
+	}
+
+	void Engine::RequestStop()
+	{
+		PGE_LOG(Info, "Stop requested");
+
+		_running = false;
+	}
+
 	void Engine::Run()
 	{
+		PGE_LOG(Info, "Running");
+
 		_running = true;
 		while (_running)
 		{
@@ -125,7 +123,6 @@ namespace PgE
 
 		// Straight after the pump, so injected events land in the same batch as real ones and every
 		// consumer below reads one record without caring which producer filled it.
-
 		_agentChannel.DrainInto(_platformEvents);
 
 		LogPlatformEvents();
@@ -175,10 +172,6 @@ namespace PgE
 
 	void Engine::ServiceFrameCapture() const
 	{
-		// Which input means "capture" is root policy, so the key lives here rather than in the renderer.
-		// The one entry point: an agent asking for a screenshot injects this same key, so it exercises
-		// the path a person at the keyboard takes rather than a parallel one that could rot unnoticed.
-
 		if (!_rendererVulkan)
 		{
 			return;
@@ -193,6 +186,7 @@ namespace PgE
 			return;
 		}
 
+		PGE_LOG(Trace, "Frame capture requested");
 		if (const std::expected<std::filesystem::path, PathError> capturePath = GenerateCapturePath())
 		{
 			_rendererVulkan->RequestCapture(*capturePath);
@@ -203,35 +197,48 @@ namespace PgE
 		}
 	}
 
-	void Engine::RequestStop()
+	std::expected<void, BootError> Engine::BootPresentation()
 	{
-		PGE_LOG(Info);
+		std::expected<std::unique_ptr<WindowServer>, WindowServerError> windowServer = WindowServer::Create();
+		if (!windowServer)
+		{
+			PGE_LOG(Error, "Presentation bootstrap failed: window server error {}", ToString(windowServer.error()));
+			return std::unexpected(BootError::Platform);
+		}
 
-		_running = false;
+		_windowServer = std::move(*windowServer);
+
+		const std::expected<Window*, WindowError> window = _windowServer->CreateWindow(WindowSpecification{});
+		if (!window)
+		{
+			PGE_LOG(Error, "Presentation bootstrap failed: window creation error {}", ToString(window.error()));
+			return std::unexpected(BootError::Platform);
+		}
+
+		_window = window.value();
+
+		return {};
 	}
 
-	void Engine::Shutdown()
+	std::expected<void, BootError> Engine::BootRendering()
 	{
-		PGE_LOG(Info);
-
-		// First, and stated here rather than left to member declaration order: the reader thread must
-		// be joined before anything it could still be handing work to goes away.
-
-		_agentChannel.Stop();
-
-		_app.reset();
-		_world.reset();
-
-		if (_rendererVulkan)
+		if (!_windowServer || !_window)
 		{
-			_rendererVulkan->Teardown();
+			PGE_LOG(Error, "Rendering bootstrap failed: can't create renderer without window");
+			return std::unexpected(BootError::Rendering);
 		}
-		_rendererVulkan.reset();
 
-		// The renderer holds a surface referencing the window, so windows outlive it and the
-		// connection outlives them.
+		std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> renderer =
+			RendererVulkan::Create(RendererSpecification{}, *_windowServer, *_window);
 
-		_window = nullptr;
-		_windowServer.reset();
+		if (!renderer)
+		{
+			PGE_LOG(Error, "Rendering bootstrap failed: renderer creation error {}", ToString(renderer.error()));
+			return std::unexpected(BootError::Rendering);
+		}
+
+		_rendererVulkan = std::move(*renderer);
+
+		return {};
 	}
 }
