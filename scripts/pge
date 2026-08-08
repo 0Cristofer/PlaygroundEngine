@@ -102,11 +102,23 @@ def is_complete_png(path):
         return False
 
 
+class CaptureDirectoryError(Exception):
+    """The captures directory exists but cannot be read, so no capture can ever be found there."""
+
+
 def list_captures():
     try:
         return set(os.listdir(CAPTURE_DIRECTORY))
     except FileNotFoundError:
+        # Absent is normal: the engine creates the directory when it writes the first capture.
         return set()
+    except OSError as error:
+        # Anything else (a stale file sitting on the name, a directory that cannot be read) never
+        # resolves itself, so it is reported now rather than waited out and blamed on the renderer.
+        raise CaptureDirectoryError(
+            "pge: %s is not a usable captures directory (%s)"
+            % (CAPTURE_DIRECTORY, error.strerror or error)
+        ) from error
 
 
 def take_screenshot():
@@ -149,7 +161,11 @@ def main():
             print("pge: screenshot takes no arguments", file=sys.stderr)
             return 1
 
-        capture = take_screenshot()
+        try:
+            capture = take_screenshot()
+        except CaptureDirectoryError as error:
+            print(error, file=sys.stderr)
+            return 1
 
         if capture is None:
             print(
