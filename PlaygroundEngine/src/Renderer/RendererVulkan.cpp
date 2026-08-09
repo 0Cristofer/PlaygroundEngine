@@ -3,6 +3,7 @@
 #include "PlaygroundEngine/Log.h"
 
 #include <vulkan/vulkan.h>
+#include <imgui_impl_vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -25,6 +26,11 @@ namespace PgE
 {
 	constexpr std::uint32_t MaxFramesInFlight = 2;
 	constexpr std::array RequiredDeviceExtensions = {vk::KHRSwapchainExtensionName};
+	// Sized for the font atlas plus room for a handful of panel-owned textures; the ImGui backend
+	// grows nothing on its own, so this is the ceiling on what the debug UI can bind at once.
+	constexpr std::uint32_t DebugUiDescriptorPoolSize = 16;
+	constexpr vk::DeviceSize DebugUiMinimumAllocationSize = 1024 * 1024;
+
 	constexpr std::string_view PlaceholderTextureFileName = "viking_room.png";
 	constexpr std::string_view PlaceholderModelFileName = "viking_room.obj";
 
@@ -311,7 +317,7 @@ namespace PgE
 		}
 		std::vector<vk::raii::Fence>& inFlightFences = inFlightFencesResult.value();
 
-		return std::unique_ptr<RendererVulkan>(new RendererVulkan(
+		std::unique_ptr<RendererVulkan> renderer(new RendererVulkan(
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, swapChain.SupportsTransferSource, std::move(swapChain.ImageViews), std::move(descriptorSetLayout),
@@ -321,15 +327,93 @@ namespace PgE
 			std::move(multisampleColorImageView), depthFormat, std::move(depthImageResource), std::move(depthImageView),
 			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
 			std::move(presentCompleteSemaphores), std::move(renderFinishedSemaphores), std::move(inFlightFences)));
+
+		// Deliberately not part of the result: the debug overlay is a development aid, so losing it
+		// costs a log line rather than the run. The renderer reports the outcome through
+		// IsDebugUiOverlayEnabled() and draws no overlay when it failed.
+
+		if (specification.DebugUiOverlay)
+		{
+			renderer->InitializeDebugUiBackend(queueFamilyIndex);
+		}
+
+		return renderer;
+	}
+
+	void RendererVulkan::InitializeDebugUiBackend(const std::uint32_t queueFamilyIndex)
+	{
+		// The backend attaches to whatever context is current, and reads it before returning anything,
+		// so with no context ImGui_ImplVulkan_Init aborts on an assert rather than reporting failure.
+
+		if (ImGui::GetCurrentContext() == nullptr)
+		{
+			PGE_LOG(Error, "Debug UI overlay requested with no ImGui context: continuing without an overlay");
+			return;
+		}
+
+		// The overlay renders straight onto the swap chain image, after the scene pass has resolved
+		// into it, so the pipeline is built for that format at one sample rather than for the scene's
+		// multisampled target.
+
+		const auto colorAttachmentFormat = static_cast<VkFormat>(_swapChainSurfaceFormat.format);
+
+		const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+																		.pNext = nullptr,
+																		.viewMask = 0,
+																		.colorAttachmentCount = 1,
+																		.pColorAttachmentFormats = &colorAttachmentFormat,
+																		.depthAttachmentFormat = VK_FORMAT_UNDEFINED,
+																		.stencilAttachmentFormat = VK_FORMAT_UNDEFINED};
+
+		const auto imageCount = static_cast<std::uint32_t>(_swapChainImages.size());
+
+		ImGui_ImplVulkan_InitInfo initInfo{};
+		initInfo.ApiVersion = vk::ApiVersion14;
+		initInfo.Instance = static_cast<VkInstance>(*_instance);
+		initInfo.PhysicalDevice = static_cast<VkPhysicalDevice>(*_physicalDevice);
+		initInfo.Device = static_cast<VkDevice>(*_logicalDevice);
+		initInfo.QueueFamily = queueFamilyIndex;
+		initInfo.Queue = static_cast<VkQueue>(*_queue);
+
+		// Leaving DescriptorPool null and giving a size instead makes the backend own its pool, so the
+		// renderer's own pool stays sized for the scene alone.
+
+		initInfo.DescriptorPoolSize = DebugUiDescriptorPoolSize;
+		initInfo.MinImageCount = imageCount;
+		initInfo.ImageCount = imageCount;
+		initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = pipelineRenderingCreateInfo;
+		initInfo.UseDynamicRendering = true;
+
+		// Vulkan's best-practices validation warns about small dedicated allocations, and validation
+		// errors are a hard gate here, so the backend is asked to allocate in larger blocks.
+
+		initInfo.MinAllocationSize = DebugUiMinimumAllocationSize;
+
+		if (!ImGui_ImplVulkan_Init(&initInfo))
+		{
+			PGE_LOG(Error, "ImGui Vulkan backend failed to initialize: continuing without an overlay");
+			return;
+		}
+
+		_debugUiOverlayEnabled = true;
 	}
 
 	void RendererVulkan::Teardown() const
 	{
 		[[maybe_unused]] auto waitResult = _logicalDevice.waitIdle();
+
+		// After the wait: the backend frees device resources the in-flight frames may still be using.
+
+		if (_debugUiOverlayEnabled)
+		{
+			ImGui_ImplVulkan_Shutdown();
+		}
 	}
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const PlatformEventRecord& platformEventRecord,
-																						  const FramebufferSize framebufferSize)
+																						  const FramebufferSize framebufferSize,
+																						  ImDrawData* debugUiDrawData)
 	{
 		// A minimized window reports a zero framebuffer, and no swap chain can be built for one.
 
@@ -381,7 +465,7 @@ namespace PgE
 			return std::unexpected(RendererError(RendererRenderErrorKind::UnableToResetCommandBuffer, ToString(resetCommandBufferResult)));
 		}
 
-		if (std::expected<void, RendererError<RendererRenderErrorKind>> recordCommandBufferResult = RecordCommandBuffer(imageIndex);
+		if (std::expected<void, RendererError<RendererRenderErrorKind>> recordCommandBufferResult = RecordCommandBuffer(imageIndex, debugUiDrawData);
 			!recordCommandBufferResult)
 		{
 			return recordCommandBufferResult;
@@ -571,6 +655,14 @@ namespace PgE
 		_swapChainExtent = swapChainResult->Extent;
 		_swapChainSupportsTransferSource = swapChainResult->SupportsTransferSource;
 
+		// The backend sizes its per-image buffers from this count, and a rebuilt swap chain can come
+		// back with a different one.
+
+		if (_debugUiOverlayEnabled)
+		{
+			ImGui_ImplVulkan_SetMinImageCount(static_cast<std::uint32_t>(_swapChainImages.size()));
+		}
+
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
 			CreateMultisampleColorResources(_physicalDevice, _logicalDevice, _swapChainExtent, _swapChainSurfaceFormat.format, _sampleCount);
 		if (!multisampleColorResourcesResult)
@@ -671,7 +763,6 @@ namespace PgE
 
 	void RendererVulkan::MoveCamera(const CameraInputState cameraInput, const float deltaTimeSeconds)
 	{
-		constexpr float moveSpeed = 1.5f;
 		constexpr float turnSpeed = 1.5f;
 
 		// Pitch stops just short of straight up or down, where forward would become parallel to the
@@ -695,6 +786,7 @@ namespace PgE
 
 		if (glm::length(movement) > 0.0f)
 		{
+			constexpr float moveSpeed = 1.5f;
 			_cameraPosition += glm::normalize(movement) * moveSpeed * deltaTimeSeconds;
 		}
 
@@ -716,7 +808,8 @@ namespace PgE
 		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &_ubo, sizeof(_ubo));
 	}
 
-	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex) const
+	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex,
+																									ImDrawData* debugUiDrawData) const
 	{
 		if (std::expected<void, vk::Result> beginResult = _commandBuffers[_frameIndex].begin({}); !beginResult)
 		{
@@ -793,6 +886,14 @@ namespace PgE
 
 		_commandBuffers[_frameIndex].endRendering();
 
+		// The enabled check belongs here rather than at the caller: draw data handed to a renderer
+		// whose overlay never came up is dropped, not a precondition violation.
+
+		if (_debugUiOverlayEnabled && debugUiDrawData != nullptr)
+		{
+			RecordDebugUiOverlay(imageIndex, debugUiDrawData);
+		}
+
 		// After rendering, transition the swapchain image to vk::ImageLayout::ePresentSrcKHR
 		TransitionImageLayout(
 			_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
@@ -808,6 +909,42 @@ namespace PgE
 		}
 
 		return {};
+	}
+
+	void RendererVulkan::RecordDebugUiOverlay(const std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const
+	{
+		// The scene resolves into the swap chain image as its rendering ends, and the overlay
+		// loads that same image, so the two colour writes need ordering. Old and new layout are
+		// equal on purpose: this is a barrier, not a transition.
+
+		TransitionImageLayout(
+			_commandBuffers[_frameIndex], _swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::AccessFlagBits2::eColorAttachmentWrite,												// srcAccessMask
+			vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput,										// srcStage
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput,										// dstStage
+			{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1});
+
+		// A second rendering scope rather than a share of the scene's: the overlay is 2D, so it
+		// wants the resolved single-sampled image directly. Drawing it in the scene's pass would
+		// put UI text through MSAA and tie ImGui's pipeline to the scene's sample count.
+
+		const vk::RenderingAttachmentInfo overlayAttachmentInfo = {.imageView = _swapChainImageViews[imageIndex],
+																   .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+																   .loadOp = vk::AttachmentLoadOp::eLoad,
+																   .storeOp = vk::AttachmentStoreOp::eStore};
+
+		const vk::RenderingInfo overlayRenderingInfo = {.renderArea = {.offset = {.x = 0, .y = 0}, .extent = _swapChainExtent},
+														.layerCount = 1,
+														.colorAttachmentCount = 1,
+														.pColorAttachments = &overlayAttachmentInfo};
+
+		_commandBuffers[_frameIndex].beginRendering(overlayRenderingInfo);
+
+		ImGui_ImplVulkan_RenderDrawData(debugUiDrawData, *_commandBuffers[_frameIndex]);
+
+		_commandBuffers[_frameIndex].endRendering();
 	}
 
 }

@@ -8,6 +8,10 @@ namespace PgE
 	{
 		std::string ApplicationName = "Playground";
 		std::string EngineName = "No Engine";
+
+		/// Builds the overlay pass that draws debug UI on top of the scene. An ImGui context must
+		/// already exist when the renderer is created, since the backend attaches itself to it.
+		bool DebugUiOverlay = false;
 	};
 
 	export enum class RendererCreationErrorKind

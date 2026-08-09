@@ -267,11 +267,24 @@ add_library(
 	"${imgui_SOURCE_DIR}/imgui_tables.cpp"
 	"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
 	"${imgui_SOURCE_DIR}/imgui_demo.cpp"
+	# The Vulkan backend is the one stock backend kept. Its platform counterpart is not: the engine
+	# feeds ImGui from PlatformEventRecord instead, so ImGui never reaches the window layer.
+	"${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp"
 )
 
 target_compile_features(ImGuiLibrary PUBLIC cxx_std_26)
 
-target_include_directories(ImGuiLibrary SYSTEM PUBLIC "${imgui_SOURCE_DIR}")
+target_include_directories(
+	ImGuiLibrary
+	SYSTEM
+	PUBLIC
+		"${imgui_SOURCE_DIR}"
+		"${imgui_SOURCE_DIR}/backends"
+)
+
+# Vulkan::Vulkan rather than VulkanModule: the backend is C++ using the plain C headers, and it is
+# the renderer that speaks vulkan-hpp.
+target_link_libraries(ImGuiLibrary PUBLIC Vulkan::Vulkan)
 
 target_compile_options(ImGuiLibrary PRIVATE -w)
 
