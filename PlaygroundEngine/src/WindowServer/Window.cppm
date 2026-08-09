@@ -21,6 +21,7 @@ namespace PgE
 	concept WindowBackendInterface = requires(const Backend constBackend, VkInstance vkInstance) {
 		{ constBackend.GetSize() } -> std::same_as<WindowSize>;
 		{ constBackend.GetFramebufferSize() } -> std::same_as<FramebufferSize>;
+		{ constBackend.GetContentScale() } -> std::same_as<ContentScale>;
 		{ constBackend.CreateVulkanSurface(vkInstance) } -> std::same_as<std::expected<VkSurfaceKHR, VulkanWindowError>>;
 	};
 
@@ -41,6 +42,9 @@ namespace PgE
 
 		/// The authoritative drawable size, queried live.
 		[[nodiscard]] FramebufferSize GetFramebufferSize() const;
+
+		/// The display's density hint, used to size interface elements.
+		[[nodiscard]] ContentScale GetContentScale() const;
 		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance vkInstance) const;
 
 	private:

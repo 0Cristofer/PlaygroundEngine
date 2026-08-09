@@ -35,6 +35,15 @@ namespace PgE
 		return FramebufferSize{.Width = width, .Height = height};
 	}
 
+	ContentScale WindowBackend::GetContentScale() const
+	{
+		float horizontal = 1.0f;
+		float vertical = 1.0f;
+		glfwGetWindowContentScale(_handle, &horizontal, &vertical);
+
+		return ContentScale{.X = horizontal, .Y = vertical};
+	}
+
 	std::expected<VkSurfaceKHR, VulkanWindowError> WindowBackend::CreateVulkanSurface(const VkInstance instance) const
 	{
 		VkSurfaceKHR surface;

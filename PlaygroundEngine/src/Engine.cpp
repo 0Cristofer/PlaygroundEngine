@@ -11,6 +11,38 @@ import imgui;
 
 namespace PgE
 {
+	namespace
+	{
+		// A display density hint of 1 is what a window system reports when it does not scale, which
+		// on a dense monitor still leaves the debug UI unreadably small. This is the reader's own
+		// factor on top, scanned raw the way --agent-channel is, since there is no settings store.
+
+		constexpr std::string_view DebugUiScaleFlag = "--debug-ui-scale=";
+
+		float ReadDebugUiScale(const CommandLine& commandLine)
+		{
+			for (int index = 1; index < commandLine.Argc; ++index)
+			{
+				const std::string_view argument = commandLine.Argv[index];
+				if (!argument.starts_with(DebugUiScaleFlag))
+				{
+					continue;
+				}
+
+				const std::string_view value = argument.substr(DebugUiScaleFlag.size());
+
+				if (float scale = 0.0f; std::from_chars(value.data(), value.data() + value.size(), scale).ec == std::errc{} && scale > 0.0f)
+				{
+					return scale;
+				}
+
+				PGE_LOG(Warn, "Ignoring malformed {}{}", DebugUiScaleFlag, value);
+			}
+
+			return 1.0f;
+		}
+	}
+
 	Engine::Engine(AppDescriptorBase& appDescriptor) : _appDescriptor(appDescriptor)
 	{}
 
@@ -162,13 +194,18 @@ namespace PgE
 				_rendererVulkan->BeginDebugUiFrame();
 			}
 
-			_debugUi->BeginFrame(_window->GetFramebufferSize(), deltaTimeSeconds);
+			_debugUi->BeginFrame(*_window, _platformEvents, deltaTimeSeconds);
 		}
 
 		_world->Run();
 
 		// Placeholder standing in for real panels, written the way one would be: a guard on the frame
 		// being open, then plain ImGui calls, with no reference to the DebugUi instance.
+
+		if (_debugUi != nullptr)
+		{
+			_debugUi->DrawSettingsPanel();
+		}
 
 		if (DebugUi::IsFrameOpen())
 		{
@@ -245,7 +282,7 @@ namespace PgE
 		// inside DebugUi itself.
 
 #if defined(PGE_DEV)
-		_debugUi = std::make_unique<DebugUi>();
+		_debugUi = std::make_unique<DebugUi>(*_window, ReadDebugUiScale(_appDescriptor.GetCommandLine()));
 #endif
 	}
 

@@ -27,6 +27,7 @@ namespace PgE
 
 		[[nodiscard]] WindowSize GetSize() const;
 		[[nodiscard]] FramebufferSize GetFramebufferSize() const;
+		[[nodiscard]] ContentScale GetContentScale() const;
 		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance instance) const pre(_handle != nullptr);
 
 	private:

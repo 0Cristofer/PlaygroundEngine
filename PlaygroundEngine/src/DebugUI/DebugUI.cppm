@@ -2,6 +2,7 @@ export module PlaygroundEngine.DebugUi;
 
 import imgui;
 
+import PlaygroundEngine.PlatformEvents;
 import PlaygroundEngine.WindowServer;
 
 namespace PgE
@@ -12,7 +13,10 @@ namespace PgE
 	export class DebugUi
 	{
 	public:
-		DebugUi();
+		/// The window supplies the display's density hint and interfaceScale the reader's starting
+		/// preference, which ImGui keeps as separate factors and multiplies. Only text is scaled;
+		/// spacing and padding keep their pixel sizes.
+		explicit DebugUi(const Window& window, float interfaceScale = 1.0f);
 		~DebugUi();
 
 		DebugUi(const DebugUi&) = delete;
@@ -23,8 +27,10 @@ namespace PgE
 		/// context ImGui::Begin dereferences a null pointer before it asserts anything.
 		[[nodiscard]] static bool IsFrameOpen();
 
-		/// Opens the ImGui frame. Pairs with EndFrame.
-		void BeginFrame(FramebufferSize framebufferSize, float deltaTimeSeconds) const;
+		/// Opens the ImGui frame, feeding it this frame's input. Pairs with EndFrame.
+		void BeginFrame(const Window& window, const PlatformEventRecord& platformEventRecord, float deltaTimeSeconds) const;
+
+		void DrawSettingsPanel() const;
 
 		/// Closes the ImGui frame and returns its draw data, valid until the next BeginFrame. Hand it
 		/// to the renderer, which draws it in its overlay pass. Null when no frame was open.
