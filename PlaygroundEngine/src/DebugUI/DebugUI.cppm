@@ -2,6 +2,8 @@ export module PlaygroundEngine.DebugUi;
 
 import imgui;
 
+import std;
+
 import PlaygroundEngine.PlatformEvents;
 import PlaygroundEngine.WindowServer;
 
@@ -35,5 +37,13 @@ namespace PgE
 		/// Closes the ImGui frame and returns its draw data, valid until the next BeginFrame. Hand it
 		/// to the renderer, which draws it in its overlay pass. Null when no frame was open.
 		[[nodiscard]] ImDrawData* EndFrame() const;
+
+	private:
+		void LoadSettings() const;
+		void SaveSettings() const;
+
+		// Empty when the location could not be resolved, which turns persistence off rather than
+		// failing: a debug overlay that cannot remember its layout is still a working overlay.
+		std::filesystem::path _settingsPath;
 	};
 }

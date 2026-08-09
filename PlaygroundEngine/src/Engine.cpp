@@ -13,6 +13,7 @@ namespace PgE
 {
 	namespace
 	{
+#if defined(PGE_DEV)
 		// A display density hint of 1 is what a window system reports when it does not scale, which
 		// on a dense monitor still leaves the debug UI unreadably small. This is the reader's own
 		// factor on top, scanned raw the way --agent-channel is, since there is no settings store.
@@ -41,6 +42,7 @@ namespace PgE
 
 			return 1.0f;
 		}
+#endif
 	}
 
 	Engine::Engine(AppDescriptorBase& appDescriptor) : _appDescriptor(appDescriptor)

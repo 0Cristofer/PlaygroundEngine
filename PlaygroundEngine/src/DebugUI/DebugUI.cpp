@@ -7,8 +7,11 @@ module PlaygroundEngine.DebugUi;
 import imgui;
 import std;
 
+import PlaygroundEngine.Files;
 import PlaygroundEngine.Log;
+import PlaygroundEngine.Paths;
 import PlaygroundEngine.PlatformEvents;
+import PlaygroundEngine.Reflection;
 import PlaygroundEngine.WindowServer;
 
 import :InputTranslation;
@@ -25,6 +28,11 @@ namespace PgE
 	constexpr float MinimumFontScale = 0.5f;
 	constexpr float MaximumFontScale = 4.0f;
 	constexpr float FontScaleDragStep = 0.02f;
+
+	// Beside the executable, the way the renderer's shaders and textures are staged, so a clean build
+	// starts from a clean layout.
+
+	constexpr std::string_view SettingsFileName = "DebugUi.ini";
 
 	// File-local rather than a member for the same reason ImGui's own context is global: the code
 	// that needs to ask is scattered through whatever the frame reaches, and holds no DebugUi.
@@ -55,11 +63,23 @@ namespace PgE
 
 		PGE_LOG(Info, "Debug UI scale: display {:.2f}, interface {:.2f}", displayScale, interfaceScale);
 
-		// Layout persistence is off rather than left at ImGui's default, which would fopen an
-		// imgui.ini beside the working directory. It comes back through Files/Paths, the way stb's
-		// I/O does, once dock layouts are worth keeping.
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+		// Null disables ImGui's own file handling, whose default writes an imgui.ini relative to the
+		// working directory. The same settings are loaded and stored below through Files/Paths, which
+		// keeps one I/O path and one file-error type, the way stb's is routed.
 
 		io.IniFilename = nullptr;
+
+		if (const std::expected<std::filesystem::path, PathError> directory = GetExecutableDirectory(); directory)
+		{
+			_settingsPath = *directory / SettingsFileName;
+			LoadSettings();
+		}
+		else
+		{
+			PGE_LOG(Warn, "Debug UI settings disabled: {}", ToString(directory.error()));
+		}
 
 		PGE_LOG(Info, "Debug UI context created");
 	}
@@ -67,6 +87,15 @@ namespace PgE
 	DebugUi::~DebugUi()
 	{
 		FrameOpen = false;
+
+		// ImGui only flushes settings itself when it owns the file, so a change made inside the last
+		// save interval would be lost on exit. The frame count guards against storing the empty
+		// layout of a context that never ran a frame.
+
+		if (ImGui::GetFrameCount() > 0)
+		{
+			SaveSettings();
+		}
 
 		ImGui::DestroyContext();
 	}
@@ -101,6 +130,11 @@ namespace PgE
 		SubmitPlatformEvents(platformEventRecord);
 
 		ImGui::NewFrame();
+
+		// A dockspace over the whole viewport, so panels dock to the window edges. The central node
+		// is passthrough: it hosts no window of its own, leaving the scene visible under it.
+
+		ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 		FrameOpen = true;
 	}
@@ -144,8 +178,43 @@ namespace PgE
 
 		FrameOpen = false;
 
+		// ImGui asks rather than writes, since its own file handling is off. The flag is ours to
+		// clear once the data is stored.
+
+		if (ImGuiIO& io = ImGui::GetIO(); io.WantSaveIniSettings)
+		{
+			SaveSettings();
+			io.WantSaveIniSettings = false;
+		}
+
 		ImGui::Render();
 
 		return ImGui::GetDrawData();
+	}
+
+	void DebugUi::LoadSettings() const
+	{
+		// A missing file is the first run, not a failure.
+
+		if (const std::expected<std::string, FileError> settings = ReadTextFile(_settingsPath); settings)
+		{
+			ImGui::LoadIniSettingsFromMemory(settings->c_str(), settings->size());
+		}
+	}
+
+	void DebugUi::SaveSettings() const
+	{
+		if (_settingsPath.empty())
+		{
+			return;
+		}
+
+		std::size_t size = 0;
+		const char* settings = ImGui::SaveIniSettingsToMemory(&size);
+
+		if (const std::expected<void, FileError> written = WriteBinaryFile(_settingsPath, std::as_bytes(std::span(settings, size))); !written)
+		{
+			PGE_LOG(Warn, "Debug UI settings not saved: {}", ToString(written.error()));
+		}
 	}
 }
