@@ -39,6 +39,9 @@ namespace PgE
 
 		void DrawSettingsPanel() const;
 
+		/// The pointer shape the debug UI wants this frame, valid after EndFrame. Arrow when there is no debug UI to ask.
+		[[nodiscard]] static CursorShape DesiredCursor();
+
 		/// Closes the ImGui frame and returns its draw data, valid until the next BeginFrame. Hand it
 		/// to the renderer, which draws it in its overlay pass. Null when no frame was open.
 		[[nodiscard]] ImDrawData* EndFrame() const;

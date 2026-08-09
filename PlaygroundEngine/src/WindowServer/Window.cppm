@@ -7,6 +7,7 @@ export module PlaygroundEngine.WindowServer:Window;
 import std;
 
 import :BackendDeclarations;
+import :CursorShape;
 import :WindowServerErrors;
 import :WindowSizes;
 import :WindowSpecification;
@@ -18,11 +19,12 @@ namespace PgE
 	// explicitly, instead of failing inside the renderer.
 
 	export template <typename Backend>
-	concept WindowBackendInterface = requires(const Backend constBackend, VkInstance vkInstance) {
+	concept WindowBackendInterface = requires(Backend backend, const Backend constBackend, VkInstance vkInstance, CursorShape cursorShape) {
 		{ constBackend.GetSize() } -> std::same_as<WindowSize>;
 		{ constBackend.GetFramebufferSize() } -> std::same_as<FramebufferSize>;
 		{ constBackend.GetContentScale() } -> std::same_as<ContentScale>;
 		{ constBackend.CreateVulkanSurface(vkInstance) } -> std::same_as<std::expected<VkSurfaceKHR, VulkanWindowError>>;
+		{ backend.SetCursorShape(cursorShape) } -> std::same_as<void>;
 	};
 
 	export class Window
@@ -46,6 +48,9 @@ namespace PgE
 		/// The display's density hint, used to size interface elements.
 		[[nodiscard]] ContentScale GetContentScale() const;
 		[[nodiscard]] std::expected<VkSurfaceKHR, VulkanWindowError> CreateVulkanSurface(VkInstance vkInstance) const;
+
+		/// Cheap to call every frame: a shape that is already current is not pushed again.
+		void SetCursorShape(CursorShape shape) const;
 
 	private:
 		friend class WindowServer;

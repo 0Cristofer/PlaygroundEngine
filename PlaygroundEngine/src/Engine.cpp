@@ -218,6 +218,14 @@ namespace PgE
 
 		ImDrawData* const debugUiDrawData = _debugUi != nullptr ? _debugUi->EndFrame() : nullptr;
 
+		// After the frame closed, so this is the shape the frame just decided on rather than the one
+		// before it. The window drops a shape that is already current, so this costs nothing to call.
+
+		if (_window != nullptr)
+		{
+			_window->SetCursorShape(DebugUi::DesiredCursor());
+		}
+
 		if (_rendererVulkan && _window)
 		{
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =

@@ -1,6 +1,7 @@
 export module PlaygroundEngine.WindowServer;
 
 export import :BackendDeclarations;
+export import :CursorShape;
 export import :Window;
 export import :WindowServerErrors;
 export import :WindowSizes;

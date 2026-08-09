@@ -140,6 +140,39 @@ namespace PgE
 	}
 
 	// ReSharper disable once CppMemberFunctionMayBeStatic
+	CursorShape DebugUi::DesiredCursor()
+	{
+		if (ImGui::GetCurrentContext() == nullptr)
+		{
+			return CursorShape::Arrow;
+		}
+
+		switch (ImGui::GetMouseCursor())
+		{
+		case ImGuiMouseCursor_TextInput:
+			return CursorShape::TextInput;
+		case ImGuiMouseCursor_Hand:
+			return CursorShape::Hand;
+		case ImGuiMouseCursor_NotAllowed:
+			return CursorShape::NotAllowed;
+		case ImGuiMouseCursor_ResizeEW:
+			return CursorShape::ResizeHorizontal;
+		case ImGuiMouseCursor_ResizeNS:
+			return CursorShape::ResizeVertical;
+		case ImGuiMouseCursor_ResizeNWSE:
+			return CursorShape::ResizeTopLeftBottomRight;
+		case ImGuiMouseCursor_ResizeNESW:
+			return CursorShape::ResizeTopRightBottomLeft;
+		case ImGuiMouseCursor_ResizeAll:
+			return CursorShape::ResizeAll;
+		case ImGuiMouseCursor_None:
+			return CursorShape::Hidden;
+		default:
+			return CursorShape::Arrow;
+		}
+	}
+
+	// ReSharper disable once CppMemberFunctionMayBeStatic
 	void DebugUi::DrawSettingsPanel() const
 	{
 		if (!FrameOpen)
@@ -229,6 +262,11 @@ namespace PgE
 	bool DebugUi::IsFrameOpen()
 	{
 		return false;
+	}
+
+	CursorShape DebugUi::DesiredCursor()
+	{
+		return CursorShape::Arrow;
 	}
 
 	void DebugUi::BeginFrame(const Window&, const PlatformEventRecord&, float) const

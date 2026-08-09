@@ -512,6 +512,7 @@ target_sources(
 				src/WindowServer/WindowServer.cppm
 				src/WindowServer/Window.cppm
 				src/WindowServer/WindowSizes.cppm
+				src/WindowServer/CursorShape.cppm
 				src/WindowServer/WindowSpecification.cppm
 				src/WindowServer/WindowServerErrors.cppm
 				src/WindowServer/BackendDeclarations.cppm
