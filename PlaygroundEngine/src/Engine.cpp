@@ -7,6 +7,7 @@ module PlaygroundEngine;
 import PlaygroundEngine.App;
 import PlaygroundEngine.Log;
 import PlaygroundEngine.Reflection;
+import imgui;
 
 namespace PgE
 {
@@ -35,6 +36,10 @@ namespace PgE
 
 		if (capabilities.Rendering)
 		{
+			// Before the renderer, which attaches its overlay backend to this context.
+
+			BootDebugUi();
+
 			if (const auto rendering = BootRendering(); !rendering)
 			{
 				return std::unexpected(rendering.error());
@@ -79,6 +84,10 @@ namespace PgE
 		}
 		_rendererVulkan.reset();
 
+		// After the renderer, whose teardown detaches the overlay backend from this context.
+
+		_debugUi.reset();
+
 		// The renderer holds a surface referencing the window, so windows outlive it and the
 		// connection outlives them.
 
@@ -113,6 +122,8 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
 	{
+		const float deltaTimeSeconds = AdvanceFrameClock();
+
 		_platformEvents.Clear();
 
 		if (_windowServer)
@@ -141,12 +152,35 @@ namespace PgE
 			RequestStop();
 		}
 
+		// The debug UI frame opens here and closes below, so everything the loop reaches in between
+		// can draw with no registration. The backend's own step has to precede ImGui's.
+
+		if (_debugUi != nullptr && _window != nullptr)
+		{
+			if (_rendererVulkan)
+			{
+				_rendererVulkan->BeginDebugUiFrame();
+			}
+
+			_debugUi->BeginFrame(_window->GetFramebufferSize(), deltaTimeSeconds);
+		}
+
 		_world->Run();
+
+		// Placeholder standing in for real panels, written the way one would be: a guard on the frame
+		// being open, then plain ImGui calls, with no reference to the DebugUi instance.
+
+		if (DebugUi::IsFrameOpen())
+		{
+			ImGui::ShowDemoWindow();
+		}
+
+		ImDrawData* const debugUiDrawData = _debugUi != nullptr ? _debugUi->EndFrame() : nullptr;
 
 		if (_rendererVulkan && _window)
 		{
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =
-					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize());
+					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize(), debugUiDrawData);
 				!drawResult)
 			{
 				return drawResult;
@@ -162,6 +196,16 @@ namespace PgE
 		}
 
 		return {};
+	}
+
+	float Engine::AdvanceFrameClock()
+	{
+		const std::chrono::steady_clock::time_point frameTime = std::chrono::steady_clock::now();
+		const float deltaTimeSeconds = std::chrono::duration<float>(frameTime - _previousFrameTime).count();
+
+		_previousFrameTime = frameTime;
+
+		return deltaTimeSeconds;
 	}
 
 	void Engine::LogPlatformEvents() const
@@ -195,6 +239,16 @@ namespace PgE
 		return {};
 	}
 
+	void Engine::BootDebugUi()
+	{
+		// Development builds only: the composition seam is what makes this dev-only, not a check
+		// inside DebugUi itself.
+
+#if defined(PGE_DEV)
+		_debugUi = std::make_unique<DebugUi>();
+#endif
+	}
+
 	std::expected<void, BootError> Engine::BootRendering()
 	{
 		if (!_windowServer || !_window)
@@ -204,7 +258,7 @@ namespace PgE
 		}
 
 		std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> renderer =
-			RendererVulkan::Create(RendererSpecification{}, *_windowServer, *_window);
+			RendererVulkan::Create(RendererSpecification{.DebugUiOverlay = _debugUi != nullptr}, *_windowServer, *_window);
 
 		if (!renderer)
 		{

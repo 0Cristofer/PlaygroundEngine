@@ -399,6 +399,14 @@ namespace PgE
 		_debugUiOverlayEnabled = true;
 	}
 
+	void RendererVulkan::BeginDebugUiFrame() const
+	{
+		if (_debugUiOverlayEnabled)
+		{
+			ImGui_ImplVulkan_NewFrame();
+		}
+	}
+
 	void RendererVulkan::Teardown() const
 	{
 		[[maybe_unused]] auto waitResult = _logicalDevice.waitIdle();

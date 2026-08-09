@@ -467,6 +467,7 @@ target_sources(
 		src/Files.cpp
 		src/Paths.cpp
 		src/FrameCapture.cpp
+		src/DebugUI/DebugUI.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
 		src/AgentChannel/AgentChannel.cpp
@@ -496,6 +497,7 @@ target_sources(
 				src/Files.cppm
 				src/Paths.cppm
 				src/FrameCapture.cppm
+				src/DebugUI/DebugUI.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm

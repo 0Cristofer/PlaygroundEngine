@@ -37,6 +37,10 @@ namespace PgE
 
 		void NotifyFramebufferResized();
 
+		/// Runs the overlay backend's per-frame step. Must precede the ImGui frame it belongs to, so
+		/// the loop calls this before DebugUi::BeginFrame. A no-op when the overlay is off.
+		void BeginDebugUiFrame() const;
+
 		/// False when the overlay was not requested, or was requested and failed to come up. Callers
 		/// need not consult it before passing draw data: an overlay that is off simply draws nothing.
 		[[nodiscard]] bool IsDebugUiOverlayEnabled() const

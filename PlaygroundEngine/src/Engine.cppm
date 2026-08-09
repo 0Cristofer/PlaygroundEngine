@@ -6,6 +6,7 @@ export import PlaygroundEngine.WindowServer;
 
 import PlaygroundEngine.AgentChannel;
 import PlaygroundEngine.App;
+import PlaygroundEngine.DebugUi;
 import PlaygroundEngine.FrameCapture;
 import PlaygroundEngine.Renderer.Vulkan;
 
@@ -77,6 +78,9 @@ namespace PgE
 
 		std::expected<void, BootError> BootPresentation();
 		std::expected<void, BootError> BootRendering();
+		void BootDebugUi();
+
+		[[nodiscard]] float AdvanceFrameClock();
 
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;
@@ -89,6 +93,9 @@ namespace PgE
 		AgentChannelHost _agentChannel;
 		FrameCapture _frameCapture;
 
+		std::chrono::steady_clock::time_point _previousFrameTime = std::chrono::steady_clock::now();
+
+		std::unique_ptr<DebugUi> _debugUi;
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<World> _world;
 		std::unique_ptr<AppBase> _app;
