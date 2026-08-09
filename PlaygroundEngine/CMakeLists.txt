@@ -499,7 +499,6 @@ target_sources(
 				src/Paths.cppm
 				src/FrameCapture.cppm
 				src/DebugUI/DebugUI.cppm
-				src/DebugUI/DebugUIInputTranslation.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm

@@ -4,8 +4,6 @@ import imgui;
 
 import PlaygroundEngine.PlatformEvents;
 
-import :InputTranslation;
-
 namespace PgE
 {
 	// InputCode names a physical position and ImGuiKey names the key a layout would produce, so this

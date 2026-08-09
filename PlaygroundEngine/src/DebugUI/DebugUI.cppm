@@ -9,6 +9,11 @@ import PlaygroundEngine.WindowServer;
 
 namespace PgE
 {
+	/// Feeds one frame of platform events into the current ImGui context's input queue. BeginFrame
+	/// calls it before opening the frame; it is exposed because it needs the record and nothing else,
+	/// which is what lets it be exercised without a window.
+	export void SubmitPlatformEvents(const PlatformEventRecord& platformEventRecord);
+
 	/// Owns the ImGui context and brackets the frame it is drawn in. There is no panel registration:
 	/// ImGui's context is the registry, so any code reached between BeginFrame and EndFrame can call
 	/// ImGui:: and its windows land in that frame.

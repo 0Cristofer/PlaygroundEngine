@@ -14,10 +14,10 @@ import PlaygroundEngine.PlatformEvents;
 import PlaygroundEngine.Reflection;
 import PlaygroundEngine.WindowServer;
 
-import :InputTranslation;
-
 namespace PgE
 {
+
+#if defined(PGE_DEV)
 	// ImGui aborts on a non-positive delta on any frame past the first, so a frame the clock reports
 	// as instant is floored rather than passed through.
 	constexpr float MinimumDeltaTimeSeconds = 1.0f / 10000.0f;
@@ -217,4 +217,35 @@ namespace PgE
 			PGE_LOG(Warn, "Debug UI settings not saved: {}", ToString(written.error()));
 		}
 	}
+#else
+	// Compiled out of shipping builds, which is what keeps ImGui's code from being linked at all:
+	// nothing here references it, so the linker never pulls the objects that hold it.
+
+	DebugUi::DebugUi(const Window&, float)
+	{}
+
+	DebugUi::~DebugUi() = default;
+
+	bool DebugUi::IsFrameOpen()
+	{
+		return false;
+	}
+
+	void DebugUi::BeginFrame(const Window&, const PlatformEventRecord&, float) const
+	{}
+
+	void DebugUi::DrawSettingsPanel() const
+	{}
+
+	ImDrawData* DebugUi::EndFrame() const
+	{
+		return nullptr;
+	}
+
+	void DebugUi::LoadSettings() const
+	{}
+
+	void DebugUi::SaveSettings() const
+	{}
+#endif
 }

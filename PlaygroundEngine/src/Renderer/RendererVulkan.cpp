@@ -3,7 +3,9 @@
 #include "PlaygroundEngine/Log.h"
 
 #include <vulkan/vulkan.h>
+#if defined(PGE_DEV)
 #include <imgui_impl_vulkan.h>
+#endif
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -340,6 +342,7 @@ namespace PgE
 		return renderer;
 	}
 
+#if defined(PGE_DEV)
 	void RendererVulkan::InitializeDebugUiBackend(const std::uint32_t queueFamilyIndex)
 	{
 		// The backend attaches to whatever context is current, and reads it before returning anything,
@@ -398,13 +401,21 @@ namespace PgE
 
 		_debugUiOverlayEnabled = true;
 	}
+#else
+	// Shipping builds carry no overlay, so the backend it would attach to is never wired.
+
+	void RendererVulkan::InitializeDebugUiBackend(std::uint32_t)
+	{}
+#endif
 
 	void RendererVulkan::BeginDebugUiFrame() const
 	{
+#if defined(PGE_DEV)
 		if (_debugUiOverlayEnabled)
 		{
 			ImGui_ImplVulkan_NewFrame();
 		}
+#endif
 	}
 
 	void RendererVulkan::Teardown() const
@@ -413,10 +424,12 @@ namespace PgE
 
 		// After the wait: the backend frees device resources the in-flight frames may still be using.
 
+#if defined(PGE_DEV)
 		if (_debugUiOverlayEnabled)
 		{
 			ImGui_ImplVulkan_Shutdown();
 		}
+#endif
 	}
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const PlatformEventRecord& platformEventRecord,
@@ -666,10 +679,12 @@ namespace PgE
 		// The backend sizes its per-image buffers from this count, and a rebuilt swap chain can come
 		// back with a different one.
 
+#if defined(PGE_DEV)
 		if (_debugUiOverlayEnabled)
 		{
 			ImGui_ImplVulkan_SetMinImageCount(static_cast<std::uint32_t>(_swapChainImages.size()));
 		}
+#endif
 
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
 			CreateMultisampleColorResources(_physicalDevice, _logicalDevice, _swapChainExtent, _swapChainSurfaceFormat.format, _sampleCount);
@@ -919,6 +934,7 @@ namespace PgE
 		return {};
 	}
 
+#if defined(PGE_DEV)
 	void RendererVulkan::RecordDebugUiOverlay(const std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const
 	{
 		// The scene resolves into the swap chain image as its rendering ends, and the overlay
@@ -954,5 +970,9 @@ namespace PgE
 
 		_commandBuffers[_frameIndex].endRendering();
 	}
+#else
+	void RendererVulkan::RecordDebugUiOverlay(std::uint32_t, ImDrawData*) const
+	{}
+#endif
 
 }

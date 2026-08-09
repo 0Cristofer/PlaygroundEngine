@@ -209,10 +209,12 @@ namespace PgE
 			_debugUi->DrawSettingsPanel();
 		}
 
+#if defined(PGE_DEV)
 		if (DebugUi::IsFrameOpen())
 		{
 			ImGui::ShowDemoWindow();
 		}
+#endif
 
 		ImDrawData* const debugUiDrawData = _debugUi != nullptr ? _debugUi->EndFrame() : nullptr;
 
