@@ -7,6 +7,7 @@ module;
 module PlaygroundEngine.DebugUi;
 
 import imgui;
+import imgui_internal;
 import std;
 
 import PlaygroundEngine.Files;
@@ -35,6 +36,12 @@ namespace PgE
 	// starts from a clean layout.
 
 	constexpr std::string_view SettingsFileName = "DebugUi.ini";
+
+	// The debug UI's own values ride in ImGui's settings file rather than a second one, through the
+	// handler mechanism ImGui offers for exactly this. Window layout and this share one file.
+
+	constexpr auto SettingsTypeName = "PlaygroundDebugUi";
+	constexpr std::string_view FontScaleKey = "FontScale=";
 
 	// File-local rather than a member for the same reason ImGui's own context is global: the code
 	// that needs to ask is scattered through whatever the frame reaches, and holds no DebugUi.
@@ -74,7 +81,52 @@ namespace PgE
 		}
 	}
 
-	DebugUi::DebugUi(const Window& window, WindowServer& windowServer, const float interfaceScale)
+	namespace
+	{
+		void* ReadSettingsOpen(ImGuiContext*, ImGuiSettingsHandler*, const char* name)
+		{
+			// One entry with a fixed name, so the token handed back to the line reader carries nothing.
+
+			return std::string_view(name) == "Settings" ? const_cast<char*>(SettingsTypeName) : nullptr;
+		}
+
+		void ReadSettingsLine(ImGuiContext*, ImGuiSettingsHandler*, void*, const char* line)
+		{
+			const std::string_view text(line);
+			if (!text.starts_with(FontScaleKey))
+			{
+				return;
+			}
+
+			const std::string_view value = text.substr(FontScaleKey.size());
+
+			if (float fontScale = 0.0f; std::from_chars(value.data(), value.data() + value.size(), fontScale).ec == std::errc{} && fontScale > 0.0f)
+			{
+				ImGui::GetStyle().FontScaleMain = fontScale;
+			}
+		}
+
+		// ReSharper disable once CppParameterMayBeConstPtrOrRef
+		void WriteSettings(ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buffer)
+		{
+			buffer->appendf("[%s][Settings]\n", handler->TypeName);
+			buffer->appendf("FontScale=%.2f\n\n", static_cast<double>(ImGui::GetStyle().FontScaleMain));
+		}
+
+		void RegisterSettingsHandler()
+		{
+			ImGuiSettingsHandler handler;
+			handler.TypeName = SettingsTypeName;
+			handler.TypeHash = ImHashStr(SettingsTypeName);
+			handler.ReadOpenFn = &ReadSettingsOpen;
+			handler.ReadLineFn = &ReadSettingsLine;
+			handler.WriteAllFn = &WriteSettings;
+
+			ImGui::AddSettingsHandler(&handler);
+		}
+	}
+
+	DebugUi::DebugUi(const Window& window, WindowServer& windowServer)
 	{
 		ImGui::CreateContext();
 
@@ -100,9 +152,10 @@ namespace PgE
 
 		ImGuiStyle& style = ImGui::GetStyle();
 		style.FontScaleDpi = displayScale;
-		style.FontScaleMain = interfaceScale;
 
-		PGE_LOG(Info, "Debug UI scale: display {:.2f}, interface {:.2f}", displayScale, interfaceScale);
+		// Before the settings are read, since a handler registered afterward never sees its section.
+
+		RegisterSettingsHandler();
 
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
@@ -122,7 +175,7 @@ namespace PgE
 			PGE_LOG(Warn, "Debug UI settings disabled: {}", ToString(directory.error()));
 		}
 
-		PGE_LOG(Info, "Debug UI context created");
+		PGE_LOG(Info, "Debug UI scale: display {:.2f}, interface {:.2f}", displayScale, style.FontScaleMain);
 	}
 
 	DebugUi::~DebugUi()
@@ -233,7 +286,12 @@ namespace PgE
 		if (ImGui::Begin("Debug UI", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
-			ImGui::DragFloat("Font scale", &style.FontScaleMain, FontScaleDragStep, MinimumFontScale, MaximumFontScale, "%.2f");
+			if (ImGui::DragFloat("Font scale", &style.FontScaleMain, FontScaleDragStep, MinimumFontScale, MaximumFontScale, "%.2f"))
+			{
+				// ImGui tracks its own state for this, and knows nothing about ours changing.
+
+				ImGui::MarkIniSettingsDirty();
+			}
 			ImGui::Text("Display scale: %.2f", style.FontScaleDpi);
 		}
 
@@ -295,7 +353,7 @@ namespace PgE
 	// Compiled out of shipping builds, which is what keeps ImGui's code from being linked at all:
 	// nothing here references it, so the linker never pulls the objects that hold it.
 
-	DebugUi::DebugUi(const Window&, WindowServer&, float)
+	DebugUi::DebugUi(const Window&, WindowServer&)
 	{}
 
 	DebugUi::~DebugUi() = default;

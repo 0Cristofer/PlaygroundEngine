@@ -20,10 +20,10 @@ namespace PgE
 	export class DebugUi
 	{
 	public:
-		/// The window supplies the display's density hint and interfaceScale the reader's starting
-		/// preference, which ImGui multiplies; only text scales, spacing keeps its pixel sizes. The
+		/// The window supplies the display's density hint, which ImGui multiplies with the scale the
+		/// reader chose and the settings stored; only text scales, spacing keeps its pixel sizes. The
 		/// server is borrowed for the clipboard, and must outlive this, as the teardown order ensures.
-		DebugUi(const Window& window, WindowServer& windowServer, float interfaceScale = 1.0f);
+		DebugUi(const Window& window, WindowServer& windowServer);
 		~DebugUi();
 
 		DebugUi(const DebugUi&) = delete;

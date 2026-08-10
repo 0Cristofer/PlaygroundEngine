@@ -342,6 +342,9 @@ target_sources(
 				"${imguimodule_SOURCE_DIR}/generated"
 			FILES
 				"${imguimodule_SOURCE_DIR}/generated/imgui.cppm"
+				# The settings handler that lets the debug UI store its own values in ImGui's ini
+				# lives in ImGui's internal header, so its binding is built too.
+				"${imguimodule_SOURCE_DIR}/generated/imgui_internal.cppm"
 )
 # --- ImGui setup --
 
