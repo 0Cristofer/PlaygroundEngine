@@ -69,6 +69,7 @@ target_sources(
 		src/Reflection/ReflectionNamespaceTests.cpp
 		src/LogTests.cpp
 		src/PlatformEventsTests.cpp
+		src/DebugUiInputTests.cpp
 		src/AgentChannelTests.cpp
 		src/ImageTests.cpp
 		src/FilesTests.cpp
@@ -98,6 +99,9 @@ target_link_libraries(
 	PlaygroundTests
 	PRIVATE
 		PlaygroundEngine
+		# ImGuiModule is PRIVATE on the engine, so the debug UI tests, which assert against ImGui's
+		# own state, name it here rather than reaching it through the engine.
+		ImGuiModule
 		doctest::doctest
 )
 

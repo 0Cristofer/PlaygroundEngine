@@ -1,0 +1,57 @@
+export module PlaygroundEngine.DebugUi;
+
+import imgui;
+
+import std;
+
+import PlaygroundEngine.PlatformEvents;
+import PlaygroundEngine.WindowServer;
+
+namespace PgE
+{
+	/// Feeds one frame of platform events into the current ImGui context's input queue. BeginFrame
+	/// calls it before opening the frame; it is exposed because it needs the record and nothing else,
+	/// which is what lets it be exercised without a window.
+	export void SubmitPlatformEvents(const PlatformEventRecord& platformEventRecord);
+
+	/// Owns the ImGui context and brackets the frame it is drawn in. There is no panel registration:
+	/// ImGui's context is the registry, so any code reached between BeginFrame and EndFrame can call
+	/// ImGui:: and its windows land in that frame.
+	export class DebugUi
+	{
+	public:
+		/// The window supplies the display's density hint, which ImGui multiplies with the scale the
+		/// reader chose and the settings stored; only text scales, spacing keeps its pixel sizes. The
+		/// server is borrowed for the clipboard, and must outlive this, as the teardown order ensures.
+		DebugUi(const Window& window, WindowServer& windowServer);
+		~DebugUi();
+
+		DebugUi(const DebugUi&) = delete;
+		DebugUi& operator=(const DebugUi&) = delete;
+
+		/// Whether ImGui calls are safe right now: a context is alive and its frame is open. Static
+		/// because panel code drawing from inside a system has no DebugUi to ask, and without a
+		/// context ImGui::Begin dereferences a null pointer before it asserts anything.
+		[[nodiscard]] static bool IsFrameOpen();
+
+		/// Opens the ImGui frame, feeding it this frame's input. Pairs with EndFrame.
+		void BeginFrame(const Window& window, const PlatformEventRecord& platformEventRecord, float deltaTimeSeconds) const;
+
+		void DrawSettingsPanel() const;
+
+		/// The pointer shape the debug UI wants this frame, valid after EndFrame. Arrow when there is no debug UI to ask.
+		[[nodiscard]] static CursorShape DesiredCursor();
+
+		/// Closes the ImGui frame and returns its draw data, valid until the next BeginFrame. Hand it
+		/// to the renderer, which draws it in its overlay pass. Null when no frame was open.
+		[[nodiscard]] ImDrawData* EndFrame() const;
+
+	private:
+		void LoadSettings() const;
+		void SaveSettings() const;
+
+		// Empty when the location could not be resolved, which turns persistence off rather than
+		// failing: a debug overlay that cannot remember its layout is still a working overlay.
+		std::filesystem::path _settingsPath;
+	};
+}

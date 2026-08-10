@@ -10,7 +10,7 @@ namespace PgE
 	export struct WindowSpecification
 	{
 		std::string Title = "Playground";
-		int Width = 1280;
-		int Height = 720;
+		int Width = 1440;
+		int Height = 900;
 	};
 }

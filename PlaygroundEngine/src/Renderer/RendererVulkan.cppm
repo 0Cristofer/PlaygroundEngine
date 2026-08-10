@@ -15,6 +15,7 @@ export import :VulkanTypes;
 export import :VulkanUtils;
 
 import vulkan;
+import imgui;
 import std;
 import PlaygroundEngine.Renderer.Vertex;
 
@@ -28,10 +29,25 @@ namespace PgE
 
 		void Teardown() const;
 
+		/// debugUiDrawData is ImGui's output for this frame, drawn in an overlay pass after the scene.
+		/// Null draws no overlay.
 		std::expected<void, RendererError<RendererRenderErrorKind>> DrawFrame(const PlatformEventRecord& platformEventRecord,
-																			  FramebufferSize framebufferSize);
+																			  FramebufferSize framebufferSize,
+																			  float deltaTimeSeconds,
+																			  ImDrawData* debugUiDrawData = nullptr);
 
 		void NotifyFramebufferResized();
+
+		/// Runs the overlay backend's per-frame step. Must precede the ImGui frame it belongs to, so
+		/// the loop calls this before DebugUi::BeginFrame. A no-op when the overlay is off.
+		void BeginDebugUiFrame() const;
+
+		/// False when the overlay was not requested, or was requested and failed to come up. Callers
+		/// need not consult it before passing draw data: an overlay that is off simply draws nothing.
+		[[nodiscard]] bool IsDebugUiOverlayEnabled() const
+		{
+			return _debugUiOverlayEnabled;
+		}
 
 		/// Queues a capture of the next presented frame, writing it to path as a PNG.
 		/// Fire and forget. The frame is not failed if the capture is.
@@ -106,7 +122,12 @@ namespace PgE
 			RebuildViewMatrix();
 		}
 
-		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex) const;
+		/// Attaches ImGui's Vulkan backend to the current ImGui context. Separate from the constructor
+		/// because it is the one piece of setup that reads state owned outside the renderer.
+		void InitializeDebugUiBackend(std::uint32_t queueFamilyIndex);
+
+		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const;
+		void RecordDebugUiOverlay(std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const;
 		CreationResult<void> CaptureSwapChainImage(std::uint32_t imageIndex, const std::filesystem::path& path) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
 		void UpdateUniformBuffer(std::uint32_t frameIndex) const;
@@ -179,6 +200,7 @@ namespace PgE
 
 		std::uint32_t _frameIndex = 0;
 		bool _framebufferResized = false;
+		bool _debugUiOverlayEnabled = false;
 		std::optional<std::filesystem::path> _pendingCapturePath;
 
 		UniformBufferObject _ubo;
@@ -190,6 +212,5 @@ namespace PgE
 		float _cameraYaw = glm::radians(-45.0f);
 		float _cameraPitch = glm::radians(-35.264f);
 		CameraInputState _cameraInput;
-		std::chrono::steady_clock::time_point _previousFrameTime = std::chrono::steady_clock::now();
 	};
 }

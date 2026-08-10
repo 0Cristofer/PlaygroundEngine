@@ -28,6 +28,16 @@ namespace PgE
 		return _backend->GetFramebufferSize();
 	}
 
+	ContentScale Window::GetContentScale() const
+	{
+		return _backend->GetContentScale();
+	}
+
+	void Window::SetCursorShape(const CursorShape shape) const
+	{
+		_backend->SetCursorShape(shape);
+	}
+
 	std::expected<VkSurfaceKHR, VulkanWindowError> Window::CreateVulkanSurface(const VkInstance vkInstance) const
 	{
 		return _backend->CreateVulkanSurface(vkInstance);

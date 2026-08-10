@@ -20,4 +20,14 @@ namespace PgE
 		int Width = 0;
 		int Height = 0;
 	};
+
+	// How much larger interface elements should be drawn than their nominal size. A density hint
+	// rather than a measurement, so it is neither of the sizes above and does not derive from them:
+	// a display can be dense without the window system scaling the framebuffer.
+
+	export struct ContentScale
+	{
+		float X = 1.0f;
+		float Y = 1.0f;
+	};
 }

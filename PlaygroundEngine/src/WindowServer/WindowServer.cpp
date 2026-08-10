@@ -53,6 +53,17 @@ namespace PgE
 		_backend->Pump(record);
 	}
 
+	// ReSharper disable once CppMemberFunctionMayBeConst
+	void WindowServer::SetClipboardText(const std::string_view text)
+	{
+		_backend->SetClipboardText(text);
+	}
+
+	std::optional<std::string> WindowServer::GetClipboardText() const
+	{
+		return _backend->GetClipboardText();
+	}
+
 	std::expected<std::span<const char* const>, VulkanWindowError> WindowServer::GetRequiredVulkanExtensions() const
 	{
 		return _backend->GetRequiredVulkanExtensions();

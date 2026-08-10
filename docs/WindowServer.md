@@ -1,6 +1,6 @@
 # WindowServer
 
-Status: implemented, for the "now" rows of the ownership table. The boundary rule, the ownership split, and the event record's shape are settled. The interfaces below are what shipped; see [Implementation notes](#implementation-notes) for where they differ from the original sketch, and [Corrections during design](#corrections-during-design) for conclusions that would otherwise get re-derived. This is now the single source for this slice: the session handoff that used to accompany it is deleted. Parent document: [ApplicationArchitecture.md](ApplicationArchitecture.md). Engine-wide conventions live in [CoreConventions.md](CoreConventions.md). The dev overlay that consumes this first is sketched in [DebugUISketch.md](DebugUISketch.md), parts of which this document overrides (see "Overrides").
+Status: implemented, for the "now" rows of the ownership table. The boundary rule, the ownership split, and the event record's shape are settled. The interfaces below are what shipped; see [Implementation notes](#implementation-notes) for where they differ from the original sketch, and [Corrections during design](#corrections-during-design) for conclusions that would otherwise get re-derived. This is now the single source for this slice: the session handoff that used to accompany it is deleted. Parent document: [ApplicationArchitecture.md](ApplicationArchitecture.md). Engine-wide conventions live in [CoreConventions.md](CoreConventions.md). The dev overlay that consumes this first is built: see `PlaygroundEngine/src/DebugUI/`.
 
 ## Definition
 
@@ -339,13 +339,13 @@ Done; kept as the record of what moved and why.
 
 **Not migrating:** the live `GetFramebufferSize` query in the frame loop stays. Replacing it with a value cached from resize events was considered and rejected. The live query returns 0x0 while minimized, which is what makes the renderer's early return correct; a cache can miss that zero, since Wayland may send no resize on minimize at all, and then swapchain recreation clamps a nonzero extent against surface capabilities that report zero while minimized, and fails. The current split is already right: **the resize event is the "something changed" signal, the live query is the authoritative size.** A cache becomes necessary only when a threaded renderer must not touch the connection, and the fix then is the root reading the size once per frame into `FrameContext`, which is a cache with a defined refresh point rather than one fed by events.
 
-## Overrides to DebugUISketch
+## Conclusions carried into the overlay
 
-- `RawInputQueue` must die as a name: the record is neither a queue nor drained.
-- The record should reach the overlay as frame data rather than as a construction-time borrowed pointer, matching the frame-time POD data seam rule.
-- The sketch's "DebugUI drains before InputSystem" contract is **simplified away**. Both read the same non-destructive batch, so ordering between them now matters only for the `InputCaptureState` POD.
-- `InputCaptureState` survives, but as a state-layer concept rather than a record-level one.
-- The sketch references `EngineBootSketch.md`, which no longer exists.
+These outlived the design sketch, which is deleted now that the overlay is built.
+
+- The record reaches the overlay as frame data rather than as a construction-time borrowed pointer, matching the frame-time POD data seam rule. `DebugUi::BeginFrame` takes it per frame.
+- The "overlay drains before the input system" contract is **simplified away**. Both read the same non-destructive batch, so ordering between them matters only for the capture state below.
+- Capture arbitration survives as a state-layer concept rather than a record-level one. ImGui reports it as two frame-level booleans (`io.WantCaptureMouse`, `io.WantCaptureKeyboard`), never per event, so filtering the record was rejected: upstream requires input be fed to ImGui unconditionally, and a blanket removal would also swallow window and dev bindings that are not gameplay input. The gate belongs on the consumer, at the layer where events become commands.
 
 ## Known gaps
 
@@ -373,7 +373,7 @@ Conclusions reached the long way, recorded so they are not re-derived from scrat
 
 ## Next
 
-The debug overlay adapter, which is the [DebugUISketch.md](DebugUISketch.md) slice. It needs the record and nothing else, which is what keeps it small: walk the span in arrival order and forward to `io.AddKeyEvent`, `io.AddInputCharacter` and friends. The input state layer comes after it, not before, because the overlay does not need folded state and the layer's design wants a real second consumer to answer to.
+The input state layer. The debug overlay adapter that used to be next is built (`PlaygroundEngine.DebugUi`), and it needed the record and nothing else: it walks the span in arrival order and forwards to `io.AddKeyEvent`, `io.AddInputCharacter` and friends. The state layer wants a real second consumer to answer to, and capture arbitration is now waiting on it.
 
 ## Rejected alternatives
 

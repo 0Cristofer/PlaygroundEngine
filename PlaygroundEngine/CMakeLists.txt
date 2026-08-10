@@ -232,6 +232,122 @@ target_sources(
 )
 # --- Vulkan setup --
 
+# --- ImGui setup --
+# Two repositories pinned together: ImGui itself, and the C++ module binding for it, which is a
+# generated `export using ::X;` skin over imgui.h rather than a library of its own. Neither ships a
+# usable CMakeLists (the binding ships none at all), so SOURCE_SUBDIR names a directory that does not
+# exist and the targets are written here. The binding is generated against one ImGui release, so the
+# two tags move together; it covers the whole public ImGui:: surface but no macros, since those
+# cannot cross a module boundary. GIT_SUBMODULES "" keeps the binding's cimgui submodule, which is
+# only its generator's input, out of the checkout.
+FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.92.9b-docking SOURCE_SUBDIR does-not-exist)
+
+FetchContent_Declare(
+	imguimodule
+	GIT_REPOSITORY https://github.com/stripe2933/imgui-module.git
+	GIT_TAG 49e9e298293e2c89e881c1871b864a22a63e204d
+	GIT_SUBMODULES
+		""
+	SOURCE_SUBDIR does-not-exist
+)
+
+FetchContent_MakeAvailable(
+	imgui
+	imguimodule
+)
+
+# ImGui's own sources. Split from the module binding below because a target carrying a CXX_MODULES
+# file set has every one of its C++ sources scanned for modules, and these are plain TUs. Kept at
+# C++26 because the global -freflection breaks any C++ TU compiled below it.
+add_library(
+	ImGuiLibrary
+	STATIC
+	"${imgui_SOURCE_DIR}/imgui.cpp"
+	"${imgui_SOURCE_DIR}/imgui_draw.cpp"
+	"${imgui_SOURCE_DIR}/imgui_tables.cpp"
+	"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+	"${imgui_SOURCE_DIR}/imgui_demo.cpp"
+	# The Vulkan backend is the one stock backend kept. Its platform counterpart is not: the engine
+	# feeds ImGui from PlatformEventRecord instead, so ImGui never reaches the window layer.
+	"${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp"
+)
+
+target_compile_features(ImGuiLibrary PUBLIC cxx_std_26)
+
+target_include_directories(
+	ImGuiLibrary
+	SYSTEM
+	PUBLIC
+		"${imgui_SOURCE_DIR}"
+		"${imgui_SOURCE_DIR}/backends"
+)
+
+# Vulkan::Vulkan rather than VulkanModule: the backend is C++ using the plain C headers, and it is
+# the renderer that speaks vulkan-hpp.
+target_link_libraries(ImGuiLibrary PUBLIC Vulkan::Vulkan)
+
+target_compile_options(ImGuiLibrary PRIVATE -w)
+
+# Carried on the ImGui target itself for the same reason GLM_FORCE_DEPTH_ZERO_TO_ONE is: they change
+# the definitions of imgui.h's inline entities, so a TU disagreeing about them is an ODR violation.
+# The module binding's own include of imgui.h is one such TU, and reaches them through the link
+# below. DEFINE_MATH_OPERATORS is also what gates the binding's export of the ImVec2/ImVec4 operators.
+target_compile_definitions(
+	ImGuiLibrary
+	PUBLIC
+		IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+		IMGUI_DEFINE_MATH_OPERATORS
+)
+
+set_target_properties(
+	ImGuiLibrary
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			OFF
+		# Not module units, and the global CMAKE_CXX_SCAN_FOR_MODULES would have them scanned as
+		# such. CXX_MODULE_STD OFF for the matching reason: a synthetic std module built with this
+		# target's flags disagrees with the one every other target imports.
+		CXX_SCAN_FOR_MODULES
+			OFF
+		CXX_MODULE_STD
+			OFF
+)
+
+# The generated binding, given its own target the way VulkanModule is: third-party generated source
+# that does not compile clean under the engine's warning set. The definitions above bake into the
+# BMI, so importers need none of them.
+add_library(ImGuiModule STATIC)
+
+target_compile_features(ImGuiModule PUBLIC cxx_std_26)
+
+target_link_libraries(ImGuiModule PUBLIC ImGuiLibrary)
+
+target_compile_options(ImGuiModule PRIVATE -w)
+
+set_target_properties(
+	ImGuiModule
+	PROPERTIES
+		COMPILE_WARNING_AS_ERROR
+			OFF
+		# The binding imports nothing, so it needs no std module of its own.
+		CXX_MODULE_STD
+			OFF
+)
+
+target_sources(
+	ImGuiModule
+	PUBLIC
+		FILE_SET CXX_MODULES
+			BASE_DIRS
+				"${imguimodule_SOURCE_DIR}/generated"
+			FILES
+				"${imguimodule_SOURCE_DIR}/generated/imgui.cppm"
+				# The settings handler that lets the debug UI store its own values in ImGui's ini
+				# lives in ImGui's internal header, so its binding is built too.
+				"${imguimodule_SOURCE_DIR}/generated/imgui_internal.cppm"
+)
+# --- ImGui setup --
+
 # --- Slang shader setup --
 # slangc is not part of FindVulkan's component set, so it is located on its own rather than
 # through find_package(Vulkan).
@@ -332,6 +448,7 @@ target_link_libraries(
 	PRIVATE
 		glfw
 		glm::glm
+		ImGuiModule
 		StbImage
 		TinyObjLoader
 		VulkanModule
@@ -353,6 +470,8 @@ target_sources(
 		src/Files.cpp
 		src/Paths.cpp
 		src/FrameCapture.cpp
+		src/DebugUI/DebugUI.cpp
+		src/DebugUI/DebugUIInputTranslation.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
 		src/AgentChannel/AgentChannel.cpp
@@ -382,6 +501,7 @@ target_sources(
 				src/Files.cppm
 				src/Paths.cppm
 				src/FrameCapture.cppm
+				src/DebugUI/DebugUI.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm
@@ -395,6 +515,7 @@ target_sources(
 				src/WindowServer/WindowServer.cppm
 				src/WindowServer/Window.cppm
 				src/WindowServer/WindowSizes.cppm
+				src/WindowServer/CursorShape.cppm
 				src/WindowServer/WindowSpecification.cppm
 				src/WindowServer/WindowServerErrors.cppm
 				src/WindowServer/BackendDeclarations.cppm
