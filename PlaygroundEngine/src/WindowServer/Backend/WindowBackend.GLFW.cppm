@@ -41,7 +41,11 @@ namespace PgE
 
 		GLFWwindow* _handle;
 
-		std::array<GLFWcursor*, std::to_underlying(CursorShape::Hidden)> _cursors{};
+		// One slot per shape, Hidden's included but never filled, since hiding goes through the input
+		// mode rather than a cursor object. A new shape cannot slip past this unnoticed: the switch
+		// that maps them carries no default, so -Wswitch stops a build that forgot one.
+
+		std::array<GLFWcursor*, std::to_underlying(CursorShape::Hidden) + 1> _cursors{};
 		CursorShape _currentShape = CursorShape::Arrow;
 	};
 }

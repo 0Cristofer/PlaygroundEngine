@@ -434,6 +434,7 @@ namespace PgE
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const PlatformEventRecord& platformEventRecord,
 																						  const FramebufferSize framebufferSize,
+																						  const float deltaTimeSeconds,
 																						  ImDrawData* debugUiDrawData)
 	{
 		// A minimized window reports a zero framebuffer, and no swap chain can be built for one.
@@ -471,10 +472,6 @@ namespace PgE
 		{
 			return std::unexpected(RendererError(RendererRenderErrorKind::FenceResetError, ToString(fenceResetResult)));
 		}
-
-		const auto currentFrameTime = std::chrono::steady_clock::now();
-		const float deltaTimeSeconds = std::chrono::duration<float>(currentFrameTime - _previousFrameTime).count();
-		_previousFrameTime = currentFrameTime;
 
 		_cameraInput = ReadCameraInput(platformEventRecord, _cameraInput);
 		MoveCamera(_cameraInput, deltaTimeSeconds);
@@ -675,16 +672,6 @@ namespace PgE
 		_swapChainImageViews = std::move(swapChainResult->ImageViews);
 		_swapChainExtent = swapChainResult->Extent;
 		_swapChainSupportsTransferSource = swapChainResult->SupportsTransferSource;
-
-		// The backend sizes its per-image buffers from this count, and a rebuilt swap chain can come
-		// back with a different one.
-
-#if defined(PGE_DEV)
-		if (_debugUiOverlayEnabled)
-		{
-			ImGui_ImplVulkan_SetMinImageCount(static_cast<std::uint32_t>(_swapChainImages.size()));
-		}
-#endif
 
 		CreationResult<std::tuple<ImageResource, vk::raii::ImageView>> multisampleColorResourcesResult =
 			CreateMultisampleColorResources(_physicalDevice, _logicalDevice, _swapChainExtent, _swapChainSurfaceFormat.format, _sampleCount);

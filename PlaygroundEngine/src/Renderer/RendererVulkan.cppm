@@ -33,6 +33,7 @@ namespace PgE
 		/// Null draws no overlay.
 		std::expected<void, RendererError<RendererRenderErrorKind>> DrawFrame(const PlatformEventRecord& platformEventRecord,
 																			  FramebufferSize framebufferSize,
+																			  float deltaTimeSeconds,
 																			  ImDrawData* debugUiDrawData = nullptr);
 
 		void NotifyFramebufferResized();
@@ -211,6 +212,5 @@ namespace PgE
 		float _cameraYaw = glm::radians(-45.0f);
 		float _cameraPitch = glm::radians(-35.264f);
 		CameraInputState _cameraInput;
-		std::chrono::steady_clock::time_point _previousFrameTime = std::chrono::steady_clock::now();
 	};
 }

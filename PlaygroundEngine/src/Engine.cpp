@@ -36,10 +36,6 @@ namespace PgE
 
 		if (capabilities.Rendering)
 		{
-			// Before the renderer, which attaches its overlay backend to this context.
-
-			BootDebugUi();
-
 			if (const auto rendering = BootRendering(); !rendering)
 			{
 				return std::unexpected(rendering.error());
@@ -110,6 +106,8 @@ namespace PgE
 	{
 		PGE_LOG(Info, "Running");
 
+		_previousFrameTime = std::chrono::steady_clock::now();
+
 		_running = true;
 		while (_running)
 		{
@@ -175,13 +173,6 @@ namespace PgE
 			_debugUi->DrawSettingsPanel();
 		}
 
-#if defined(PGE_DEV)
-		if (DebugUi::IsFrameOpen())
-		{
-			ImGui::ShowDemoWindow();
-		}
-#endif
-
 		ImDrawData* const debugUiDrawData = _debugUi != nullptr ? _debugUi->EndFrame() : nullptr;
 
 		// After the frame closed, so this is the shape the frame just decided on rather than the one
@@ -195,7 +186,7 @@ namespace PgE
 		if (_rendererVulkan && _window)
 		{
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =
-					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize(), debugUiDrawData);
+					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize(), deltaTimeSeconds, debugUiDrawData);
 				!drawResult)
 			{
 				return drawResult;
@@ -272,6 +263,11 @@ namespace PgE
 			return std::unexpected(BootError::Rendering);
 		}
 
+		// Past the check above, which is what makes the window and server safe to hand over, and ahead
+		// of the renderer, which attaches its overlay backend to the context this creates.
+
+		BootDebugUi();
+
 		std::expected<std::unique_ptr<RendererVulkan>, RendererError<RendererCreationErrorKind>> renderer =
 			RendererVulkan::Create(RendererSpecification{.DebugUiOverlay = _debugUi != nullptr}, *_windowServer, *_window);
 
@@ -282,6 +278,15 @@ namespace PgE
 		}
 
 		_rendererVulkan = std::move(*renderer);
+
+		// An overlay that did not come up leaves a context nobody draws, and ImGui's frame asserts on
+		// a font atlas no backend ever built. Dropping the debug UI is what makes losing it survivable.
+
+		if (_debugUi != nullptr && !_rendererVulkan->IsDebugUiOverlayEnabled())
+		{
+			PGE_LOG(Warn, "Debug UI disabled: the renderer brought up no overlay");
+			_debugUi.reset();
+		}
 
 		return {};
 	}
