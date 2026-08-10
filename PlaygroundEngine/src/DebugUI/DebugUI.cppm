@@ -21,9 +21,9 @@ namespace PgE
 	{
 	public:
 		/// The window supplies the display's density hint and interfaceScale the reader's starting
-		/// preference, which ImGui keeps as separate factors and multiplies. Only text is scaled;
-		/// spacing and padding keep their pixel sizes.
-		explicit DebugUi(const Window& window, float interfaceScale = 1.0f);
+		/// preference, which ImGui multiplies; only text scales, spacing keeps its pixel sizes. The
+		/// server is borrowed for the clipboard, and must outlive this, as the teardown order ensures.
+		DebugUi(const Window& window, WindowServer& windowServer, float interfaceScale = 1.0f);
 		~DebugUi();
 
 		DebugUi(const DebugUi&) = delete;

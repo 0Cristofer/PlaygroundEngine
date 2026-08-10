@@ -20,6 +20,8 @@ namespace PgE
 			{ backend.CreateWindow(specification) } -> std::same_as<std::expected<std::unique_ptr<WindowBackend>, WindowError>>;
 			{ backend.Pump(record) } -> std::same_as<void>;
 			{ constBackend.GetRequiredVulkanExtensions() } -> std::same_as<std::expected<std::span<const char* const>, VulkanWindowError>>;
+			{ backend.SetClipboardText(std::string_view{}) } -> std::same_as<void>;
+			{ constBackend.GetClipboardText() } -> std::same_as<std::optional<std::string>>;
 		};
 
 	/// The engine's connection to the OS window system, and everything that must be performed over
@@ -44,6 +46,11 @@ namespace PgE
 		void Pump(PlatformEventRecord& record);
 
 		[[nodiscard]] std::expected<std::span<const char* const>, VulkanWindowError> GetRequiredVulkanExtensions() const;
+
+		/// The window system's clipboard, which belongs to the connection
+		/// Reading yields nothing when the clipboard is empty or holds something that is not text
+		void SetClipboardText(std::string_view text);
+		[[nodiscard]] std::optional<std::string> GetClipboardText() const;
 
 	private:
 		explicit WindowServer(std::unique_ptr<WindowServerBackend> backend);

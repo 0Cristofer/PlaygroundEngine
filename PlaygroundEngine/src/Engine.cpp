@@ -294,7 +294,7 @@ namespace PgE
 		// inside DebugUi itself.
 
 #if defined(PGE_DEV)
-		_debugUi = std::make_unique<DebugUi>(*_window, ReadDebugUiScale(_appDescriptor.GetCommandLine()));
+		_debugUi = std::make_unique<DebugUi>(*_window, *_windowServer, ReadDebugUiScale(_appDescriptor.GetCommandLine()));
 #endif
 	}
 

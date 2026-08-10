@@ -2,6 +2,8 @@ module;
 
 #include "PlaygroundEngine/Log.h"
 
+#include "ImGuiContextDeclaration.h"
+
 module PlaygroundEngine.DebugUi;
 
 import imgui;
@@ -38,9 +40,48 @@ namespace PgE
 	// that needs to ask is scattered through whatever the frame reaches, and holds no DebugUi.
 	bool FrameOpen = false;
 
-	DebugUi::DebugUi(const Window& window, const float interfaceScale)
+	namespace
+	{
+		// ImGui hands the borrowed server back through its own user-data slot, so nothing about the
+		// connection has to be stored here. Its default handlers on this platform are a buffer local
+		// to the context, which copies and pastes within the app and never reaches other programs.
+
+		void SetClipboardText(ImGuiContext*, const char* text)
+		{
+			auto* windowServer = static_cast<WindowServer*>(ImGui::GetPlatformIO().Platform_ClipboardUserData);
+
+			windowServer->SetClipboardText(text != nullptr ? std::string_view(text) : std::string_view());
+		}
+
+		const char* GetClipboardText(ImGuiContext*)
+		{
+			const auto* windowServer = static_cast<WindowServer*>(ImGui::GetPlatformIO().Platform_ClipboardUserData);
+
+			// Parked in a buffer that outlives the call, because ImGui reads the returned pointer
+			// after this returns and only drops it at the next request.
+
+			static std::string clipboardText;
+
+			std::optional<std::string> text = windowServer->GetClipboardText();
+			if (!text)
+			{
+				return nullptr;
+			}
+
+			clipboardText = std::move(*text);
+
+			return clipboardText.c_str();
+		}
+	}
+
+	DebugUi::DebugUi(const Window& window, WindowServer& windowServer, const float interfaceScale)
 	{
 		ImGui::CreateContext();
+
+		ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
+		platformIo.Platform_SetClipboardTextFn = &SetClipboardText;
+		platformIo.Platform_GetClipboardTextFn = &GetClipboardText;
+		platformIo.Platform_ClipboardUserData = &windowServer;
 
 		ImGuiIO& io = ImGui::GetIO();
 
@@ -254,7 +295,7 @@ namespace PgE
 	// Compiled out of shipping builds, which is what keeps ImGui's code from being linked at all:
 	// nothing here references it, so the linker never pulls the objects that hold it.
 
-	DebugUi::DebugUi(const Window&, float)
+	DebugUi::DebugUi(const Window&, WindowServer&, float)
 	{}
 
 	DebugUi::~DebugUi() = default;

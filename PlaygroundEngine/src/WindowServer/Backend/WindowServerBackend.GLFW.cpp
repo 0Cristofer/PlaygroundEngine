@@ -21,7 +21,22 @@ namespace PgE
 	{
 		void OnGlfwError(const int code, const char* description)
 		{
-			PGE_LOG(Error, "GLFW error {}: {}", code, description);
+			// Two of GLFW's codes mean "the platform declines", not "the engine is broken". An empty
+			// clipboard is routine, and Wayland refuses whole calls the other backends serve (window
+			// position, cursor position), so neither is worth an error line.
+
+			switch (code)
+			{
+			case GLFW_FORMAT_UNAVAILABLE:
+				PGE_LOG(Trace, "GLFW: {}", description);
+				break;
+			case GLFW_FEATURE_UNAVAILABLE:
+				PGE_LOG(Warn, "GLFW: {}", description);
+				break;
+			default:
+				PGE_LOG(Error, "GLFW error {}: {}", code, description);
+				break;
+			}
 		}
 
 		// GLFW exposes no event timestamps, so arrival at the pump is the best available base and
@@ -109,6 +124,32 @@ namespace PgE
 
 		record.Append(_pendingEvents.GetEvents());
 		_pendingEvents.Clear();
+	}
+
+	// ReSharper disable once CppMemberFunctionMayBeStatic
+	void WindowServerBackend::SetClipboardText(const std::string_view text)
+	{
+		// Copied because GLFW takes a null-terminated string and a view carries no such promise. GLFW
+		// copies it again on its side, so nothing here has to outlive the call.
+
+		const std::string terminated(text);
+
+		glfwSetClipboardString(nullptr, terminated.c_str());
+	}
+
+	// ReSharper disable once CppMemberFunctionMayBeStatic
+	std::optional<std::string> WindowServerBackend::GetClipboardText() const
+	{
+		// Null covers an empty clipboard and one holding something that is not text. Neither is a
+		// failure, so both come back as nothing rather than as an error.
+
+		const char* text = glfwGetClipboardString(nullptr);
+		if (text == nullptr)
+		{
+			return std::nullopt;
+		}
+
+		return std::string(text);
 	}
 
 	// ReSharper disable once CppMemberFunctionMayBeStatic

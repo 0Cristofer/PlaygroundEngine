@@ -30,6 +30,9 @@ namespace PgE
 
 		[[nodiscard]] std::expected<std::span<const char* const>, VulkanWindowError> GetRequiredVulkanExtensions() const;
 
+		void SetClipboardText(std::string_view text);
+		[[nodiscard]] std::optional<std::string> GetClipboardText() const;
+
 	private:
 		WindowServerBackend() = default;
 
