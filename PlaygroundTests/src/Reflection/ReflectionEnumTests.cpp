@@ -91,6 +91,64 @@ TEST_CASE("signed enumerator round-trips through the uint64 bit pattern")
 	CHECK(PgE::ToString(static_cast<Temperature>(-5)) == "-5");
 }
 
+TEST_CASE("enumeration facet reads and writes an erased object")
+{
+	Permissions permissions = Permissions::Read;
+	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Permissions>().GetFacet<PgE::EnumerationFacet>();
+	REQUIRE(enumeration != nullptr);
+
+	// Value speaks the enumerator table's currency, so it feeds FindByValue with no conversion in between.
+	CHECK(enumeration->Value(&permissions) == 1);
+	CHECK(enumeration->FindByValue(enumeration->Value(&permissions))->GetIdentifier() == "Read");
+
+	enumeration->Assign(&permissions, enumeration->FindByIdentifier("Execute")->GetValue());
+	CHECK(permissions == Permissions::Execute);
+	CHECK(enumeration->Value(&permissions) == 4);
+
+	// A value no enumerator names round-trips as a value; naming it is a separate question.
+	enumeration->Assign(&permissions, 3);
+	CHECK(static_cast<std::uint16_t>(permissions) == 3);
+	CHECK(enumeration->FindByValue(enumeration->Value(&permissions)) == nullptr);
+}
+
+TEST_CASE("erased enum access preserves a negative enumerator")
+{
+	Temperature temperature = Temperature::Boiling;
+	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Temperature>().GetFacet<PgE::EnumerationFacet>();
+	REQUIRE(enumeration != nullptr);
+
+	CHECK(enumeration->Value(&temperature) == 100);
+
+	enumeration->Assign(&temperature, enumeration->FindByIdentifier("Freezing")->GetValue());
+	CHECK(temperature == Temperature::Freezing);
+
+	// The read reproduces the stored two's-complement pattern, so the name is recoverable from the object.
+	CHECK(enumeration->Value(&temperature) == static_cast<std::uint64_t>(static_cast<std::int16_t>(-10)));
+	CHECK(enumeration->FindByValue(enumeration->Value(&temperature))->GetIdentifier() == "Freezing");
+}
+
+TEST_CASE("erased enum write through a field touches only that field")
+{
+	Palette palette{};
+	const PgE::TypeInfo& type = PgE::TypeOf<Palette>();
+
+	const PgE::FieldInfo* primary = type.FindFieldByIdentifier("Primary");
+	REQUIRE(primary != nullptr);
+
+	const PgE::EnumerationFacet* enumeration = primary->GetTypeInfo().GetFacet<PgE::EnumerationFacet>();
+	REQUIRE(enumeration != nullptr);
+
+	const auto ref = primary->GetRef(&palette);
+	REQUIRE(ref.has_value());
+
+	CHECK(enumeration->Value(ref->Data) == static_cast<std::uint64_t>(Shade::Green));
+
+	// Writing through the facet is as wide as the member, so Count (the next member) is not part of the write.
+	enumeration->Assign(ref->Data, enumeration->FindByIdentifier("Red")->GetValue());
+	CHECK(palette.Primary == Shade::Red);
+	CHECK(palette.Count == 2);
+}
+
 TEST_CASE("unscoped enum is reflected like a scoped one")
 {
 	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Direction>().GetFacet<PgE::EnumerationFacet>();

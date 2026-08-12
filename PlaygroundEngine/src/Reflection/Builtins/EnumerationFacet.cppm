@@ -30,6 +30,24 @@ namespace PgE
 		std::uint64_t _value;
 	};
 
+	// The one statement of the enumerator table's currency, in both directions. Every path that crosses
+	// between an enum and a uint64 goes through these, so the compile-time table, the erased thunks, and the
+	// typed sugar cannot spell the conversion differently: a negative enumerator sign-extends once, here.
+
+	export template <typename Enum>
+	requires std::is_enum_v<Enum>
+	constexpr std::uint64_t ToEnumeratorValue(const Enum value)
+	{
+		return static_cast<std::uint64_t>(static_cast<std::underlying_type_t<Enum>>(value));
+	}
+
+	export template <typename Enum>
+	requires std::is_enum_v<Enum>
+	constexpr Enum FromEnumeratorValue(const std::uint64_t value)
+	{
+		return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(value));
+	}
+
 	export class EnumerationFacet
 	{
 		// The enum-specific facet of a TypeInfo: the enumerator set plus the underlying integer type.
@@ -38,11 +56,32 @@ namespace PgE
 		// Supersedes the raw structural view like the other in-table facets; read generically by the builder.
 		static constexpr bool Supersedes = true;
 
-		constexpr EnumerationFacet(const TypeReference underlyingType, const std::span<const EnumeratorInfo> enumerators)
-			: _underlyingType(underlyingType), _enumerators(enumerators)
+		// An enumeration is always readable and always writable, so neither thunk is nullable and there are
+		// no capability queries, unlike the string and sequence facets whose views can be read-only.
+		using ValueThunk = std::uint64_t (*)(const void*);
+		using AssignThunk = void (*)(void*, std::uint64_t);
+
+		constexpr EnumerationFacet(const TypeReference underlyingType,
+								   const std::span<const EnumeratorInfo> enumerators,
+								   const ValueThunk value,
+								   const AssignThunk assign)
+			: _underlyingType(underlyingType), _enumerators(enumerators), _value(value), _assign(assign)
 		{}
 
 		const TypeInfo& GetUnderlyingType() const;
+
+		// The object's value in the enumerator table's currency: the underlying integer widened to uint64,
+		// which is what FindByValue and EnumeratorInfo::GetValue speak. A consumer holding only an erased
+		// pointer cannot do this conversion itself, since the width and signedness live in the enum type.
+		std::uint64_t Value(const void* obj) const pre(_value != nullptr) pre(obj != nullptr)
+		{
+			return _value(obj);
+		}
+
+		void Assign(void* obj, const std::uint64_t value) const pre(_assign != nullptr) pre(obj != nullptr)
+		{
+			_assign(obj, value);
+		}
 
 		std::span<const EnumeratorInfo> GetEnumerators() const
 		{
@@ -55,5 +94,7 @@ namespace PgE
 	private:
 		TypeReference _underlyingType;
 		std::span<const EnumeratorInfo> _enumerators;
+		ValueThunk _value = nullptr;
+		AssignThunk _assign = nullptr;
 	};
 }

@@ -16,12 +16,24 @@ namespace PgE
 	namespace detail
 	{
 		template <typename Enum>
+		std::uint64_t EnumValueThunk(const void* obj)
+		{
+			return ToEnumeratorValue(*static_cast<const Enum*>(obj));
+		}
+
+		template <typename Enum>
+		void EnumAssignThunk(void* obj, const std::uint64_t value)
+		{
+			*static_cast<Enum*>(obj) = FromEnumeratorValue<Enum>(value);
+		}
+
+		template <typename Enum>
 		consteval EnumerationFacet MakeEnumerationFacet()
 		{
 			// Built from the enumerators rather than a thunk: the enumerator array is a program-lifetime
 			// static so the facet's span stays valid once the facet is copied into the table.
 			static constexpr auto Enumerators = MakeEnumeratorsFromType<^^Enum>();
-			return EnumerationFacet(TypeReferenceTo<^^std::underlying_type_t<Enum>>(), Enumerators);
+			return EnumerationFacet(TypeReferenceTo<^^std::underlying_type_t<Enum>>(), Enumerators, &EnumValueThunk<Enum>, &EnumAssignThunk<Enum>);
 		}
 	}
 
@@ -33,14 +45,12 @@ namespace PgE
 		{
 			const TypeInfo& typeInfo = TypeMetaOf<T>();
 			const EnumerationFacet& facet = *typeInfo.GetFacet<EnumerationFacet>();
-			const auto underlying = static_cast<std::underlying_type_t<T>>(value);
-
-			if (const EnumeratorInfo* enumerator = facet.FindByValue(static_cast<std::uint64_t>(underlying)))
+			if (const EnumeratorInfo* enumerator = facet.FindByValue(ToEnumeratorValue(value)))
 			{
 				return std::string(enumerator->GetIdentifier());
 			}
 
-			return ToString(underlying);
+			return ToString(static_cast<std::underlying_type_t<T>>(value));
 		}
 
 		static consteval auto MakeFacets()

@@ -13,8 +13,8 @@ import std;
 namespace PgE
 {
 	// Typed sugar over the enumeration facet, for callers who know the enum type. EnumToName has no answer
-	// for a value no enumerator names; the single enum-to-uint64 cast is the one typed-to-erased step the
-	// erased FindByValue cannot do for us, since it has no static type to work from.
+	// for a value no enumerator names; ToEnumeratorValue is the one typed-to-erased step the erased
+	// FindByValue cannot do for us, since it has no static type to work from.
 
 	export template <typename Enum>
 	requires std::is_enum_v<Enum>
@@ -22,7 +22,7 @@ namespace PgE
 	{
 		const TypeInfo& type = TypeMetaOf<Enum>();
 
-		if (const EnumeratorInfo* enumerator = type.GetFacet<EnumerationFacet>()->FindByValue(static_cast<std::uint64_t>(value)))
+		if (const EnumeratorInfo* enumerator = type.GetFacet<EnumerationFacet>()->FindByValue(ToEnumeratorValue(value)))
 		{
 			return enumerator->GetIdentifier();
 		}
@@ -38,7 +38,7 @@ namespace PgE
 
 		if (const EnumeratorInfo* enumerator = type.GetFacet<EnumerationFacet>()->FindByIdentifier(identifier))
 		{
-			return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(enumerator->GetValue()));
+			return FromEnumeratorValue<Enum>(enumerator->GetValue());
 		}
 
 		return std::nullopt;

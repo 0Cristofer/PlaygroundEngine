@@ -11,8 +11,8 @@ import :EnumerationFacet;
 import std;
 
 // Builds the EnumeratorInfo list for an enumeration type from std::meta::enumerators_of. The enumerator
-// value is captured as the raw bit pattern of the underlying integer, widened to uint64_t; the underlying
-// type on the EnumerationFacet says how to read it back.
+// value is captured through ToEnumeratorValue, the same conversion the facet's runtime thunks use, so the
+// table and a value read off a live object are the same bit pattern; the underlying type on the EnumerationFacet says how to read it back.
 
 namespace PgE::detail
 {
@@ -26,7 +26,7 @@ namespace PgE::detail
 					  "Enumerator value does not fit in uint64_t: enum underlying type exceeds 64 bits "
 					  "(a GCC extended-integer base). Such an enum cannot cross the C# boundary either.");
 
-		static constexpr std::uint64_t Value = static_cast<std::uint64_t>(static_cast<Underlying>([:Enumerator:]));
+		static constexpr std::uint64_t Value = ToEnumeratorValue([:Enumerator:]);
 	};
 
 	template <std::meta::info Enumerator>
