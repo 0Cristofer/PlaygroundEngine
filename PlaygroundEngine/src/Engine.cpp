@@ -111,16 +111,16 @@ namespace PgE
 		_running = true;
 		while (_running)
 		{
-			if (const std::expected<void, RendererError<RendererRenderErrorKind>> runFrameResult = RunFrame(); !runFrameResult)
+			if (const std::expected<void, RendererError<RendererRenderErrorKind>> runFrameResult = RunStep(); !runFrameResult)
 			{
 				RequestStop();
 			}
 		}
 	}
 
-	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunFrame()
+	std::expected<void, RendererError<RendererRenderErrorKind>> Engine::RunStep()
 	{
-		const float deltaTimeSeconds = AdvanceFrameClock();
+		const float deltaTimeSeconds = AdvanceStepClock();
 
 		_platformEvents.Clear();
 
@@ -163,6 +163,7 @@ namespace PgE
 			_debugUi->BeginFrame(*_window, _platformEvents, deltaTimeSeconds);
 		}
 
+		_app->OnStep();
 		_world->Run();
 
 		// Placeholder standing in for real panels, written the way one would be: a guard on the frame
@@ -204,7 +205,7 @@ namespace PgE
 		return {};
 	}
 
-	float Engine::AdvanceFrameClock()
+	float Engine::AdvanceStepClock()
 	{
 		const std::chrono::steady_clock::time_point frameTime = std::chrono::steady_clock::now();
 		const float deltaTimeSeconds = std::chrono::duration<float>(frameTime - _previousFrameTime).count();

@@ -194,3 +194,38 @@ TEST_CASE("template-instance and scoped-enum traits")
 	CHECK(PgE::TypeOf<Shade>().GetTraits().IsScopedEnum);
 	CHECK_FALSE(PgE::TypeOf<int>().GetTraits().IsScopedEnum);
 }
+
+TEST_CASE("TypedRefOf erases a value and reads its qualifiers off the value category")
+{
+	Widget widget{};
+
+	const PgE::TypedRef borrowed = PgE::TypedRefOf(widget);
+	CHECK(borrowed.Type == &PgE::TypeOf<Widget>());
+	CHECK(borrowed.Data == &widget);
+	CHECK_FALSE(borrowed.IsConst);
+	CHECK_FALSE(borrowed.Movable);
+
+	// An lvalue is only ever borrowed; std::move is the caller's offer to move out of it.
+	const PgE::TypedRef offered = PgE::TypedRefOf(std::move(widget));
+	CHECK(offered.Movable);
+	CHECK_FALSE(offered.IsConst);
+
+	const Widget& constant = widget;
+	const PgE::TypedRef readOnly = PgE::TypedRefOf(constant);
+	CHECK(readOnly.IsConst);
+	CHECK_FALSE(readOnly.Movable);
+	CHECK(readOnly.Data == &widget);
+}
+
+TEST_CASE("TypedRefOf erases a const object without materializing its ops")
+{
+	// The metadata handle and the invoke-intent handle are the same node, so a ref built from the total
+	// tier still matches by identity anywhere an op-materialized one is expected.
+	const int value = 7;
+	const PgE::TypedRef ref = PgE::TypedRefOf(value);
+
+	CHECK(ref.Type == &PgE::TypeMetaOf<int>());
+	CHECK(ref.Type == &PgE::TypeOf<int>());
+	CHECK(ref.IsConst);
+	CHECK(*static_cast<const int*>(ref.Data) == 7);
+}

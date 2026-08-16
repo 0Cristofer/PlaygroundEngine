@@ -471,6 +471,7 @@ target_sources(
 		src/Paths.cpp
 		src/FrameCapture.cpp
 		src/DebugUI/DebugUI.cpp
+		src/DebugUI/DebugPanelDrawer.cpp
 		src/DebugUI/DebugUIInputTranslation.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
@@ -502,6 +503,7 @@ target_sources(
 				src/Paths.cppm
 				src/FrameCapture.cppm
 				src/DebugUI/DebugUI.cppm
+				src/DebugUI/DebugPanelDrawer.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm

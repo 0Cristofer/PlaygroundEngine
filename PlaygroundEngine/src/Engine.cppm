@@ -72,7 +72,7 @@ namespace PgE
 
 	private:
 		void Run();
-		std::expected<void, RendererError<RendererRenderErrorKind>> RunFrame() pre(_world != nullptr);
+		std::expected<void, RendererError<RendererRenderErrorKind>> RunStep() pre(_world != nullptr);
 
 		void LogPlatformEvents() const;
 
@@ -80,7 +80,7 @@ namespace PgE
 		std::expected<void, BootError> BootRendering();
 		void BootDebugUi();
 
-		[[nodiscard]] float AdvanceFrameClock();
+		[[nodiscard]] float AdvanceStepClock();
 
 		AppDescriptorBase& _appDescriptor;
 		bool _running = false;

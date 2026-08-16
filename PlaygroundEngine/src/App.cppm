@@ -18,5 +18,6 @@ namespace PgE
 
 		virtual void OnBooted(EngineContext& engine) = 0;
 		virtual void OnStartRun(World* world) = 0;
+		virtual void OnStep() = 0;
 	};
 }

@@ -121,8 +121,7 @@ namespace PgE
 		template <typename T>
 		std::expected<void, FieldError> SetAs(const T& value) const
 		{
-			return SetValue(
-				TypedRef{.Type = &TypeMetaOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
+			return SetValue(TypedRefOf(value));
 		}
 
 	private:

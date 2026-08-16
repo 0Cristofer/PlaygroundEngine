@@ -116,9 +116,7 @@ namespace PgE::detail
 	{
 		auto&& lvalue = [:MetaField:];
 
-		return TypedRef{.Type = &TypeMetaOf<std::meta::remove_cvref(std::meta::type_of(MetaField))>(),
-						.Data = const_cast<void*>(static_cast<const void*>(std::addressof(lvalue))),
-						.IsConst = std::is_const_v<std::remove_reference_t<decltype(lvalue)>>};
+		return TypedRefOf(lvalue);
 	}
 
 	template <std::meta::info MetaField>

@@ -1,5 +1,7 @@
 export module PlaygroundEngine.DebugUi;
 
+export import :DebugPanelDrawer;
+
 import imgui;
 
 import std;

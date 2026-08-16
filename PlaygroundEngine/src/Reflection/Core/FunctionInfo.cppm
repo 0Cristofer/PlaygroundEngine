@@ -187,7 +187,7 @@ namespace PgE
 			{
 				using Referent = std::remove_reference_t<Return>;
 				Referent* pointer = nullptr;
-				const auto result = Invoke(obj, args, TypedRef{.Type = &TypeMetaOf<Referent*>(), .Data = &pointer, .IsConst = false});
+				const auto result = Invoke(obj, args, TypedRefOf(pointer));
 				if (!result)
 				{
 					return std::unexpected(result.error());
