@@ -30,22 +30,16 @@ namespace PgE
 		TypedRef SequenceElementRefThunk(void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			Element& element = (*static_cast<Container*>(obj))[index];
-			return TypedRef{.Type = tag, .Data = std::addressof(element), .IsConst = false};
+			return TypedRefOf(element);
 		}
 
 		template <typename Container, std::meta::info ElementMeta>
 		TypedRef SequenceElementRefConstThunk(const void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			const Element& element = (*static_cast<const Container*>(obj))[index];
-			return TypedRef{
-				.Type = tag,
-				.Data = const_cast<void*>(static_cast<const void*>(std::addressof(element))),
-				.IsConst = true,
-			};
+			return TypedRefOf(element);
 		}
 
 		template <std::size_t Count>
@@ -58,22 +52,16 @@ namespace PgE
 		TypedRef CArrayElementRefThunk(void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			Element* base = static_cast<Element*>(obj);
-			return TypedRef{.Type = tag, .Data = std::addressof(base[index]), .IsConst = false};
+			return TypedRefOf(base[index]);
 		}
 
 		template <std::meta::info ElementMeta>
 		TypedRef CArrayElementRefConstThunk(const void* obj, const std::size_t index)
 		{
 			using Element = [:ElementMeta:];
-			const TypeInfo* tag = &TypeMetaOf<ElementMeta>();
 			const Element* base = static_cast<const Element*>(obj);
-			return TypedRef{
-				.Type = tag,
-				.Data = const_cast<void*>(static_cast<const void*>(std::addressof(base[index]))),
-				.IsConst = true,
-			};
+			return TypedRefOf(base[index]);
 		}
 
 		template <typename Container>

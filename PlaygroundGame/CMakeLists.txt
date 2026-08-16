@@ -63,7 +63,12 @@ target_sources(
 			FILES
 )
 
-target_link_libraries(PlaygroundGame PRIVATE PlaygroundEngine)
+target_link_libraries(
+	PlaygroundGame
+	PRIVATE
+		PlaygroundEngine
+		ImGuiModule
+)
 
 # Shaders are loaded at runtime by a path relative to the working directory, so the compiled SPIR-V
 # is staged into a Shaders folder beside the executable. A stand-in until the asset system owns

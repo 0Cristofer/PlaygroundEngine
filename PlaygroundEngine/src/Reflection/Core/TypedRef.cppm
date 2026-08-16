@@ -17,6 +17,20 @@ namespace PgE
 		bool Movable = false;
 	};
 
+	// Erases one live object into the borrow every erased entry point takes. The value category the caller
+	// wrote sets Movable, so an lvalue is only ever borrowed and std::move is the offer to move out of it.
+	// The ref points at the caller's object and owns nothing, so it must not outlive the expression that built it.
+	export template <typename T>
+	constexpr TypedRef TypedRefOf(T&& object)
+	{
+		// Through const volatile void*, not const void*: the narrower cast is ill-formed from a volatile
+		// lvalue, which a memory-mapped member is. See docs/ReflectionExtraction.md.
+		return TypedRef{.Type = &TypeMetaOf<std::remove_cvref_t<T>>(),
+						.Data = const_cast<void*>(static_cast<const volatile void*>(std::addressof(object))),
+						.IsConst = std::is_const_v<std::remove_reference_t<T>>,
+						.Movable = !std::is_lvalue_reference_v<T>};
+	}
+
 	namespace detail
 	{
 		// Erases a typed call's arguments for any sugar entry point (InvokeAs, ConstructAs). The value
@@ -25,10 +39,7 @@ namespace PgE
 		export template <typename... Arguments>
 		std::array<TypedRef, sizeof...(Arguments)> MakeTypedRefs(Arguments&&... arguments)
 		{
-			return {TypedRef{.Type = &TypeMetaOf<std::remove_cvref_t<Arguments>>(),
-							 .Data = const_cast<void*>(static_cast<const void*>(std::addressof(arguments))),
-							 .IsConst = std::is_const_v<std::remove_reference_t<Arguments>>,
-							 .Movable = !std::is_lvalue_reference_v<Arguments>}...};
+			return {TypedRefOf(std::forward<Arguments>(arguments))...};
 		}
 
 		// The erased slot protocol, stated once: the callee builds its result into caller-owned storage, so

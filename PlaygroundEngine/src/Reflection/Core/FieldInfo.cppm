@@ -149,14 +149,13 @@ namespace PgE
 		template <typename T>
 		std::expected<void, FieldError> SetAs(void* obj, const T& value) const
 		{
-			return SetValue(
-				obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = const_cast<void*>(static_cast<const void*>(std::addressof(value))), .IsConst = true});
+			return SetValue(obj, TypedRefOf(value));
 		}
 
 		template <typename T>
 		std::expected<void, FieldError> MoveAs(void* obj, T& value) const
 		{
-			return SetValue(obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = std::addressof(value), .IsConst = false, .Movable = true});
+			return SetValue(obj, TypedRefOf(std::move(value)));
 		}
 
 		template <typename T>

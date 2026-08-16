@@ -65,6 +65,7 @@ target_sources(
 		src/Reflection/ReflectionOperatorTests.cpp
 		src/Reflection/ReflectionEnumTests.cpp
 		src/Reflection/ReflectionAnnotationTests.cpp
+		src/DebugPanelDrawerTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp
 		src/Reflection/ReflectionNamespaceTests.cpp
 		src/LogTests.cpp
