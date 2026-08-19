@@ -40,7 +40,8 @@ namespace PgE::detail
 	{
 		return ConversionInfo(std::meta::is_explicit(MetaConversion),
 							  TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaConversion))>(), DisplayStringOf(MetaConversion),
-							  ScopePathOf<MetaConversion>(), MakeFunctionTraits<MetaConversion>(), invoke, MakeAnnotations<MetaConversion>());
+							  ScopePathOf<MetaConversion>(), MakeFunctionTraits<MetaConversion>(), invoke, MakeAnnotations<MetaConversion>(),
+							  TypeReferenceTo<MetaType>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

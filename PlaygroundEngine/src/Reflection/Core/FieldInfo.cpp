@@ -17,44 +17,76 @@ namespace PgE
 		return _typeInfo.Get();
 	}
 
-	std::expected<void, FieldError> FieldInfo::GetValue(const void* obj, const TypedRef& out) const
+	const TypeInfo& FieldInfo::GetDeclaringType() const
 	{
+		return _declaringType.Get();
+	}
+
+	std::expected<void, FieldError> FieldInfo::CheckDeclaringInstance(const TypedRef& object) const
+	{
+		if (object.Data == nullptr)
+		{
+			return std::unexpected(FieldError{FieldError::NullObject});
+		}
+		if (object.Type != &GetDeclaringType())
+		{
+			return std::unexpected(FieldError{FieldError::ObjectTypeMismatch});
+		}
+
+		return {};
+	}
+
+	std::expected<void, FieldError> FieldInfo::GetValue(const TypedRef& object, const TypedRef& out) const
+	{
+		if (const auto checked = CheckDeclaringInstance(object); !checked)
+		{
+			return checked;
+		}
 		if (!_getter)
 		{
 			return std::unexpected(FieldError{FieldError::NotReadable});
 		}
+		if (out.IsConst)
+		{
+			return std::unexpected(FieldError{FieldError::ConstViolation});
+		}
 
-		return _getter(obj, out);
+		return _getter(object.Data, out);
 	}
 
-	std::expected<void, FieldError> FieldInfo::SetValue(void* obj, const TypedRef& in) const
+	std::expected<void, FieldError> FieldInfo::SetValue(const TypedRef& object, const TypedRef& in) const
 	{
+		if (const auto checked = CheckDeclaringInstance(object); !checked)
+		{
+			return checked;
+		}
+		if (object.IsConst && !WritableThroughConstObject())
+		{
+			return std::unexpected(FieldError{FieldError::ConstViolation});
+		}
 		if (!_setter)
 		{
 			return std::unexpected(FieldError{FieldError::NotWritable});
 		}
 
-		return _setter(obj, in);
+		return _setter(object.Data, in);
 	}
 
-	std::expected<TypedRef, FieldError> FieldInfo::GetRef(void* obj) const
+	std::expected<TypedRef, FieldError> FieldInfo::GetRef(const TypedRef& object) const
 	{
+		if (const auto checked = CheckDeclaringInstance(object); !checked)
+		{
+			return std::unexpected(checked.error());
+		}
 		if (!_referencer)
 		{
 			return std::unexpected(FieldError{FieldError::NotAddressable});
 		}
 
-		return _referencer(obj);
-	}
-
-	std::expected<TypedRef, FieldError> FieldInfo::GetRef(const void* obj) const
-	{
-		if (!_referencer)
-		{
-			return std::unexpected(FieldError{FieldError::NotAddressable});
-		}
-
-		const TypedRef ref = _referencer(const_cast<void*>(obj));
-		return TypedRef{.Type = ref.Type, .Data = ref.Data, .IsConst = true};
+		// The object's constness reaches the field, and stops where C++ stops it: at a mutable member, and
+		// at a reference member whose referent the qualification never reached.
+		TypedRef ref = _referencer(object.Data);
+		ref.IsConst = ref.IsConst || (object.IsConst && !WritableThroughConstObject());
+		return ref;
 	}
 }

@@ -486,7 +486,7 @@ TEST_CASE("a reference qualifier turns a missing invoker into a stated reason")
 	// An rvalue-ref-qualified function reflects with no invoker; before, the metadata gave no reason why.
 	const PgE::FunctionInfo& onRvalue = FunctionNamed(type, "OnRvalue");
 	CHECK(onRvalue.GetRefQualifier() == PgE::RefQualifier::RValue);
-	CHECK(onRvalue.Invoke(static_cast<void*>(nullptr), {}).error().Reason == PgE::InvokeError::NotInvocable);
+	CHECK(onRvalue.Invoke(PgE::TypedRef{}, {}).error().Reason == PgE::InvokeError::NotInvocable);
 }
 
 TEST_CASE("a decayed return type keeps its qualifiers as stated facts")
@@ -635,7 +635,7 @@ TEST_CASE("a pointer to an incomplete type is named but has no structure")
 
 	// The owning type is unaffected: its real fields still read.
 	HasOpaquePointer value{};
-	CHECK(*type.GetFieldAs<int>(&value, "Plain") == 3);
+	CHECK(*type.GetFieldAs<int>(value, "Plain") == 3);
 }
 
 TEST_CASE("a std container renders through the same extraction, allocator included")
@@ -655,7 +655,7 @@ TEST_CASE("a private member function stays invocable, which is why the pointer r
 	const PgE::FunctionInfo& doubled = FunctionNamed(type, "Doubled");
 	CHECK(doubled.GetAccess() == PgE::AccessKind::Private);
 
-	const auto result = doubled.InvokeAs<int>(&object);
+	const auto result = doubled.InvokeAs<int>(object);
 	REQUIRE(result.has_value());
 	CHECK(*result == 42);
 }
@@ -741,7 +741,7 @@ TEST_CASE("the reflected destructor runs the real destructor")
 	alignas(Destructible) std::byte storage[sizeof(Destructible)];
 	Destructible* object = std::construct_at(reinterpret_cast<Destructible*>(storage), Destructible{.Flag = &destroyed});
 
-	PgE::TypeOf<Destructible>().GetDestructor().Destroy(object);
+	PgE::TypeOf<Destructible>().GetDestructor().Destroy(PgE::TypedRefOf(*object));
 	CHECK(destroyed);
 }
 
@@ -808,17 +808,17 @@ TEST_CASE("a volatile class-typed field reflects with no accessors rather than b
 	CHECK(item.IsVolatile());
 
 	VolatileClassHolder holder{};
-	CHECK(item.GetAs<VolatileClassHolder::Payload>(&holder).error().Reason == PgE::FieldError::NotReadable);
-	CHECK(item.SetAs<VolatileClassHolder::Payload>(&holder, {}).error().Reason == PgE::FieldError::NotWritable);
+	CHECK(item.GetAs<VolatileClassHolder::Payload>(holder).error().Reason == PgE::FieldError::NotReadable);
+	CHECK(item.SetAs<VolatileClassHolder::Payload>(holder, {}).error().Reason == PgE::FieldError::NotWritable);
 
 	// The borrow survives, since taking the member's address is unaffected by its volatility.
-	CHECK(item.GetRef(static_cast<void*>(&holder)).has_value());
+	CHECK(item.GetRef(PgE::TypedRefOf(holder)).has_value());
 
 	// A volatile scalar keeps both accessors: only the class-typed case loses them.
 	const PgE::FieldInfo& scalar = FieldNamed(PgE::TypeOf<VolatileHolder>(), "Register");
 	VolatileHolder scalarHolder{};
-	CHECK(scalar.SetAs<int>(&scalarHolder, 7).has_value());
-	CHECK(*scalar.GetAs<int>(&scalarHolder) == 7);
+	CHECK(scalar.SetAs<int>(scalarHolder, 7).has_value());
+	CHECK(*scalar.GetAs<int>(scalarHolder) == 7);
 }
 
 TEST_CASE("a free function reflects by being named, and reports no access rather than private")
@@ -844,7 +844,7 @@ TEST_CASE("a free function reflects by being named, and reports no access rather
 	CHECK(&spawn.GetReturnType() == &PgE::TypeOf<int>());
 
 	// The erased call works through the same thunk as a static member, with no object.
-	const auto result = spawn.InvokeAs<int>(static_cast<void*>(nullptr), 4, 2.5F);
+	const auto result = spawn.InvokeStaticAs<int>(4, 2.5F);
 	REQUIRE(result.has_value());
 	CHECK(*result == 10);
 

@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection.Core:DestructorInfo;
 
 import :DeclarationInfo;
+import :TypedRef;
 
 import std;
 
@@ -71,9 +72,9 @@ namespace PgE
 		{
 			return _destroy != nullptr;
 		}
-		void Destroy(void* obj) const pre(_destroy != nullptr) pre(obj != nullptr)
+		void Destroy(const TypedRef& object) const pre(_destroy != nullptr) pre(object.Data != nullptr)
 		{
-			_destroy(obj);
+			_destroy(object.Data);
 		}
 
 	private:

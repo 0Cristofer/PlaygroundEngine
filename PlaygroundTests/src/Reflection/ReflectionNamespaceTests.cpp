@@ -8,6 +8,7 @@ import PlaygroundEngine.Reflection;
 // a sweep answers for what the asking TU has seen, so a fixture whose visibility depends on an import order
 // would make the expected counts a property of the build. See docs/ReflectionExtraction.md (namespace sweep).
 
+// ReSharper disable CppConceptNeverUsed
 namespace
 {
 	struct Marker
@@ -20,15 +21,15 @@ namespace[[= Marker{.Id = 7}]] SweepFixture
 {
 	struct Widget
 	{
-		int Value = 0;
+		[[maybe_unused]] int Value = 0;
 	};
 
-	enum class Color
+	enum class [[maybe_unused]] Color
 	{
 		Red
 	};
 
-	using WidgetAlias = Widget;
+	using WidgetAlias [[maybe_unused]] = Widget;
 
 	int Overloaded(const int count)
 	{
@@ -64,7 +65,7 @@ namespace[[= Marker{.Id = 7}]] SweepFixture
 
 	namespace Inner
 	{
-		struct Deep
+		struct [[maybe_unused]] Deep
 		{};
 
 		void Nested()
@@ -81,7 +82,7 @@ namespace[[= Marker{.Id = 7}]] SweepFixture
 
 	namespace
 	{
-		struct FileLocal
+		struct [[maybe_unused]] FileLocal
 		{};
 	}
 }
@@ -101,12 +102,13 @@ namespace TemplatesOnly
 // way a class is.
 namespace SweepFixture
 {
-	struct Reopened
+	struct [[maybe_unused]] Reopened
 	{};
 
 	void ReopenedFunction()
 	{}
 }
+// ReSharper restore CppConceptNeverUsed
 
 namespace
 {
@@ -193,7 +195,7 @@ TEST_CASE("a swept entity carries its full metadata, not just a name")
 	CHECK((*unique)->IsFreeFunction());
 	CHECK((*unique)->GetAccess() == PgE::AccessKind::None);
 
-	const auto invoked = (*unique)->InvokeAs<int>(static_cast<void*>(nullptr), 21);
+	const auto invoked = (*unique)->InvokeStaticAs<int>(21);
 	REQUIRE(invoked.has_value());
 	CHECK(*invoked == 42);
 

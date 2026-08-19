@@ -207,9 +207,10 @@ namespace PgE::detail
 	template <std::meta::info MetaType, const std::meta::info MetaField>
 	consteval FieldInfo MakeField()
 	{
-		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), IdentifierOf(MetaField),
-						 DisplayStringOf(MetaField), ScopePathOf<MetaField>(), MakeFieldTraits<MetaField>(), MakeFieldGetter<MetaType, MetaField>(),
-						 MakeFieldSetter<MetaType, MetaField>(), MakeFieldReferencer<MetaType, MetaField>(), MakeAnnotations<MetaField>());
+		return FieldInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaField))>(), TypeReferenceTo<MetaType>(),
+						 IdentifierOf(MetaField), DisplayStringOf(MetaField), ScopePathOf<MetaField>(), MakeFieldTraits<MetaField>(),
+						 MakeFieldGetter<MetaType, MetaField>(), MakeFieldSetter<MetaType, MetaField>(), MakeFieldReferencer<MetaType, MetaField>(),
+						 MakeAnnotations<MetaField>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

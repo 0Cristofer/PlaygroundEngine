@@ -30,9 +30,9 @@ TEST_CASE("string facet reads and writes through the erased view")
 	REQUIRE(facet->CanAssign());
 
 	std::string value = "hello";
-	CHECK(facet->View(&value) == "hello");
+	CHECK(facet->View(PgE::TypedRefOf(value)) == "hello");
 
-	REQUIRE(facet->Assign(&value, "world").has_value());
+	REQUIRE(facet->Assign(PgE::TypedRefOf(value), "world").has_value());
 	CHECK(value == "world");
 }
 
@@ -43,11 +43,11 @@ TEST_CASE("string_view facet reads but has no assign")
 	CHECK_FALSE(facet->CanAssign());
 
 	constexpr std::string_view view = "borrowed";
-	CHECK(facet->View(&view) == "borrowed");
+	CHECK(facet->View(PgE::TypedRefOf(view)) == "borrowed");
 
 	// The absent write half reports NotWritable rather than crashing on a null thunk.
 	std::string_view target = view;
-	const auto assigned = facet->Assign(&target, "other");
+	const auto assigned = facet->Assign(PgE::TypedRefOf(target), "other");
 	REQUIRE_FALSE(assigned.has_value());
 	CHECK(assigned.error().Reason == PgE::FacetError::NotWritable);
 }
@@ -71,16 +71,16 @@ TEST_CASE("sequence facet walks and mutates a vector's elements")
 	REQUIRE(facet != nullptr);
 
 	CHECK(&facet->ElementType() == &PgE::TypeOf<int>());
-	CHECK(facet->Size(&numbers) == 3);
+	CHECK(facet->Size(PgE::TypedRefOf(numbers)) == 3);
 
 	// A const object selects the const element-ref overload (as ObjectToString does with its const void*).
 	const std::vector<int>& constNumbers = numbers;
-	const PgE::TypedRef first = facet->ElementRef(&constNumbers, 0);
+	const PgE::TypedRef first = facet->ElementRef(PgE::TypedRefOf(constNumbers), 0);
 	CHECK(first.Type == &PgE::TypeOf<int>());
 	CHECK(first.IsConst);
 	CHECK(*static_cast<const int*>(first.Data) == 10);
 
-	const PgE::TypedRef second = facet->ElementRef(&numbers, 1);
+	const PgE::TypedRef second = facet->ElementRef(PgE::TypedRefOf(numbers), 1);
 	CHECK_FALSE(second.IsConst);
 	*static_cast<int*>(second.Data) = 99;
 	CHECK(numbers[1] == 99);
@@ -92,21 +92,21 @@ TEST_CASE("sequence facet rebuilds a vector via clear, reserve, and append")
 	const PgE::SequenceFacet* facet = PgE::TypeOf<std::vector<int>>().GetFacet<PgE::SequenceFacet>();
 	REQUIRE(facet != nullptr);
 
-	REQUIRE(facet->Clear(&numbers).has_value());
+	REQUIRE(facet->Clear(PgE::TypedRefOf(numbers)).has_value());
 	CHECK(numbers.empty());
-	REQUIRE(facet->Reserve(&numbers, 2).has_value());
+	REQUIRE(facet->Reserve(PgE::TypedRefOf(numbers), 2).has_value());
 
 	int a = 7;
 	int b = 8;
-	REQUIRE(facet->Append(&numbers, {.Type = &PgE::TypeOf<int>(), .Data = &a, .IsConst = true}).has_value());
-	REQUIRE(facet->Append(&numbers, {.Type = &PgE::TypeOf<int>(), .Data = &b, .IsConst = true}).has_value());
+	REQUIRE(facet->Append(PgE::TypedRefOf(numbers), {.Type = &PgE::TypeOf<int>(), .Data = &a, .IsConst = true}).has_value());
+	REQUIRE(facet->Append(PgE::TypedRefOf(numbers), {.Type = &PgE::TypeOf<int>(), .Data = &b, .IsConst = true}).has_value());
 	REQUIRE(numbers.size() == 2);
 	CHECK(numbers[0] == 7);
 	CHECK(numbers[1] == 8);
 
 	// A mistyped element is rejected before it touches the container.
 	std::string wrong = "x";
-	const auto bad = facet->Append(&numbers, {.Type = &PgE::TypeOf<std::string>(), .Data = &wrong, .IsConst = true});
+	const auto bad = facet->Append(PgE::TypedRefOf(numbers), {.Type = &PgE::TypeOf<std::string>(), .Data = &wrong, .IsConst = true});
 	REQUIRE_FALSE(bad.has_value());
 	CHECK(bad.error().Reason == PgE::FacetError::TypeMismatch);
 	CHECK(numbers.size() == 2);
@@ -122,12 +122,13 @@ TEST_CASE("sequence facet appends a move-only element by move, not by copy")
 	source.Tag = 5;
 
 	// A copy request cannot append a move-only element (mirrors the field-set move protocol).
-	const auto copied = facet->Append(&items, {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source});
+	const auto copied = facet->Append(PgE::TypedRefOf(items), {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source});
 	REQUIRE_FALSE(copied.has_value());
 	CHECK(copied.error().Reason == PgE::FacetError::NotWritable);
 
 	// A move from a mutable source succeeds.
-	const auto moved = facet->Append(&items, {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source, .IsConst = false, .Movable = true});
+	const auto moved =
+		facet->Append(PgE::TypedRefOf(items), {.Type = &PgE::TypeOf<MoveOnlyValue>(), .Data = &source, .IsConst = false, .Movable = true});
 	REQUIRE(moved.has_value());
 	REQUIRE(items.size() == 1);
 	CHECK(items[0].Tag == 5);
@@ -142,8 +143,8 @@ TEST_CASE("fixed-size sequences expose elements but no resize thunks")
 	CHECK_FALSE(arrayFacet->CanAppend());
 
 	std::array<int, 3> values{1, 2, 3};
-	CHECK(arrayFacet->Size(&values) == 3);
-	const PgE::TypedRef ref = arrayFacet->ElementRef(&values, 2);
+	CHECK(arrayFacet->Size(PgE::TypedRefOf(values)) == 3);
+	const PgE::TypedRef ref = arrayFacet->ElementRef(PgE::TypedRefOf(values), 2);
 	*static_cast<int*>(ref.Data) = 42;
 	CHECK(values[2] == 42);
 
@@ -152,9 +153,9 @@ TEST_CASE("fixed-size sequences expose elements but no resize thunks")
 	CHECK_FALSE(cArrayFacet->CanAppend());
 	CHECK(&cArrayFacet->ElementType() == &PgE::TypeOf<int>());
 
-	const int raw[4] = {5, 6, 7, 8};
-	CHECK(cArrayFacet->Size(&raw) == 4);
-	CHECK(*static_cast<const int*>(cArrayFacet->ElementRef(&raw, 3).Data) == 8);
+	constexpr int raw[4] = {5, 6, 7, 8};
+	CHECK(cArrayFacet->Size(PgE::TypedRefOf(raw)) == 4);
+	CHECK(*static_cast<const int*>(cArrayFacet->ElementRef(PgE::TypedRefOf(raw), 3).Data) == 8);
 }
 
 TEST_CASE("a span reflects as a non-resizable sequence over its viewed elements")
@@ -175,10 +176,10 @@ TEST_CASE("a span reflects as a non-resizable sequence over its viewed elements"
 	CHECK(&dynamicFacet->ElementType() == &PgE::TypeOf<int>());
 
 	std::span<int> view{storage};
-	CHECK(dynamicFacet->Size(&view) == 3);
+	CHECK(dynamicFacet->Size(PgE::TypedRefOf(view)) == 3);
 
 	// The element ref writes through the view into the underlying storage.
-	const PgE::TypedRef second = dynamicFacet->ElementRef(&view, 1);
+	const PgE::TypedRef second = dynamicFacet->ElementRef(PgE::TypedRefOf(view), 1);
 	*static_cast<int*>(second.Data) = 50;
 	CHECK(storage[1] == 50);
 
@@ -187,7 +188,7 @@ TEST_CASE("a span reflects as a non-resizable sequence over its viewed elements"
 
 TEST_CASE("a const-element span reflects as a read-only sequence")
 {
-	const int storage[3] = {7, 8, 9};
+	constexpr int storage[3] = {7, 8, 9};
 	const PgE::SequenceFacet* facet = PgE::TypeOf<std::span<const int>>().GetFacet<PgE::SequenceFacet>();
 	REQUIRE(facet != nullptr);
 
@@ -198,8 +199,8 @@ TEST_CASE("a const-element span reflects as a read-only sequence")
 	CHECK(&facet->ElementType() == &PgE::TypeOf<int>());
 
 	const std::span<const int> view{storage};
-	CHECK(facet->Size(&view) == 3);
-	const PgE::TypedRef first = facet->ElementRef(&view, 0);
+	CHECK(facet->Size(PgE::TypedRefOf(view)) == 3);
+	const PgE::TypedRef first = facet->ElementRef(PgE::TypedRefOf(view), 0);
 	CHECK(first.IsConst);
 	CHECK(*static_cast<const int*>(first.Data) == 7);
 
@@ -247,6 +248,72 @@ TEST_CASE("a user-defined facet extends the system with no core change")
 
 	// It does not declare Supersedes, so the structural field view is kept alongside it.
 	REQUIRE(type.FindFieldByIdentifier("Value") != nullptr);
-	const Labeled instance{};
-	CHECK(*type.GetFieldAs<int>(&instance, "Value") == 1);
+	constexpr Labeled instance{};
+	CHECK(*type.GetFieldAs<int>(instance, "Value") == 1);
+}
+
+TEST_CASE("a facet write through a read-only borrow is rejected")
+{
+	std::vector numbers{1, 2, 3};
+	const PgE::SequenceFacet* sequence = PgE::TypeOf<std::vector<int>>().GetFacet<PgE::SequenceFacet>();
+	REQUIRE(sequence != nullptr);
+
+	// The container is mutable; the borrow is not. Before the object was a TypedRef this call could only be
+	// spelled with a non-const pointer, so the type system answered it and nothing else had to.
+	const std::vector<int>& constant = numbers;
+	const PgE::TypedRef readOnly = PgE::TypedRefOf(constant);
+
+	int value = 4;
+	CHECK(sequence->Append(readOnly, PgE::TypedRefOf(value)).error().Reason == PgE::FacetError::ConstViolation);
+	CHECK(sequence->Clear(readOnly).error().Reason == PgE::FacetError::ConstViolation);
+	CHECK(sequence->Reserve(readOnly, 16).error().Reason == PgE::FacetError::ConstViolation);
+	CHECK(numbers.size() == 3);
+
+	// Reading is unaffected, and the element it hands back carries the borrow's constness.
+	CHECK(sequence->Size(readOnly) == 3);
+	CHECK(sequence->ElementRef(readOnly, 0).IsConst);
+	CHECK_FALSE(sequence->ElementRef(PgE::TypedRefOf(numbers), 0).IsConst);
+}
+
+TEST_CASE("string and enumeration facets reject a write through a read-only borrow")
+{
+	std::string text = "abc";
+	const PgE::StringFacet* string = PgE::TypeOf<std::string>().GetFacet<PgE::StringFacet>();
+	REQUIRE(string != nullptr);
+
+	const std::string& constantText = text;
+	CHECK(string->Assign(PgE::TypedRefOf(constantText), "xyz").error().Reason == PgE::FacetError::ConstViolation);
+	CHECK(text == "abc");
+	CHECK(string->View(PgE::TypedRefOf(constantText)) == "abc");
+
+	Shade shade = Shade::Green;
+	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Shade>().GetFacet<PgE::EnumerationFacet>();
+	REQUIRE(enumeration != nullptr);
+
+	const Shade& constantShade = shade;
+	CHECK(enumeration->Assign(PgE::TypedRefOf(constantShade), 0).error().Reason == PgE::FacetError::ConstViolation);
+	CHECK(shade == Shade::Green);
+}
+
+TEST_CASE("a facet rejects an object of a type it does not describe")
+{
+	std::vector numbers{1, 2, 3};
+	std::vector others{1.0f};
+
+	const PgE::SequenceFacet* facet = PgE::TypeOf<std::vector<int>>().GetFacet<PgE::SequenceFacet>();
+	REQUIRE(facet != nullptr);
+
+	// A facet is reached through the type that provides it, so the pairing is right by construction. It is
+	// wrong only when a caller caches one and applies it elsewhere, which the thunks cannot survive.
+	int value = 4;
+	const auto foreign = facet->Append(PgE::TypedRefOf(others), PgE::TypedRefOf(value));
+	REQUIRE_FALSE(foreign.has_value());
+	CHECK(foreign.error().Reason == PgE::FacetError::ObjectTypeMismatch);
+	CHECK(others.size() == 1);
+
+	CHECK(facet->Clear(PgE::TypedRef{.Type = &PgE::TypeOf<std::vector<int>>()}).error().Reason == PgE::FacetError::NullObject);
+
+	// The matching object is unaffected.
+	REQUIRE(facet->Append(PgE::TypedRefOf(numbers), PgE::TypedRefOf(value)).has_value());
+	CHECK(numbers.size() == 4);
 }

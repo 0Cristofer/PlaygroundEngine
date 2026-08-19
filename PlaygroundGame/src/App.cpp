@@ -31,6 +31,7 @@ void PgG::App::OnStartRun(PgE::World* world)
 	PGE_LOG(Info, "{}", component->Position);
 	a++;
 
+	_camera.LocalPosition = 3.5f;
 	_camera.Type = Perspective;
 	_camera.Enabled = false;
 	_camera.Position = 2.5f;

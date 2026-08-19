@@ -25,9 +25,9 @@ namespace PgE
 		constexpr StringFacet(const ViewThunk view, const AssignThunk assign) : _view(view), _assign(assign)
 		{}
 
-		std::string_view View(const void* obj) const pre(_view != nullptr)
+		std::string_view View(const TypedRef& object) const pre(_view != nullptr) pre(CheckFacetOwner(_owner, object).has_value())
 		{
-			return _view(obj);
+			return _view(object.Data);
 		}
 
 		bool CanAssign() const
@@ -35,16 +35,32 @@ namespace PgE
 			return _assign != nullptr;
 		}
 
-		std::expected<void, FacetError> Assign(void* obj, const std::string_view value) const
+		std::expected<void, FacetError> Assign(const TypedRef& object, const std::string_view value) const
 		{
+			if (const auto owned = CheckFacetOwner(_owner, object); !owned)
+			{
+				return owned;
+			}
+			if (object.IsConst)
+			{
+				return std::unexpected(FacetError{FacetError::ConstViolation});
+			}
 			if (!_assign)
 			{
 				return std::unexpected(FacetError{FacetError::NotWritable});
 			}
-			return _assign(obj, value);
+			return _assign(object.Data, value);
+		}
+
+		// Set by the facet builder to the type that provides this facet, so an op can tell an object of that
+		// type from any other. Empty for a facet built by hand, which skips the check.
+		constexpr void SetOwnerType(const TypeReference owner)
+		{
+			_owner = owner;
 		}
 
 	private:
+		TypeReference _owner;
 		ViewThunk _view = nullptr;
 		AssignThunk _assign = nullptr;
 	};

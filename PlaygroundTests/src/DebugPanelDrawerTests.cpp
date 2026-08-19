@@ -42,16 +42,29 @@ namespace
 	enum class Facing : std::int8_t
 	{
 		Back = -1,
-		Front = 1
+		Front [[maybe_unused]] = 1
 	};
 
 	struct Leaf
 	{
 		[[= PgE::DrawDebug{}]] float Value = 1.0f;
-		int Hidden = 7;
+		[[maybe_unused]] int Hidden = 7;
 	};
 
-	struct Node
+	struct Origin
+	{
+		[[= PgE::DrawDebug{}]] int Generation = 2;
+		[[maybe_unused]] int HiddenInBase = 1;
+	};
+
+	// A base whose facet supersedes its structure: it publishes no fields, so a walk that only reads
+	// GetFields() would draw an empty node where the string's own value belongs.
+	struct Titled : std::string
+	{
+		[[= PgE::DrawDebug{}]] int Rank = 4;
+	};
+
+	struct Node : Origin
 	{
 		[[= PgE::DrawDebug{}]] bool Flag = true;
 		[[= PgE::DrawDebug{}]] std::int32_t Count = 3;
@@ -62,7 +75,16 @@ namespace
 		[[= PgE::DrawDebug{}]] Node* Self = nullptr;
 		[[= PgE::DrawDebug{}]] const int Frozen = 9;
 		[[= PgE::DrawDebug{}]] const Leaf* Reference = nullptr;
-		int Unannotated = 5;
+
+		// A const pointer to a mutable target: the row must not be read-only just because the pointer is.
+		[[= PgE::DrawDebug{}]] [[maybe_unused]] Leaf* const Pinned = nullptr;
+
+		// Shadows the base's annotated field: both rows are siblings in the panel, so they must not share
+		// an ImGui id and the edit state that goes with it.
+		[[= PgE::DrawDebug{}]] int Generation = 7;
+
+		[[= PgE::DrawDebug{}]] Titled Heading;
+		[[maybe_unused]] int Unannotated = 5;
 	};
 }
 
@@ -84,13 +106,21 @@ TEST_CASE("the panel drawer walks every supported field kind")
 	CHECK(node.Values.size() == 2);
 	CHECK(node.Child.Value == 1.0f);
 	CHECK(node.Reference == &node.Child);
+
+	// An inherited annotated field is reached by walking the bases; GetFields() is direct members only, so a
+	// drawer that read only direct fields would silently omit it.
+	CHECK(node.Origin::Generation == 2);
+	CHECK(node.Generation == 7);
+
+	// A facet-backed base draws through its facet rather than as an empty node.
+	CHECK(node.Heading.Rank == 4);
 }
 
 TEST_CASE("a faceted root draws through its facet")
 {
 	const ImGuiFrameFixture frame;
 
-	std::vector<float> values{1.0f, 2.0f, 3.0f};
+	std::vector values{1.0f, 2.0f, 3.0f};
 
 	// A facet supersedes the structural view, so a root that could only draw fields would dead-end here
 	// on the very types the field path already handles.

@@ -9,6 +9,20 @@ import std;
 
 namespace PgE
 {
+	std::expected<void, FacetError> CheckFacetOwner(const TypeReference owner, const TypedRef& object)
+	{
+		if (object.Data == nullptr)
+		{
+			return std::unexpected(FacetError{FacetError::NullObject});
+		}
+		if (owner.Resolve != nullptr && object.Type != &owner.Get())
+		{
+			return std::unexpected(FacetError{FacetError::ObjectTypeMismatch});
+		}
+
+		return {};
+	}
+
 	namespace
 	{
 		bool HasMembersToWalk(const TypeInfo& typeInfo)
@@ -34,21 +48,21 @@ namespace PgE
 			out += ": ";
 		}
 
-		void AppendFieldValue(std::string& out, const FieldInfo& field, const void* obj)
+		void AppendFieldValue(std::string& out, const FieldInfo& field, const TypedRef& object)
 		{
 			// Prefer the borrow: it reads the field in place, whatever its size. The stack-slot path is the
 			// fallback for a non-addressable field (a bitfield), which is always a small trivial type that
 			// fits the slot; running it for an addressable struct or container would overflow the slot.
-			if (const auto ref = field.GetRef(obj))
+			if (const auto ref = field.GetRef(object))
 			{
-				out += ObjectToString(field.GetTypeInfo(), ref->Data);
+				out += ObjectToString(*ref);
 				return;
 			}
 
 			alignas(std::uintmax_t) std::byte slot[sizeof(std::uintmax_t)];
-			if (field.GetValue(obj, TypedRef{.Type = &field.GetTypeInfo(), .Data = slot, .IsConst = false}))
+			if (const TypedRef slotRef{.Type = &field.GetTypeInfo(), .Data = slot, .IsConst = false}; field.GetValue(object, slotRef))
 			{
-				out += ObjectToString(field.GetTypeInfo(), slot);
+				out += ObjectToString(slotRef);
 			}
 			else
 			{
@@ -56,18 +70,18 @@ namespace PgE
 			}
 		}
 
-		void AppendMembers(std::string& out, bool& firstEntry, const TypeInfo& typeInfo, const void* obj)
+		void AppendMembers(std::string& out, bool& firstEntry, const TypedRef& object)
 		{
 			// GetFields() is direct members only, so the inherited ones are reached by walking the bases, each
 			// through the base subobject its field thunks were built against.
-			for (const BaseInfo& base : typeInfo.GetBases())
+			for (const BaseInfo& base : object.Type->GetBases())
 			{
 				const TypeInfo& baseType = base.GetTypeInfo();
-				const void* baseObject = base.Upcast(obj);
+				const TypedRef baseObject = base.Upcast(object);
 
 				if (HasMembersToWalk(baseType))
 				{
-					AppendMembers(out, firstEntry, baseType, baseObject);
+					AppendMembers(out, firstEntry, baseObject);
 				}
 				else if (RendersThroughFacet(baseType))
 				{
@@ -81,27 +95,34 @@ namespace PgE
 				// no entry rather than the type-name placeholder its leaf thunk would produce.
 			}
 
-			for (const FieldInfo& field : typeInfo.GetFields())
+			for (const FieldInfo& field : object.Type->GetFields())
 			{
 				BeginEntry(out, firstEntry, field.GetIdentifier());
-				AppendFieldValue(out, field, obj);
+				AppendFieldValue(out, field, object);
 			}
 		}
 	}
 
-	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj)
+	std::string ObjectToString(const TypedRef& object)
 	{
+		const TypeInfo& typeInfo = *object.Type;
+
+		if (typeInfo.GetKind() == TypeKind::Union)
+		{
+			return "<union>";
+		}
+
 		// Anything with members renders by walking them; the thunk is for a leaf, which is what a type with
 		// nothing to walk is (an int, an empty struct, a facet-backed string). The builder hands out a thunk
 		// by fields alone, so which one wins is the renderer's call. See docs/ReflectionInternals.md (Rendering).
 		if (!HasMembersToWalk(typeInfo) && typeInfo.CanStringify())
 		{
-			return typeInfo.Stringify(obj);
+			return typeInfo.Stringify(object);
 		}
 
 		std::string out = "{";
 		bool firstEntry = true;
-		AppendMembers(out, firstEntry, typeInfo, obj);
+		AppendMembers(out, firstEntry, object);
 		return out + "}";
 	}
 }

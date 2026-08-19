@@ -309,7 +309,7 @@ TEST_CASE("a type carries a destroy thunk that runs its destructor")
 	auto object = ::new (storage) Destructible{};
 	object->Flag = &destroyed;
 
-	type.Destroy(object);
+	type.Destroy(PgE::TypedRefOf(*object));
 	CHECK(destroyed);
 }
 

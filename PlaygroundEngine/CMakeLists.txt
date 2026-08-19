@@ -481,6 +481,7 @@ target_sources(
 		src/WindowServer/Backend/WindowServerBackend.GLFW.cpp
 		src/WindowServer/Backend/WindowBackend.GLFW.cpp
 		src/WindowServer/Backend/GlfwInputTranslation.cpp
+		src/Reflection/Core/TypedRef.cpp
 		src/Reflection/Core/TypeInfo.cpp
 		src/Reflection/Core/FieldInfo.cpp
 		src/Reflection/Core/FunctionInfo.cpp

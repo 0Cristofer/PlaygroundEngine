@@ -142,7 +142,7 @@ namespace PgE::detail
 		return OperatorInfo(MapOperatorKind(std::meta::operator_of(MetaOperator)),
 							TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaOperator))>(), IdentifierOf(MetaOperator),
 							DisplayStringOf(MetaOperator), ScopePathOf<MetaOperator>(), MakeParameters<MetaOperator>(),
-							MakeFunctionTraits<MetaOperator>(), invoke, MakeAnnotations<MetaOperator>());
+							MakeFunctionTraits<MetaOperator>(), invoke, MakeAnnotations<MetaOperator>(), TypeReferenceTo<MetaType>());
 	}
 
 	template <std::meta::info MetaType, std::size_t... I>

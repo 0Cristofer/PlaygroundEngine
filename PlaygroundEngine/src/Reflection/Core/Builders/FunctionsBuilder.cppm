@@ -340,12 +340,27 @@ namespace PgE::detail
 		};
 	}
 
+	// A namespace-scope function is built with MetaType void and declares no owner, so the reference stays
+	// empty rather than naming void as a declaring type.
+	template <std::meta::info MetaType, std::meta::info MetaMember>
+	consteval TypeReference MakeDeclaringType()
+	{
+		if constexpr (std::meta::is_class_member(MetaMember))
+		{
+			return TypeReferenceTo<MetaType>();
+		}
+		else
+		{
+			return TypeReference{};
+		}
+	}
+
 	template <std::meta::info MetaType, std::meta::info MetaFunction>
 	consteval FunctionInfo MakeFunction(const Invoker invoke)
 	{
 		return FunctionInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::return_type_of(MetaFunction))>(), IdentifierOf(MetaFunction),
 							DisplayStringOf(MetaFunction), ScopePathOf<MetaFunction>(), MakeParameters<MetaFunction>(),
-							MakeFunctionTraits<MetaFunction>(), invoke, MakeAnnotations<MetaFunction>());
+							MakeFunctionTraits<MetaFunction>(), invoke, MakeAnnotations<MetaFunction>(), MakeDeclaringType<MetaType, MetaFunction>());
 	}
 
 	export template <std::meta::info MetaFunction>

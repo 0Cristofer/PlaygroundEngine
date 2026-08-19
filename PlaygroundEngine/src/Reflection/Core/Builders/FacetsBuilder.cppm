@@ -55,6 +55,19 @@ namespace PgE::detail
 		}
 	}
 
+	// Stamps the providing type onto a facet that offers the hook, so a facet op can reject an object of
+	// some other type. Read generically, the way Supersedes is: the builder still names no facet kind.
+	template <std::meta::info MetaType, typename FacetType>
+	consteval FacetType WithOwnerType(FacetType facet)
+	{
+		if constexpr (requires { facet.SetOwnerType(TypeReference{}); })
+		{
+			facet.SetOwnerType(TypeReferenceTo<MetaType>());
+		}
+
+		return facet;
+	}
+
 	template <std::meta::info MetaType, std::size_t Index>
 	consteval FacetEntry MakeFacetEntry()
 	{
@@ -63,7 +76,7 @@ namespace PgE::detail
 		// program-lifetime static whose stable address goes into the entry.
 		using T = [:MetaType:];
 		static constexpr auto Facets = TypeInfoTraits<T>::MakeFacets();
-		static constexpr auto Facet = std::get<Index>(Facets);
+		static constexpr auto Facet = WithOwnerType<MetaType>(std::get<Index>(Facets));
 		using FacetType = std::remove_cvref_t<decltype(Facet)>;
 		return FacetEntry{.Type = TypeReferenceTo<^^FacetType>(), .Data = &Facet};
 	}

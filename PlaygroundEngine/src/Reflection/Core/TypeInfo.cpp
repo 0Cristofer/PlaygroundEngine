@@ -202,7 +202,7 @@ namespace PgE
 		return nullptr;
 	}
 
-	std::expected<void, FieldError> TypeInfo::GetFieldValue(const void* obj, const std::string_view identifier, const TypedRef& out) const
+	std::expected<void, FieldError> TypeInfo::GetFieldValue(const TypedRef& object, const std::string_view identifier, const TypedRef& out) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
@@ -210,10 +210,10 @@ namespace PgE
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 		}
 
-		return field->GetValue(obj, out);
+		return field->GetValue(object, out);
 	}
 
-	std::expected<void, FieldError> TypeInfo::SetFieldValue(void* obj, const std::string_view identifier, const TypedRef& in) const
+	std::expected<void, FieldError> TypeInfo::SetFieldValue(const TypedRef& object, const std::string_view identifier, const TypedRef& in) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
@@ -221,10 +221,10 @@ namespace PgE
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 		}
 
-		return field->SetValue(obj, in);
+		return field->SetValue(object, in);
 	}
 
-	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(void* obj, const std::string_view identifier) const
+	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(const TypedRef& object, const std::string_view identifier) const
 	{
 		const FieldInfo* field = FindFieldByIdentifier(identifier);
 		if (!field)
@@ -232,17 +232,6 @@ namespace PgE
 			return std::unexpected(FieldError{FieldError::FieldNotFound});
 		}
 
-		return field->GetRef(obj);
-	}
-
-	std::expected<TypedRef, FieldError> TypeInfo::GetFieldRef(const void* obj, const std::string_view identifier) const
-	{
-		const FieldInfo* field = FindFieldByIdentifier(identifier);
-		if (!field)
-		{
-			return std::unexpected(FieldError{FieldError::FieldNotFound});
-		}
-
-		return field->GetRef(obj);
+		return field->GetRef(object);
 	}
 }

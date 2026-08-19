@@ -598,6 +598,39 @@ export namespace ReflectionTestTypes
 		int G = 0;
 	};
 
+	// Two polymorphic bases, so the second one cannot share the first's vptr and lands at a nonzero offset.
+	// Reaching its virtual function through the derived address would read the wrong vptr entirely, which a
+	// single-inheritance fixture (Base at offset 0) cannot tell apart from a correct upcast.
+	struct FirstVoice
+	{
+		virtual ~FirstVoice() = default;
+		virtual int Speak() const
+		{
+			return 1;
+		}
+	};
+
+	struct SecondVoice
+	{
+		virtual ~SecondVoice() = default;
+		virtual int Answer() const
+		{
+			return 10;
+		}
+	};
+
+	struct TwoVoices : FirstVoice, SecondVoice
+	{
+		int Speak() const override
+		{
+			return 2;
+		}
+		int Answer() const override
+		{
+			return 20;
+		}
+	};
+
 	// A tag base: it holds no state, so it must contribute nothing to a rendering.
 	struct Tag
 	{};

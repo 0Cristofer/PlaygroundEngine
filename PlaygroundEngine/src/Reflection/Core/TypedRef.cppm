@@ -9,12 +9,37 @@ namespace PgE
 	export template <typename T>
 	constexpr const TypeInfo& TypeMetaOf();
 
+	export struct DereferenceError
+	{
+		enum Kind : std::uint8_t
+		{
+			// The borrow does not name a pointer, so there is nothing to load. Reading the bytes anyway
+			// would hand back a wild address, which is why this is an error value and not a contract.
+			NotAPointer,
+
+			// A pointer to a function has no object to borrow, unlike a pointer to an object.
+			NotAnObjectPointer,
+
+			// The borrow names no object, so there is no pointer to read. Distinct from NullPointer, which
+			// is a pointer that was read and found null.
+			NullObject,
+
+			NullPointer,
+		};
+
+		Kind Reason;
+	};
+
 	export struct TypedRef
 	{
 		const TypeInfo* Type = nullptr;
 		void* Data = nullptr;
 		bool IsConst = false;
 		bool Movable = false;
+
+		// The pointee, as a borrow of its own, with the cv nodes peeled off. Read-only when the pointee type
+		// is const, and NOT when this borrow is
+		std::expected<TypedRef, DereferenceError> Dereference() const;
 	};
 
 	// Erases one live object into the borrow every erased entry point takes. The value category the caller

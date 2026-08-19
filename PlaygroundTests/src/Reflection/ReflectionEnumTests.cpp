@@ -11,8 +11,8 @@ TEST_CASE("enum field is accessible and stringifies to its enumerator name")
 	Palette palette{};
 	const PgE::TypeInfo& type = PgE::TypeOf<Palette>();
 
-	CHECK(*type.GetFieldAs<Shade>(&palette, "Primary") == Shade::Green);
-	REQUIRE(type.SetFieldAs(&palette, "Primary", Shade::Red).has_value());
+	CHECK(*type.GetFieldAs<Shade>(palette, "Primary") == Shade::Green);
+	REQUIRE(type.SetFieldAs(palette, "Primary", Shade::Red).has_value());
 	CHECK(palette.Primary == Shade::Red);
 
 	// The enum name propagates through the owning struct's field walk.
@@ -98,17 +98,17 @@ TEST_CASE("enumeration facet reads and writes an erased object")
 	REQUIRE(enumeration != nullptr);
 
 	// Value speaks the enumerator table's currency, so it feeds FindByValue with no conversion in between.
-	CHECK(enumeration->Value(&permissions) == 1);
-	CHECK(enumeration->FindByValue(enumeration->Value(&permissions))->GetIdentifier() == "Read");
+	CHECK(enumeration->Value(PgE::TypedRefOf(permissions)) == 1);
+	CHECK(enumeration->FindByValue(enumeration->Value(PgE::TypedRefOf(permissions)))->GetIdentifier() == "Read");
 
-	enumeration->Assign(&permissions, enumeration->FindByIdentifier("Execute")->GetValue());
+	REQUIRE(enumeration->Assign(PgE::TypedRefOf(permissions), enumeration->FindByIdentifier("Execute")->GetValue()).has_value());
 	CHECK(permissions == Permissions::Execute);
-	CHECK(enumeration->Value(&permissions) == 4);
+	CHECK(enumeration->Value(PgE::TypedRefOf(permissions)) == 4);
 
 	// A value no enumerator names round-trips as a value; naming it is a separate question.
-	enumeration->Assign(&permissions, 3);
+	REQUIRE(enumeration->Assign(PgE::TypedRefOf(permissions), 3).has_value());
 	CHECK(static_cast<std::uint16_t>(permissions) == 3);
-	CHECK(enumeration->FindByValue(enumeration->Value(&permissions)) == nullptr);
+	CHECK(enumeration->FindByValue(enumeration->Value(PgE::TypedRefOf(permissions))) == nullptr);
 }
 
 TEST_CASE("erased enum access preserves a negative enumerator")
@@ -117,14 +117,14 @@ TEST_CASE("erased enum access preserves a negative enumerator")
 	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Temperature>().GetFacet<PgE::EnumerationFacet>();
 	REQUIRE(enumeration != nullptr);
 
-	CHECK(enumeration->Value(&temperature) == 100);
+	CHECK(enumeration->Value(PgE::TypedRefOf(temperature)) == 100);
 
-	enumeration->Assign(&temperature, enumeration->FindByIdentifier("Freezing")->GetValue());
+	REQUIRE(enumeration->Assign(PgE::TypedRefOf(temperature), enumeration->FindByIdentifier("Freezing")->GetValue()).has_value());
 	CHECK(temperature == Temperature::Freezing);
 
 	// The read reproduces the stored two's-complement pattern, so the name is recoverable from the object.
-	CHECK(enumeration->Value(&temperature) == static_cast<std::uint64_t>(static_cast<std::int16_t>(-10)));
-	CHECK(enumeration->FindByValue(enumeration->Value(&temperature))->GetIdentifier() == "Freezing");
+	CHECK(enumeration->Value(PgE::TypedRefOf(temperature)) == static_cast<std::uint64_t>(static_cast<std::int16_t>(-10)));
+	CHECK(enumeration->FindByValue(enumeration->Value(PgE::TypedRefOf(temperature)))->GetIdentifier() == "Freezing");
 }
 
 TEST_CASE("erased enum write through a field touches only that field")
@@ -138,13 +138,13 @@ TEST_CASE("erased enum write through a field touches only that field")
 	const PgE::EnumerationFacet* enumeration = primary->GetTypeInfo().GetFacet<PgE::EnumerationFacet>();
 	REQUIRE(enumeration != nullptr);
 
-	const auto ref = primary->GetRef(&palette);
+	const auto ref = primary->GetRef(PgE::TypedRefOf(palette));
 	REQUIRE(ref.has_value());
 
-	CHECK(enumeration->Value(ref->Data) == static_cast<std::uint64_t>(Shade::Green));
+	CHECK(enumeration->Value(*ref) == static_cast<std::uint64_t>(Shade::Green));
 
 	// Writing through the facet is as wide as the member, so Count (the next member) is not part of the write.
-	enumeration->Assign(ref->Data, enumeration->FindByIdentifier("Red")->GetValue());
+	REQUIRE(enumeration->Assign(*ref, enumeration->FindByIdentifier("Red")->GetValue()).has_value());
 	CHECK(palette.Primary == Shade::Red);
 	CHECK(palette.Count == 2);
 }

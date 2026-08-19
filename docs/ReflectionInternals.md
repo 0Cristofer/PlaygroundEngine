@@ -252,6 +252,11 @@ exists so `FunctionInfo` and `ConstructorInfo` agree on what an argument means, 
 - **`Data` is the argument object's address**, so a null one names no object and is refused
   (`NullArgument`); a null *pointer* argument still has an address. This is unlike a function's **return**
   slot, where null is the caller discarding the result.
+- **The same rules reach the object parameter.** The object is a `TypedRef` too, so it is checked before the
+  arguments are: null answers `ObjectRequired`, a wrong tag `ObjectTypeMismatch`, and a read-only borrow
+  handed to a mutating member `ConstViolation`. A static or free function is exempt, since it never touches
+  the object. The destination is checked the same way, a read-only `out` or `ret` slot cannot receive a
+  value.
 - **Validation is neutral, mapping is per caller.** `CheckArgument` returns an `ArgumentError`, which
   `ToInvokeError` / `ToConstructError` map onto the caller's own enum. A new failure kind is one enumerator
   plus one `case` per caller, not another `else if` in two chains.
@@ -549,10 +554,28 @@ be walked"; the renderer decides which of the two wins.
   prefers the borrow (`GetRef`, reads in place at any size); the stack-slot fallback is for a
   non-addressable field (a bitfield), always a small trivial type that fits the slot.
 
+An **anonymous union in an internal-linkage type cannot be reflected on GCC 16**: its members mangle into the
+enclosing class's name and the translation unit fails to assemble on duplicate symbols
+(`ScopePathOf<...::AsInt> is already defined`). The same union in an external-linkage type is fine, which is
+why `std::expected` (which holds one) reflects normally. It is a toolchain bug, not a model limit, so it is
+recorded rather than guarded: a guard broad enough to catch it rejects every type holding a `std::expected`.
+
+A **union** is listed but never walked. Its members overlap and C++ records no active one, so reading them
+in turn reads every inactive member as well: punning for a trivially copyable alternative, a dereference of
+garbage for a `std::string` one. `GetFields()` still reports them, since a serializer or a C# generator needs
+the shape, and single-member access through `GetFieldAs` stays well defined (it reads what was written).
+What is refused is the *value walk*: rendering yields `<union>` and the debug panel draws a placeholder,
+until a discriminant can name the live member.
+
 `GetFields()` is direct members only, so inherited fields are reached through `GetBases()`. The walk
-recurses into each base through `BaseInfo::Upcast(obj)`, which shifts the object address by the base
-offset: every member thunk is built against its **declaring** type (`static_cast<Owner*>(obj)`), so an
-inherited field handed the derived pointer would read the wrong bytes for any base past the first.
+recurses into each base through `BaseInfo::Upcast(objectRef)`, which shifts the borrow by the base offset,
+retags it with the base's `TypeInfo` and carries its constness across: every member thunk is built against
+its **declaring** type (`static_cast<Owner*>(obj)`), so an inherited field handed the derived pointer would
+read the wrong bytes for any base past the first. Since the borrow is tagged, that mistake is no longer
+silent, the field reports `ObjectTypeMismatch` (see [ReflectionSystem.md](ReflectionSystem.md), Erased ABI).
+The upcast validates its own input with a `pre` rather than an error value: the `BaseInfo` came from the
+type being upcast, so a mismatch is a code bug, and it still surfaces in every configuration at the member
+thunk, which is the check that guards the memory access.
 
 Each base takes one of three paths:
 

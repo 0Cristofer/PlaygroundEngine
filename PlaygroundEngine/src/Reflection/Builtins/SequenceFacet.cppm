@@ -42,21 +42,20 @@ namespace PgE
 			return _element.Get();
 		}
 
-		std::size_t Size(const void* obj) const pre(_size != nullptr)
+		std::size_t Size(const TypedRef& object) const pre(_size != nullptr) pre(CheckFacetOwner(_owner, object).has_value())
 		{
-			return _size(obj);
+			return _size(object.Data);
 		}
 
-		TypedRef ElementRef(void* obj, const std::size_t index) const pre(_elementRef != nullptr)
+		TypedRef ElementRef(const TypedRef& object, const std::size_t index) const pre(_constElementRef != nullptr)
+			pre(CheckFacetOwner(_owner, object).has_value())
 		{
-			// _elementRef is null for a read-only view (std::span<const T>), so this pre holds only for a
-			// mutable sequence; a caller that mutates gates on CanMutateElements() first, as CanAppend gates Append.
-			return _elementRef(obj, index);
-		}
+			if (object.IsConst || _elementRef == nullptr)
+			{
+				return _constElementRef(object.Data, index);
+			}
 
-		TypedRef ElementRef(const void* obj, const std::size_t index) const pre(_constElementRef != nullptr)
-		{
-			return _constElementRef(obj, index);
+			return _elementRef(object.Data, index);
 		}
 
 		bool CanMutateElements() const
@@ -76,36 +75,68 @@ namespace PgE
 			return _append != nullptr;
 		}
 
-		std::expected<void, FacetError> Clear(void* obj) const
+		std::expected<void, FacetError> Clear(const TypedRef& object) const
 		{
+			if (const auto owned = CheckFacetOwner(_owner, object); !owned)
+			{
+				return owned;
+			}
+			if (object.IsConst)
+			{
+				return std::unexpected(FacetError{FacetError::ConstViolation});
+			}
 			if (!_clear)
 			{
 				return std::unexpected(FacetError{FacetError::NotWritable});
 			}
-			_clear(obj);
+			_clear(object.Data);
 			return {};
 		}
 
-		std::expected<void, FacetError> Reserve(void* obj, const std::size_t capacity) const
+		std::expected<void, FacetError> Reserve(const TypedRef& object, const std::size_t capacity) const
 		{
+			if (const auto owned = CheckFacetOwner(_owner, object); !owned)
+			{
+				return owned;
+			}
+			if (object.IsConst)
+			{
+				return std::unexpected(FacetError{FacetError::ConstViolation});
+			}
 			if (!_reserve)
 			{
 				return std::unexpected(FacetError{FacetError::NotWritable});
 			}
-			_reserve(obj, capacity);
+			_reserve(object.Data, capacity);
 			return {};
 		}
 
-		std::expected<void, FacetError> Append(void* obj, const TypedRef& in) const
+		std::expected<void, FacetError> Append(const TypedRef& object, const TypedRef& in) const
 		{
+			if (const auto owned = CheckFacetOwner(_owner, object); !owned)
+			{
+				return owned;
+			}
+			if (object.IsConst)
+			{
+				return std::unexpected(FacetError{FacetError::ConstViolation});
+			}
 			if (!_append)
 			{
 				return std::unexpected(FacetError{FacetError::NotWritable});
 			}
-			return _append(obj, in);
+			return _append(object.Data, in);
+		}
+
+		// Set by the facet builder to the type that provides this facet, so an op can tell an object of that
+		// type from any other. Empty for a facet built by hand, which skips the check.
+		constexpr void SetOwnerType(const TypeReference owner)
+		{
+			_owner = owner;
 		}
 
 	private:
+		TypeReference _owner;
 		TypeReference _element;
 		SizeThunk _size = nullptr;
 		ElementRefThunk _elementRef = nullptr;
