@@ -74,13 +74,13 @@ namespace PgE
 		return detail::NamespaceMetaOf<MetaNamespace>();
 	}
 
-	std::string ObjectToString(const TypeInfo& typeInfo, const void* obj);
+	std::string ObjectToString(const TypedRef& object);
 
 	export template <typename T>
 	std::string ToString(const T& value)
 	{
 		// Rendering is metadata only (it walks fields and facets, never invokes), so it takes the identity handle
 		// and never triggers invoker materialization: ToString of a foreign type cannot fail on a deprecated one.
-		return ObjectToString(TypeMetaOf(value), &value);
+		return ObjectToString(TypedRefOf(value));
 	}
 }

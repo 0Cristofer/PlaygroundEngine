@@ -47,10 +47,13 @@ TEST_CASE("a thunk-backed reflection accessor rejects a call it cannot serve")
 	int value = 7;
 
 	// void reflects with no destroy thunk; int has one but still needs an object to run it on.
-	CHECK_THROWS_AS(PgE::TypeOf<void>().Destroy(&value), PgETest::ContractViolationError);
-	CHECK_THROWS_AS(PgE::TypeOf<int>().Destroy(nullptr), PgETest::ContractViolationError);
+	CHECK_THROWS_AS(PgE::TypeOf<void>().Destroy(PgE::TypedRef{.Type = &PgE::TypeOf<void>(), .Data = &value}), PgETest::ContractViolationError);
+	CHECK_THROWS_AS(PgE::TypeOf<int>().Destroy(PgE::TypedRef{.Type = &PgE::TypeOf<int>()}), PgETest::ContractViolationError);
 
-	CHECK_THROWS_AS(PgE::TypeOf<int>().Stringify(nullptr), PgETest::ContractViolationError);
+	CHECK_THROWS_AS(PgE::TypeOf<int>().Stringify(PgE::TypedRef{.Type = &PgE::TypeOf<int>()}), PgETest::ContractViolationError);
+
+	// The object must be the type being asked, which a bare pointer could never state.
+	CHECK_THROWS_AS(PgE::TypeOf<int>().Stringify(PgE::TypedRefOf(value == 7)), PgETest::ContractViolationError);
 }
 
 TEST_CASE("a type reference with no resolver rejects the read")

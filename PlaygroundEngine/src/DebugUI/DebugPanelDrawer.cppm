@@ -20,12 +20,10 @@ namespace PgE
 		template <typename T>
 		static void Draw(T& object)
 		{
-			// Sound against a read-only walk: IsConst reaches every row below and no writer runs behind a
-			// disabled widget. The same bargain FieldInfo::GetRef(const void*) makes for its erased borrow.
 			DrawObject(TypedRefOf(object));
 		}
 
 	private:
-		static void DrawObject(TypedRef object);
+		static void DrawObject(const TypedRef& object);
 	};
 }

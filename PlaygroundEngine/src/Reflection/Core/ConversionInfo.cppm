@@ -24,8 +24,9 @@ namespace PgE
 								 const std::span<const std::string_view> scopePath,
 								 const FunctionTraits& traits,
 								 const Invoker invoke,
-								 const std::span<const AnnotationInfo> annotations)
-			: FunctionInfo(targetType, {}, displayName, scopePath, {}, traits, invoke, annotations), _isExplicit(isExplicit)
+								 const std::span<const AnnotationInfo> annotations,
+								 const TypeReference declaringType)
+			: FunctionInfo(targetType, {}, displayName, scopePath, {}, traits, invoke, annotations, declaringType), _isExplicit(isExplicit)
 		{}
 
 		// The type this converts to. A conversion's return type is its target, carried with the same

@@ -22,6 +22,18 @@ namespace PgE
 			NotReadable,
 			NotWritable,
 			NotAddressable,
+
+			// The object handed to the access is not the type the field's thunks were built against. An
+			// inherited field is reached through BaseInfo::Upcast, never through the derived object.
+			ObjectTypeMismatch,
+
+			// The borrow names no object to read the field out of. Distinct from NotAddressable, which is the
+			// field's own answer (a bitfield has no address to borrow).
+			NullObject,
+
+			// A write reached through a read-only borrow. The type system cannot catch this once the object
+			// is erased, so it is stated here.
+			ConstViolation,
 		};
 
 		Kind Reason;
@@ -65,6 +77,7 @@ namespace PgE
 	{
 	public:
 		constexpr FieldInfo(const TypeReference typeInfo,
+							const TypeReference declaringType,
 							const std::string_view identifier,
 							const std::string_view displayName,
 							const std::span<const std::string_view> scopePath,
@@ -73,8 +86,8 @@ namespace PgE
 							const FieldSetter setter,
 							const FieldReferencer referencer,
 							const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo(identifier, displayName, scopePath, annotations), _typeInfo(typeInfo), _traits(traits), _getter(getter),
-			  _setter(setter), _referencer(referencer)
+			: DeclarationInfo(identifier, displayName, scopePath, annotations), _typeInfo(typeInfo), _declaringType(declaringType), _traits(traits),
+			  _getter(getter), _setter(setter), _referencer(referencer)
 		{}
 
 		const FieldTraits& GetTraits() const
@@ -102,6 +115,14 @@ namespace PgE
 		{
 			return _traits.HasDefaultInitializer;
 		}
+		// A mutable member is exempt from its object's constness by definition, and a reference member's
+		// referent is a separate object the qualification never reached. Both stay writable through a const
+		// object, so an erased access must not borrow them read-only either.
+		bool WritableThroughConstObject() const
+		{
+			return _traits.IsMutable || _traits.IsLvalueReference || _traits.IsRvalueReference;
+		}
+
 		bool IsMutable() const
 		{
 			return _traits.IsMutable;
@@ -125,17 +146,21 @@ namespace PgE
 
 		const TypeInfo& GetTypeInfo() const;
 
-		std::expected<void, FieldError> GetValue(const void* obj, const TypedRef& out) const;
-		std::expected<void, FieldError> SetValue(void* obj, const TypedRef& in) const;
+		const TypeInfo& GetDeclaringType() const;
 
-		std::expected<TypedRef, FieldError> GetRef(void* obj) const;
-		std::expected<TypedRef, FieldError> GetRef(const void* obj) const;
+		std::expected<void, FieldError> GetValue(const TypedRef& object, const TypedRef& out) const;
+		std::expected<void, FieldError> SetValue(const TypedRef& object, const TypedRef& in) const;
 
-		template <typename T>
-		std::expected<T, FieldError> GetAs(const void* obj) const
+		std::expected<TypedRef, FieldError> GetRef(const TypedRef& object) const;
+
+		// The typed forms take the object itself, never its address: a pointer would erase as a pointer and
+		// fail at runtime with ObjectTypeMismatch, so the constraint turns that into a compile error.
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<T, FieldError> GetAs(const Object& object) const
 		{
 			alignas(T) std::byte storage[sizeof(T)];
-			if (const auto result = GetValue(obj, TypedRef{.Type = &TypeMetaOf<T>(), .Data = storage, .IsConst = false}); !result)
+			if (const auto result = GetValue(TypedRefOf(object), TypedRef{.Type = &TypeMetaOf<T>(), .Data = storage, .IsConst = false}); !result)
 			{
 				return std::unexpected(result.error());
 			}
@@ -146,22 +171,25 @@ namespace PgE
 			return value;
 		}
 
-		template <typename T>
-		std::expected<void, FieldError> SetAs(void* obj, const T& value) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<void, FieldError> SetAs(Object& object, const T& value) const
 		{
-			return SetValue(obj, TypedRefOf(value));
+			return SetValue(TypedRefOf(object), TypedRefOf(value));
 		}
 
-		template <typename T>
-		std::expected<void, FieldError> MoveAs(void* obj, T& value) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<void, FieldError> MoveAs(Object& object, T& value) const
 		{
-			return SetValue(obj, TypedRefOf(std::move(value)));
+			return SetValue(TypedRefOf(object), TypedRefOf(std::move(value)));
 		}
 
-		template <typename T>
-		std::expected<std::reference_wrapper<T>, FieldError> GetRefAs(void* obj) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<std::reference_wrapper<T>, FieldError> GetRefAs(Object& object) const
 		{
-			const auto ref = GetRef(obj);
+			const auto ref = GetRef(TypedRefOf(object));
 			if (!ref)
 			{
 				return std::unexpected(ref.error());
@@ -178,10 +206,11 @@ namespace PgE
 			return std::reference_wrapper<T>(*static_cast<T*>(ref->Data));
 		}
 
-		template <typename T>
-		std::expected<std::reference_wrapper<const T>, FieldError> GetRefAs(const void* obj) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<std::reference_wrapper<const T>, FieldError> GetRefAs(const Object& object) const
 		{
-			const auto ref = GetRef(obj);
+			const auto ref = GetRef(TypedRefOf(object));
 			if (!ref)
 			{
 				return std::unexpected(ref.error());
@@ -195,7 +224,10 @@ namespace PgE
 		}
 
 	private:
+		std::expected<void, FieldError> CheckDeclaringInstance(const TypedRef& object) const;
+
 		TypeReference _typeInfo;
+		TypeReference _declaringType;
 		FieldTraits _traits;
 		FieldGetter _getter = nullptr;
 		FieldSetter _setter = nullptr;

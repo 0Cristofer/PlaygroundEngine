@@ -36,22 +36,22 @@ TEST_CASE("reflected operators invoke through the shared function machinery")
 	Coord right{3};
 
 	const PgE::OperatorInfo* plus = type.FindOperators(PgE::OperatorKind::Plus).front();
-	CHECK(plus->InvokeAs<Coord>(&left, right)->Value == 13);
+	CHECK(plus->InvokeAs<Coord>(left, right)->Value == 13);
 
 	const PgE::OperatorInfo* equal = type.FindOperators(PgE::OperatorKind::Equal).front();
-	CHECK(equal->InvokeAs<bool>(&left, right).value() == false);
-	CHECK(equal->InvokeAs<bool>(&left, Coord{10}).value() == true);
+	CHECK(equal->InvokeAs<bool>(left, right).value() == false);
+	CHECK(equal->InvokeAs<bool>(left, Coord{10}).value() == true);
 
 	const PgE::OperatorInfo* subscript = type.FindOperators(PgE::OperatorKind::Subscript).front();
-	CHECK(subscript->InvokeAs<int>(&left, 5).value() == 15);
+	CHECK(subscript->InvokeAs<int>(left, 5).value() == 15);
 
 	// The private operator invokes through the pointer route, like a private member function.
 	const PgE::OperatorInfo* minus = type.FindOperators(PgE::OperatorKind::Minus).front();
-	CHECK(minus->InvokeAs<Coord>(&left, right)->Value == 7);
+	CHECK(minus->InvokeAs<Coord>(left, right)->Value == 7);
 
 	// The converting assignment mutates the object and returns a reference to it.
 	const PgE::OperatorInfo* assign = type.FindOperators(PgE::OperatorKind::Assign).front();
-	REQUIRE(assign->InvokeAs<Coord&>(&left, 99).has_value());
+	REQUIRE(assign->InvokeAs<Coord&>(left, 99).has_value());
 	CHECK(left.Value == 99);
 }
 
@@ -80,8 +80,8 @@ TEST_CASE("user-defined conversions reflect with their target type and explicit 
 	CHECK_FALSE(toBool->IsExplicit());
 
 	Coord coord{42};
-	CHECK(toInt->InvokeAs<int>(&coord).value() == 42);
-	CHECK(toBool->InvokeAs<bool>(&coord).value() == true);
+	CHECK(toInt->InvokeAs<int>(coord).value() == 42);
+	CHECK(toBool->InvokeAs<bool>(coord).value() == true);
 }
 
 TEST_CASE("operators and conversions do not leak into the ordinary function list")

@@ -1,6 +1,7 @@
 export module PlaygroundEngine.Reflection.Core:BaseInfo;
 
 import :TypeReference;
+import :TypedRef;
 import :DeclarationInfo;
 
 import std;
@@ -16,15 +17,22 @@ namespace PgE
 		// docs/ReflectionInternals.md (type hierarchy).
 	public:
 		constexpr BaseInfo(const TypeReference type,
+						   const TypeReference derivedType,
 						   const AccessKind access,
 						   const std::size_t offset,
 						   const std::span<const AnnotationInfo> annotations)
-			: _type(type), _access(access), _offset(offset), _annotations(annotations)
+			: _type(type), _derivedType(derivedType), _access(access), _offset(offset), _annotations(annotations)
 		{}
 
 		[[nodiscard]] const TypeInfo& GetTypeInfo() const
 		{
 			return _type.Get();
+		}
+
+		// The type this base is a base OF, so an upcast can verify it was handed the right object.
+		[[nodiscard]] const TypeInfo& GetDerivedType() const
+		{
+			return _derivedType.Get();
 		}
 
 		[[nodiscard]] AccessKind GetAccess() const
@@ -37,17 +45,13 @@ namespace PgE
 			return _offset;
 		}
 
-		// The base subobject inside a derived object. Every erased member thunk (a field getter, a function
-		// invoker) is built against its declaring type, so reaching an inherited member means handing it this
-		// pointer rather than the derived one, which only coincides when the base sits at offset 0.
-		[[nodiscard]] void* Upcast(void* derived) const pre(derived != nullptr)
+		// The base subobject inside a derived object: every member thunk is built against its declaring type,
+		// so an inherited member is reached through this borrow, not the derived one. One direct base per
+		// hop, which is what stays unambiguous under repeated non-virtual bases.
+		[[nodiscard]] TypedRef Upcast(const TypedRef& derived) const pre(derived.Type == &GetDerivedType()) pre(derived.Data != nullptr)
 		{
-			return static_cast<std::byte*>(derived) + _offset;
-		}
-
-		[[nodiscard]] const void* Upcast(const void* derived) const pre(derived != nullptr)
-		{
-			return static_cast<const std::byte*>(derived) + _offset;
+			return TypedRef{
+				.Type = &GetTypeInfo(), .Data = static_cast<std::byte*>(derived.Data) + _offset, .IsConst = derived.IsConst, .Movable = false};
 		}
 
 		[[nodiscard]] std::span<const AnnotationInfo> GetAnnotations() const
@@ -57,6 +61,7 @@ namespace PgE
 
 	private:
 		TypeReference _type;
+		TypeReference _derivedType;
 		AccessKind _access = AccessKind::Public;
 		std::size_t _offset = 0;
 		std::span<const AnnotationInfo> _annotations;

@@ -83,8 +83,9 @@ namespace PgE
 							   const std::span<const ParameterInfo> params,
 							   const FunctionTraits& traits,
 							   const Invoker invoke,
-							   const std::span<const AnnotationInfo> annotations)
-			: FunctionInfo(returnType, identifier, displayName, scopePath, params, traits, invoke, annotations), _kind(kind)
+							   const std::span<const AnnotationInfo> annotations,
+							   const TypeReference declaringType)
+			: FunctionInfo(returnType, identifier, displayName, scopePath, params, traits, invoke, annotations, declaringType), _kind(kind)
 		{}
 
 		OperatorKind GetOperator() const

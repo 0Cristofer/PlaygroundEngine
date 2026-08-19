@@ -17,14 +17,14 @@ import std;
 
 namespace PgE::detail
 {
-	template <std::meta::info MetaBase>
+	template <std::meta::info MetaType, std::meta::info MetaBase>
 	consteval BaseInfo MakeBase()
 	{
 		// A virtual base's derived-to-base distance lives in the vtable and depends on the most-derived type,
 		// so a stored constant would be wrong once the type is embedded further down. Reject it at build time.
 		static_assert(!std::meta::is_virtual(MetaBase), "reflected types may not use virtual inheritance");
 
-		return BaseInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaBase))>(), AccessOf(MetaBase),
+		return BaseInfo(TypeReferenceTo<std::meta::remove_cvref(std::meta::type_of(MetaBase))>(), TypeReferenceTo<MetaType>(), AccessOf(MetaBase),
 						std::meta::offset_of(MetaBase).bytes, MakeAnnotations<MetaBase>());
 	}
 
@@ -32,7 +32,7 @@ namespace PgE::detail
 	consteval std::array<BaseInfo, sizeof...(I)> MakeBaseArray(std::index_sequence<I...>)
 	{
 		[[maybe_unused]] constexpr auto bases = std::define_static_array(std::meta::bases_of(MetaType, std::meta::access_context::unchecked()));
-		return std::array<BaseInfo, sizeof...(I)>{MakeBase<bases[I]>()...};
+		return std::array<BaseInfo, sizeof...(I)>{MakeBase<MetaType, bases[I]>()...};
 	}
 
 	template <std::meta::info MetaType>

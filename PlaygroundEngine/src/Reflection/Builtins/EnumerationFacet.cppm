@@ -73,14 +73,24 @@ namespace PgE
 		// The object's value in the enumerator table's currency: the underlying integer widened to uint64,
 		// which is what FindByValue and EnumeratorInfo::GetValue speak. A consumer holding only an erased
 		// pointer cannot do this conversion itself, since the width and signedness live in the enum type.
-		std::uint64_t Value(const void* obj) const pre(_value != nullptr) pre(obj != nullptr)
+		std::uint64_t Value(const TypedRef& object) const pre(_value != nullptr) pre(CheckFacetOwner(_owner, object).has_value())
 		{
-			return _value(obj);
+			return _value(object.Data);
 		}
 
-		void Assign(void* obj, const std::uint64_t value) const pre(_assign != nullptr) pre(obj != nullptr)
+		std::expected<void, FacetError> Assign(const TypedRef& object, const std::uint64_t value) const pre(_assign != nullptr)
 		{
-			_assign(obj, value);
+			if (const auto owned = CheckFacetOwner(_owner, object); !owned)
+			{
+				return owned;
+			}
+			if (object.IsConst)
+			{
+				return std::unexpected(FacetError{FacetError::ConstViolation});
+			}
+
+			_assign(object.Data, value);
+			return {};
 		}
 
 		std::span<const EnumeratorInfo> GetEnumerators() const
@@ -91,7 +101,15 @@ namespace PgE
 		const EnumeratorInfo* FindByIdentifier(std::string_view identifier) const;
 		const EnumeratorInfo* FindByValue(std::uint64_t value) const;
 
+		// Set by the facet builder to the type that provides this facet, so an op can tell an object of that
+		// type from any other. Empty for a facet built by hand, which skips the check.
+		constexpr void SetOwnerType(const TypeReference owner)
+		{
+			_owner = owner;
+		}
+
 	private:
+		TypeReference _owner;
 		TypeReference _underlyingType;
 		std::span<const EnumeratorInfo> _enumerators;
 		ValueThunk _value = nullptr;

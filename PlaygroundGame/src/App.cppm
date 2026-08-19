@@ -34,7 +34,12 @@ namespace PgG
 		[[= PgE::DrawDebug{}]] Quality Coating;
 	};
 
-	struct Camera
+	struct BaseCamera
+	{
+		[[= PgE::DrawDebug{}]] float LocalPosition;
+	};
+
+	struct Camera : BaseCamera
 	{
 		[[= PgE::DrawDebug{}]] float Position;
 		[[= PgE::DrawDebug{}]] bool Enabled;
@@ -45,6 +50,8 @@ namespace PgG
 		[[= PgE::DrawDebug{}]] std::string Name;
 		[[= PgE::DrawDebug{}]] std::vector<float> Exposures;
 		[[= PgE::DrawDebug{}]] Camera* Parent;
+		[[= PgE::DrawDebug{}]] int* OptionalId = &Id;
+		[[= PgE::DrawDebug{}]] std::vector<float>* OptionalExposures = &Exposures;
 		[[= PgE::DrawDebug{}]] const int Serial = 7;
 		int Id;
 	};

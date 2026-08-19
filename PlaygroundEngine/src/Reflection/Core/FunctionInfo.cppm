@@ -25,6 +25,13 @@ namespace PgE
 			NotMovable,
 			ReturnTypeMismatch,
 			NotInvocable,
+
+			// The object is not the type the invoker was built against. Distinct from TypeMismatch, which
+			// names an argument by index; the object is not an argument.
+			ObjectTypeMismatch,
+
+			// A member function reached without an object, or with a null one.
+			ObjectRequired,
 		};
 
 		Kind Reason;
@@ -99,12 +106,19 @@ namespace PgE
 							   const std::span<const ParameterInfo> params,
 							   const FunctionTraits& traits,
 							   const Invoker invoke,
-							   const std::span<const AnnotationInfo> annotations)
-			: DeclarationInfo(identifier, displayName, scopePath, annotations), _returnType(returnType), _params(params), _traits(traits),
-			  _invoke(invoke)
+							   const std::span<const AnnotationInfo> annotations,
+							   const TypeReference declaringType)
+			: DeclarationInfo(identifier, displayName, scopePath, annotations), _returnType(returnType), _declaringType(declaringType),
+			  _params(params), _traits(traits), _invoke(invoke)
 		{}
 
 		const TypeInfo& GetReturnType() const;
+
+		// The type that declares this function, null for a free function.
+		const TypeInfo* GetDeclaringType() const
+		{
+			return _declaringType.Resolve != nullptr ? &_declaringType.Get() : nullptr;
+		}
 		std::span<const ParameterInfo> GetParams() const;
 
 		const FunctionTraits& GetTraits() const
@@ -171,11 +185,39 @@ namespace PgE
 			return _traits.IsConst || _traits.IsStatic || _traits.IsFreeFunction;
 		}
 
-		std::expected<void, InvokeError> Invoke(void* obj, std::span<const TypedRef> args, const TypedRef& ret = {}) const;
-		std::expected<void, InvokeError> Invoke(const void* obj, std::span<const TypedRef> args, const TypedRef& ret = {}) const;
+		bool CallsWithoutObject() const
+		{
+			return _traits.IsStatic || _traits.IsFreeFunction;
+		}
 
+		std::expected<void, InvokeError> Invoke(const TypedRef& object, std::span<const TypedRef> args, const TypedRef& ret = {}) const;
+		std::expected<void, InvokeError> Invoke(std::span<const TypedRef> args, const TypedRef& ret = {}) const;
+
+		// Constrained so a TypedRef never lands here: erasing an already-erased borrow would tag the call
+		// with TypedRef itself, which matches no declaring type and fails at runtime for a confusing reason.
 		template <typename Return = void, typename Object, typename... Arguments>
-		std::expected<InvokeResult<Return>, InvokeError> InvokeAs(Object* obj, Arguments&&... arguments) const
+		requires(!std::same_as<std::remove_cvref_t<Object>, TypedRef>)
+		std::expected<InvokeResult<Return>, InvokeError> InvokeAs(Object& object, Arguments&&... arguments) const
+		{
+			return InvokeAs<Return>(TypedRefOf(object), std::forward<Arguments>(arguments)...);
+		}
+
+		// The object-less typed call, for a static or free function.
+		template <typename Return = void, typename... Arguments>
+		std::expected<InvokeResult<Return>, InvokeError> InvokeStaticAs(Arguments&&... arguments) const
+		{
+			if (!CallsWithoutObject())
+			{
+				return std::unexpected(InvokeError{.Reason = InvokeError::ObjectRequired, .ArgumentIndex = 0});
+			}
+
+			return InvokeAs<Return>(TypedRef{}, std::forward<Arguments>(arguments)...);
+		}
+
+		// Same call, with the object already erased: that is how an inherited function is reached, since
+		// BaseInfo::Upcast hands back a borrow tagged with the declaring base rather than the derived type.
+		template <typename Return = void, typename... Arguments>
+		std::expected<InvokeResult<Return>, InvokeError> InvokeAs(const TypedRef& obj, Arguments&&... arguments) const
 		{
 			const auto args = detail::MakeTypedRefs(std::forward<Arguments>(arguments)...);
 
@@ -198,12 +240,13 @@ namespace PgE
 			else
 			{
 				return detail::ValueFromSlot<Return, InvokeError>(
-					[this, obj](const std::span<const TypedRef> callArgs, const TypedRef& ret) { return Invoke(obj, callArgs, ret); }, args);
+					[this, &obj](const std::span<const TypedRef> callArgs, const TypedRef& ret) { return Invoke(obj, callArgs, ret); }, args);
 			}
 		}
 
 	private:
 		TypeReference _returnType;
+		TypeReference _declaringType;
 		std::span<const ParameterInfo> _params;
 		FunctionTraits _traits;
 

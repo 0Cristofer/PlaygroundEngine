@@ -12,6 +12,10 @@ namespace
 {
 	constexpr float DragSpeed = 0.01f;
 
+	// The name column starts narrower than the value column, and stays draggable from there.
+	constexpr float NameColumnWeight = 0.35f;
+	constexpr float ValueColumnWeight = 0.65f;
+
 	template <typename Primitive>
 	consteval ImGuiDataType ImGuiDataTypeOf()
 	{
@@ -60,24 +64,60 @@ namespace
 		}
 	}
 
+	// ImGui draws a widget's own label to its right, so a row writes the name into the first column and
+	// gives the widget a hidden one. The id comes from the pushed label, since every hidden widget spells
+	// its own the same way.
+	void BeginLeafRow(const char* label)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::PushID(label);
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted(label);
+
+		ImGui::TableNextColumn();
+		ImGui::SetNextItemWidth(-std::numeric_limits<float>::min());
+	}
+
+	void EndLeafRow()
+	{
+		ImGui::PopID();
+	}
+
+	// A subobject owns the name column with its tree node, and leaves the value column to the caller for a
+	// summary. Children are further rows of the same table, so one nesting level indents rather than
+	// starting a table of its own and realigning everything below it.
+	bool BeginTreeRow(const char* label)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::AlignTextToFramePadding();
+		const bool open = ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_SpanAvailWidth);
+
+		ImGui::TableNextColumn();
+		return open;
+	}
+
 	template <typename Primitive>
-	bool TryDrawPrimitive(const char* label, const PgE::TypedRef ref)
+	bool TryDrawPrimitive(const char* label, const PgE::TypedRef& ref)
 	{
 		if (ref.Type != &PgE::TypeMetaOf<Primitive>())
 		{
 			return false;
 		}
 
+		BeginLeafRow(label);
 		ImGui::BeginDisabled(ref.IsConst);
 		if constexpr (std::is_same_v<Primitive, bool>)
 		{
-			ImGui::Checkbox(label, static_cast<bool*>(ref.Data));
+			ImGui::Checkbox("##value", static_cast<bool*>(ref.Data));
 		}
 		else
 		{
-			ImGui::DragScalar(label, ImGuiDataTypeOf<Primitive>(), ref.Data, DragSpeed);
+			ImGui::DragScalar("##value", ImGuiDataTypeOf<Primitive>(), ref.Data, DragSpeed);
 		}
 		ImGui::EndDisabled();
+		EndLeafRow();
 
 		return true;
 	}
@@ -87,7 +127,7 @@ namespace
 	{
 		// The fold short-circuits, so the first type whose identity matches owns the row and the rest are
 		// never called. A false result is the "not a primitive" answer the caller dispatches on.
-		static bool TryDraw(const char* label, const PgE::TypedRef ref)
+		static bool TryDraw(const char* label, const PgE::TypedRef& ref)
 		{
 			return (TryDrawPrimitive<Types>(label, ref) || ...);
 		}
@@ -107,32 +147,47 @@ namespace
 											  long long,
 											  unsigned long long>;
 
-	void DrawValue(const char* label, PgE::TypedRef value);
-
-	PgE::TypedRef PeelQualifiers(PgE::TypedRef ref)
-	{
-		// A cv node carries no structure of its own, so a borrow is only drawable once peeled down to the
-		// unqualified type. const Foo* reaches Foo through a const node, and that node is what says the
-		// target must not be edited.
-		while (ref.Type->GetTraits().IsConst || ref.Type->GetTraits().IsVolatile)
-		{
-			ref.IsConst = ref.IsConst || ref.Type->GetTraits().IsConst;
-			ref.Type = &ref.Type->GetInnerType();
-		}
-
-		return ref;
-	}
+	void DrawValue(const char* label, const PgE::TypedRef& ref);
 
 	void DrawDisabledText(const char* label, const char* text)
 	{
+		BeginLeafRow(label);
 		ImGui::BeginDisabled();
-		ImGui::LabelText(label, "%s", text);
+		ImGui::TextUnformatted(text);
 		ImGui::EndDisabled();
+		EndLeafRow();
 	}
 
-	void DrawFields(const PgE::TypedRef object)
+	// Answers whether it drew anything
+	bool DrawAnnotatedFields(const PgE::TypedRef& object)
 	{
 		bool drewAnnotatedField = false;
+
+		// GetFields() is direct members only, so an inherited annotated field is reached by walking the bases
+		for (const PgE::BaseInfo& base : object.Type->GetBases())
+		{
+			const PgE::TypeInfo& baseType = base.GetTypeInfo();
+
+			// A base's fields are siblings of the derived type's here, so a shadowed name would otherwise
+			// hand two rows the same widget id and make them share edit state.
+			ImGui::PushID(&baseType);
+
+			if (baseType.GetFacets().empty())
+			{
+				// |=, not ||: every base has to be drawn, and || would stop calling once one of them drew.
+				drewAnnotatedField |= DrawAnnotatedFields(base.Upcast(object));
+			}
+			else
+			{
+				// A facet supersedes the base's structure (a std::string base publishes no fields), so it
+				// draws through the facet as one named row rather than as an empty node. The display name,
+				// since a specialization has no identifier of its own.
+				DrawValue(baseType.GetDisplayName().data(), base.Upcast(object));
+				drewAnnotatedField = true;
+			}
+
+			ImGui::PopID();
+		}
 
 		for (const PgE::FieldInfo& field : object.Type->GetFields())
 		{
@@ -144,63 +199,70 @@ namespace
 			drewAnnotatedField = true;
 			const char* label = field.GetIdentifier().data();
 
-			const auto ref = field.GetRef(object.Data);
+			const auto ref = field.GetRef(object);
 			if (!ref)
 			{
-				// A bitfield has no address, so there is no borrow to edit in place.
-				DrawDisabledText(label, "<not addressable>");
+				// A bitfield has no address, so there is no borrow to edit in place. Any other reason is the
+				// walk's own fault and says so rather than posing as one.
+				DrawDisabledText(label, ref.error().Reason == PgE::FieldError::NotAddressable ? "<not addressable>" : "<unreadable>");
 				continue;
 			}
 
-			DrawValue(label, PgE::TypedRef{.Type = ref->Type, .Data = ref->Data, .IsConst = object.IsConst || ref->IsConst});
+			DrawValue(label, *ref);
 		}
 
-		if (!drewAnnotatedField)
+		return drewAnnotatedField;
+	}
+
+	void DrawFields(const PgE::TypedRef& object)
+	{
+		if (!DrawAnnotatedFields(object))
 		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
 			ImGui::TextDisabled("<no annotated fields>");
 		}
 	}
 
-	void DrawEnumeration(const char* label, const PgE::EnumerationFacet& enumeration, const PgE::TypedRef ref)
+	void DrawEnumeration(const char* label, const PgE::EnumerationFacet& enumeration, const PgE::TypedRef& ref)
 	{
-		const std::uint64_t current = enumeration.Value(ref.Data);
+		const std::uint64_t current = enumeration.Value(ref);
 		const PgE::EnumeratorInfo* selected = enumeration.FindByValue(current);
 
+		BeginLeafRow(label);
 		ImGui::BeginDisabled(ref.IsConst);
-		if (ImGui::BeginCombo(label, selected != nullptr ? selected->GetIdentifier().data() : "<unnamed>"))
+		if (ImGui::BeginCombo("##value", selected != nullptr ? selected->GetIdentifier().data() : "<unnamed>"))
 		{
 			for (const PgE::EnumeratorInfo& enumerator : enumeration.GetEnumerators())
 			{
 				if (const bool isSelected = enumerator.GetValue() == current; ImGui::Selectable(enumerator.GetIdentifier().data(), isSelected))
 				{
-					enumeration.Assign(ref.Data, enumerator.GetValue());
+					// Discarded, and it cannot fail: a read-only borrow disables the combo, so no selection reaches here.
+					(void)enumeration.Assign(ref, enumerator.GetValue());
 				}
 			}
 			ImGui::EndCombo();
 		}
 		ImGui::EndDisabled();
+		EndLeafRow();
 	}
 
-	void DrawSequence(const char* label, const PgE::SequenceFacet& sequence, const PgE::TypedRef ref)
+	void DrawSequence(const char* label, const PgE::SequenceFacet& sequence, const PgE::TypedRef& ref)
 	{
-		const std::size_t size = sequence.Size(ref.Data);
-		if (!ImGui::TreeNode(label, "%s (%zu)", label, size))
+		const std::size_t size = sequence.Size(ref);
+		const bool open = BeginTreeRow(label);
+		ImGui::TextDisabled("(%zu)", size);
+		if (!open)
 		{
 			return;
 		}
-
-		const bool elementsReadOnly = ref.IsConst || !sequence.CanMutateElements();
 
 		for (std::size_t index = 0; index < size; ++index)
 		{
 			ImGui::PushID(static_cast<int>(index));
 
-			PgE::TypedRef element =
-				elementsReadOnly ? sequence.ElementRef(static_cast<const void*>(ref.Data), index) : sequence.ElementRef(ref.Data, index);
-			element.IsConst = element.IsConst || elementsReadOnly;
-
 			const std::string elementLabel = std::format("[{}]", index);
-			DrawValue(elementLabel.c_str(), element);
+			DrawValue(elementLabel.c_str(), sequence.ElementRef(ref, index));
 
 			ImGui::PopID();
 		}
@@ -208,42 +270,38 @@ namespace
 		ImGui::TreePop();
 	}
 
-	void DrawContents(const PgE::TypedRef object)
+	void DrawContents(const PgE::TypedRef& ref)
 	{
-		const PgE::TypedRef ref = PeelQualifiers(object);
-
-		// A facet is the type's own view of itself and supersedes the structural one, so a faceted type
-		// reports no fields and has to draw through the labeled path. Only a plain record draws inline.
-		const bool isRecord = ref.Type->GetKind() == PgE::TypeKind::Class || ref.Type->GetKind() == PgE::TypeKind::Union;
-		if (isRecord && ref.Type->GetFacets().empty())
+		if (ref.Type->GetKind() == PgE::TypeKind::Class && ref.Type->GetFacets().empty())
 		{
 			DrawFields(ref);
 			return;
 		}
 
+		// Reached through drawing a non-record/faceted type directly, or when dereferencing a non-record/faceted type
 		DrawValue("value", ref);
 	}
 
-	void DrawPointer(const char* label, const PgE::TypedRef ref)
+	void DrawPointer(const char* label, const PgE::TypedRef& ref)
 	{
-		void* pointee = *static_cast<void**>(ref.Data);
-		if (pointee == nullptr)
+		const auto pointee = ref.Dereference();
+		if (!pointee)
 		{
-			DrawDisabledText(label, "<null>");
+			DrawDisabledText(label, pointee.error().Reason == PgE::DereferenceError::NullPointer ? "<null>" : "<unsupported>");
 			return;
 		}
 
-		if (ImGui::TreeNode(label, "%s (%p)", label, pointee))
+		const bool open = BeginTreeRow(label);
+		ImGui::TextDisabled("%p", pointee->Data);
+		if (open)
 		{
-			DrawContents(PgE::TypedRef{.Type = &ref.Type->GetInnerType(), .Data = pointee, .IsConst = ref.IsConst});
+			DrawContents(*pointee);
 			ImGui::TreePop();
 		}
 	}
 
-	void DrawValue(const char* label, const PgE::TypedRef value)
+	void DrawValue(const char* label, const PgE::TypedRef& ref)
 	{
-		const PgE::TypedRef ref = PeelQualifiers(value);
-
 		if (DrawablePrimitives::TryDraw(label, ref))
 		{
 			return;
@@ -259,7 +317,7 @@ namespace
 
 		if (const PgE::StringFacet* string = ref.Type->GetFacet<PgE::StringFacet>())
 		{
-			const std::string_view view = string->View(ref.Data);
+			const std::string_view view = string->View(ref);
 			DrawDisabledText(label, std::format("\"{}\"", view).c_str());
 			return;
 		}
@@ -276,9 +334,15 @@ namespace
 			return;
 		}
 
-		if (ref.Type->GetKind() == PgE::TypeKind::Class || ref.Type->GetKind() == PgE::TypeKind::Union)
+		if (ref.Type->GetKind() == PgE::TypeKind::Union)
 		{
-			if (ImGui::TreeNode(label))
+			DrawDisabledText(label, "<union>");
+			return;
+		}
+
+		if (ref.Type->GetKind() == PgE::TypeKind::Class)
+		{
+			if (BeginTreeRow(label))
 			{
 				DrawFields(ref);
 				ImGui::TreePop();
@@ -286,14 +350,26 @@ namespace
 			return;
 		}
 
-		DrawDisabledText(label, ref.Type->CanStringify() ? ref.Type->Stringify(ref.Data).c_str() : "<unsupported>");
+		DrawDisabledText(label, ref.Type->CanStringify() ? ref.Type->Stringify(ref).c_str() : "<unsupported>");
 	}
 }
 
 namespace PgE
 {
-	void DebugPanelDrawer::DrawObject(const TypedRef object)
+	void DebugPanelDrawer::DrawObject(const TypedRef& object)
 	{
+		// One table for the whole panel, opened once here: every row below writes into the same two columns,
+		// so a nested subobject's values stay aligned with the top level instead of measuring its own.
+		if (!ImGui::BeginTable("DebugPanelFields", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp))
+		{
+			return;
+		}
+
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, NameColumnWeight);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, ValueColumnWeight);
+
 		DrawContents(object);
+
+		ImGui::EndTable();
 	}
 }

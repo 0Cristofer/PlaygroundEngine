@@ -274,19 +274,19 @@ namespace PgE
 		{
 			return _destructor->CanDestroy();
 		}
-		void Destroy(void* obj) const pre(_destructor->CanDestroy()) pre(obj != nullptr)
+		void Destroy(const TypedRef& object) const pre(_destructor->CanDestroy()) pre(object.Data != nullptr) pre(object.Type == this)
 		{
-			_destructor->Destroy(obj);
+			_destructor->Destroy(object);
 		}
 
 		const FieldInfo* FindFieldByIdentifier(std::string_view identifier) const;
-		std::expected<void, FieldError> GetFieldValue(const void* obj, std::string_view identifier, const TypedRef& out) const;
-		std::expected<void, FieldError> SetFieldValue(void* obj, std::string_view identifier, const TypedRef& in) const;
-		std::expected<TypedRef, FieldError> GetFieldRef(void* obj, std::string_view identifier) const;
-		std::expected<TypedRef, FieldError> GetFieldRef(const void* obj, std::string_view identifier) const;
+		std::expected<void, FieldError> GetFieldValue(const TypedRef& object, std::string_view identifier, const TypedRef& out) const;
+		std::expected<void, FieldError> SetFieldValue(const TypedRef& object, std::string_view identifier, const TypedRef& in) const;
+		std::expected<TypedRef, FieldError> GetFieldRef(const TypedRef& object, std::string_view identifier) const;
 
-		template <typename T>
-		std::expected<T, FieldError> GetFieldAs(const void* obj, const std::string_view identifier) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<T, FieldError> GetFieldAs(const Object& object, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -294,11 +294,12 @@ namespace PgE
 				return std::unexpected(FieldError{FieldError::FieldNotFound});
 			}
 
-			return field->GetAs<T>(obj);
+			return field->GetAs<T>(object);
 		}
 
-		template <typename T>
-		std::expected<void, FieldError> SetFieldAs(void* obj, const std::string_view identifier, const T& value) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<void, FieldError> SetFieldAs(Object& object, const std::string_view identifier, const T& value) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -306,11 +307,12 @@ namespace PgE
 				return std::unexpected(FieldError{FieldError::FieldNotFound});
 			}
 
-			return field->SetAs<T>(obj, value);
+			return field->SetAs<T>(object, value);
 		}
 
-		template <typename T>
-		std::expected<void, FieldError> MoveFieldAs(void* obj, const std::string_view identifier, T& value) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<void, FieldError> MoveFieldAs(Object& object, const std::string_view identifier, T& value) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -318,11 +320,12 @@ namespace PgE
 				return std::unexpected(FieldError{FieldError::FieldNotFound});
 			}
 
-			return field->MoveAs<T>(obj, value);
+			return field->MoveAs<T>(object, value);
 		}
 
-		template <typename T>
-		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(void* obj, const std::string_view identifier) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<std::reference_wrapper<T>, FieldError> GetFieldRefAs(Object& object, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -330,11 +333,12 @@ namespace PgE
 				return std::unexpected(FieldError{FieldError::FieldNotFound});
 			}
 
-			return field->GetRefAs<T>(obj);
+			return field->GetRefAs<T>(object);
 		}
 
-		template <typename T>
-		std::expected<std::reference_wrapper<const T>, FieldError> GetFieldRefAs(const void* obj, const std::string_view identifier) const
+		template <typename T, typename Object>
+		requires(!std::is_pointer_v<std::remove_cvref_t<Object>>)
+		std::expected<std::reference_wrapper<const T>, FieldError> GetFieldRefAs(const Object& object, const std::string_view identifier) const
 		{
 			const FieldInfo* field = FindFieldByIdentifier(identifier);
 			if (!field)
@@ -342,16 +346,16 @@ namespace PgE
 				return std::unexpected(FieldError{FieldError::FieldNotFound});
 			}
 
-			return field->GetRefAs<T>(obj);
+			return field->GetRefAs<T>(object);
 		}
 
 		bool CanStringify() const
 		{
 			return _stringifyThunk;
 		}
-		std::string Stringify(const void* obj) const pre(_stringifyThunk != nullptr) pre(obj != nullptr)
+		std::string Stringify(const TypedRef& object) const pre(_stringifyThunk != nullptr) pre(object.Data != nullptr) pre(object.Type == this)
 		{
-			return _stringifyThunk(obj);
+			return _stringifyThunk(object.Data);
 		}
 
 	private:

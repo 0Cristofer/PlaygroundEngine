@@ -116,7 +116,7 @@ int main(int argc, char** argv)
 		++areaReflectedDimension;
 		DoNotOptimize(areaReflectedDimension);
 		widget.Width = areaReflectedDimension;
-		accumulator += area->InvokeAs<int>(&widget).value();
+		accumulator += area->InvokeAs<int>(widget).value();
 		DoNotOptimize(accumulator);
 	});
 
@@ -132,7 +132,7 @@ int main(int argc, char** argv)
 	const Result resizeReflected = Run("Resize: reflected InvokeAs (cached lookup)", iterations, [&] {
 		++resizeReflectedDimension;
 		DoNotOptimize(resizeReflectedDimension);
-		auto result = resize->InvokeAs(&widget, resizeReflectedDimension, resizeReflectedDimension + 1);
+		auto result = resize->InvokeAs(widget, resizeReflectedDimension, resizeReflectedDimension + 1);
 		DoNotOptimize(result);
 		DoNotOptimize(widget);
 	});
@@ -149,7 +149,7 @@ int main(int argc, char** argv)
 	const Result mixReflected = Run("Mix (heavy callee): reflected InvokeAs (cached lookup)", iterations, [&] {
 		++mixReflectedDimension;
 		DoNotOptimize(mixReflectedDimension);
-		accumulator += mix->InvokeAs<int>(&widget, mixReflectedDimension).value();
+		accumulator += mix->InvokeAs<int>(widget, mixReflectedDimension).value();
 		DoNotOptimize(accumulator);
 	});
 
@@ -158,6 +158,10 @@ int main(int argc, char** argv)
 	// work, not the compile-time-folded tags InvokeAs<T> produces. The int tag is fetched once, as a VM would.
 	const TypeInfo* const intTag = &TypeOf<int>();
 
+	// The object is a TypedRef on this path too, and a VM holds one the way it holds the tag: assembled when
+	// the object is bound, not rebuilt per call.
+	const TypedRef widgetRef = TypedRefOf(widget);
+
 	int areaErasedDimension = startingDimension;
 	const Result areaErased = Run("Area: erased Invoke (runtime-assembled args)", iterations, [&] {
 		++areaErasedDimension;
@@ -165,7 +169,7 @@ int main(int argc, char** argv)
 		widget.Width = areaErasedDimension;
 
 		int areaResult = 0;
-		auto result = area->Invoke(&widget, {}, TypedRef{.Type = intTag, .Data = &areaResult, .IsConst = false});
+		auto result = area->Invoke(widgetRef, {}, TypedRef{.Type = intTag, .Data = &areaResult, .IsConst = false});
 		DoNotOptimize(result);
 		accumulator += areaResult;
 		DoNotOptimize(accumulator);
@@ -180,7 +184,7 @@ int main(int argc, char** argv)
 		int height = resizeErasedDimension + 1;
 		std::array<TypedRef, 2> args{TypedRef{.Type = intTag, .Data = &width, .IsConst = false},
 									 TypedRef{.Type = intTag, .Data = &height, .IsConst = false}};
-		auto result = resize->Invoke(&widget, args);
+		auto result = resize->Invoke(widgetRef, args);
 		DoNotOptimize(result);
 		DoNotOptimize(widget);
 	});
@@ -193,7 +197,7 @@ int main(int argc, char** argv)
 		int seed = mixErasedDimension;
 		std::array<TypedRef, 1> args{TypedRef{.Type = intTag, .Data = &seed, .IsConst = false}};
 		int mixResult = 0;
-		auto result = mix->Invoke(&widget, args, TypedRef{.Type = intTag, .Data = &mixResult, .IsConst = false});
+		auto result = mix->Invoke(widgetRef, args, TypedRef{.Type = intTag, .Data = &mixResult, .IsConst = false});
 		DoNotOptimize(result);
 		accumulator += mixResult;
 		DoNotOptimize(accumulator);
@@ -217,7 +221,7 @@ int main(int argc, char** argv)
 		int worked = SimulateWork(workReflectedDimension);
 		DoNotOptimize(worked);
 		widget.Width = worked;
-		accumulator += area->InvokeAs<int>(&widget).value();
+		accumulator += area->InvokeAs<int>(widget).value();
 		DoNotOptimize(accumulator);
 	});
 
