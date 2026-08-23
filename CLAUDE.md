@@ -97,7 +97,7 @@ Background for the decisions in `docs/`, useful when evaluating proposals or ext
 
 ## Toolchain constraints
 
-- **GCC 16+ is required and the only supported compiler.** It must be a source build located at `~/gcc-16` (the `linux` preset hardcodes `~/gcc-16/bin/{gcc,g++}`).
+- **GCC 16+ is required and the only supported compiler.** It must be a source build located at `~/gcc-16` (the `linux` preset hardcodes `~/gcc-16/bin/{gcc,g++}`). Despite the directory name, that build is currently **GCC 17.0.0 experimental (trunk snapshot 2026-07-14)**; check `~/gcc-16/bin/g++ --version` before attributing a bug to a release.
 - **MSVC cannot currently be used** even though the CMake has Windows presets/flags: the reflection demo needs `-freflection`, which is GCC-only. Treat the Windows preset as aspirational, not working.
 - CMake 4.3+ and Ninja are required. `import std` support is gated behind the experimental `CMAKE_EXPERIMENTAL_CXX_IMPORT_STD` UUID set in the root `CMakeLists.txt`, that UUID is CMake-version-specific and must be updated when bumping CMake.
 - All warnings are errors (`COMPILE_WARNING_AS_ERROR ON`, `-Wall -Wextra -Wpedantic`). `-freflection` is applied globally via `add_compile_options` in the root CMakeLists.
@@ -125,7 +125,7 @@ Tests use **doctest** + **CTest** (`PlaygroundTests` target). Build with `cmake 
 Use `PlaygroundTests` (doctest + CTest) as the working ground for validating engine behavior, not throwaway `main()`s, see [docs/TestingSystem.md](docs/TestingSystem.md).
 
 - **Explore in the `scratch` case.** Behavior needing on-demand validation (reflection capabilities, engine output) goes in the shared, ephemeral `scratch` case, overwrite it freely; don't accumulate provisional tests. For purely toolchain/compile-level questions, a throwaway compile is the right tool, the harness's value is engine linkage + logging.
-- **Durable API that settles ⇒ test.** Such an API isn't done until a named test validates what was implemented; promote the scratch exploration into it (characterization tests pinning implementation-defined output are fine). Run `ctest -C Debug` and report. Exempt placeholder scaffolding slated for replacement (the GameObject/World/Component skeleton).
+- **Durable API that settles ⇒ test.** Such an API isn't done until a named test validates what was implemented; promote the scratch exploration into it (characterization tests pinning implementation-defined output are fine). Run `ctest -C Debug` and report. Exempt genuine throwaway scaffolding, but note the ECS is no longer in that category: it is the live simulation model and `PlaygroundTests/src/EcsTests.cpp` covers it.
 - **Permissive in between.** Don't gold-plate, spikes, trivial/obvious changes, and pure refactors owe no new test. When unsure, lean toward writing it.
 
 ## Targets
@@ -134,31 +134,43 @@ Use `PlaygroundTests` (doctest + CTest) as the working ground for validating eng
 - **PlaygroundGame**, executable; links `PlaygroundEngine`. The actual game/demo.
 - **PlaygroundReflection**, standalone executable, unrelated to the engine. A scratch pad for `std::meta` (C++26 reflection: `^^T`, `template for`, `[:member:]` splicers). Build-guarded to GCC 16+. **This is not the engine reflection system** (that lives in `PlaygroundEngine/src/Reflection/`); it is only an isolated language playground.
 - **PlaygroundTests**, executable; links `PlaygroundEngine`. doctest-based test suite, run via CTest. See [docs/TestingSystem.md](docs/TestingSystem.md).
+- **PlaygroundBenchmark**, executable; links `PlaygroundEngine`.
 
 ## Architecture
 
 ### Inverted entry point
-The **engine owns `main()`** (`PlaygroundEngine/src/main.cpp`), not the game. The game supplies `PlaygroundEngine::GetAppDescriptor(CommandLine*)` (declared in the only public header, `include/PlaygroundEngine/EntryPoint.h`; implemented in `PlaygroundGame/src/PlaygroundGame.cpp`). Flow:
+The **engine owns `main()`** (`PlaygroundEngine/src/main.cpp`), not the game. The game supplies `PgE::GetAppDescriptor(CommandLine)` (declared in `include/PlaygroundEngine/EntryPoint.h`; implemented in `PlaygroundGame/src/PlaygroundGame.cpp`). Flow:
 
 ```
-main() → GetAppDescriptor() → AppDescriptorBase
-       → ::GetEngine() → Engine(appDescriptor)   // Engine ctor runs Log::Init(), builds the App + World, calls App::OnInitialized()
-       → Engine::Run()                            // calls App::OnRun(world) then World::Run()
+main() → GetAppDescriptor(CommandLine) → AppDescriptorBase
+       → Engine engine(*appDescriptor)
+       → engine.Boot()      // configures logging, boots presentation + rendering, builds the Ecs and the App,
+                            //   then calls App::OnBooted(EngineContext&). Returns expected<void, BootError>.
+       → engine.StartRun()  // calls App::OnStartRun(Ecs&) to register systems, then loops:
+                            //   pump platform events → App::OnStep(PlatformEventRecord) → Ecs::Step(delta) → draw
+       → engine.Shutdown()  // always, including on a failed Boot
 ```
 
-A game is created by subclassing `AppDescriptorBase` (factory: `GetApp()`) and `AppBase` (`OnInitialized()` + `OnRun(World*)`). See `PlaygroundGame/src/App.{cppm,cpp}` for the canonical example.
+A game is created by subclassing `AppDescriptorBase` (factory: `GetApp()`) and `AppBase` (`OnBooted()` + `OnStartRun(Ecs&)` + `OnStep()`). See `PlaygroundGame/src/App.{cppm,cpp}` for the canonical example.
 
 ### Module layout
-`PlaygroundEngine` (the primary module interface, defined in `Engine.cppm`) is the umbrella: it `export import`s `.World` and `.GameObject`. Other named modules: `.App`, `.World`, `.GameObject`, `.Log`, `.Components` (re-exports `.Components.ComponentBase` and `.Components.TransformComponent`). Importing `PlaygroundEngine` gives you the engine surface; `import PlaygroundEngine.App` is needed separately for `AppBase`.
+`PlaygroundEngine` (the primary module interface, defined in `Engine.cppm`) exports `Engine`, `AppDescriptorBase`, `CommandLine`, `AppCapabilities`, `BootError`, and re-exports `.WindowServer`. It *imports* the rest without re-exporting, so a game imports what it uses by name.
+
+Other named modules: `.App` (`AppBase`, `EngineContext`), `.Ecs` (umbrella, re-exports `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.PositionComponent`, and the `:System` partition), `.Ecs.InputSystem` and `.Ecs.InputSystem.InputStateComponent`, `.PlatformEvents`, `.WindowServer`, `.Renderer.Vulkan`, `.DebugUi`, `.Reflection` (umbrella over `.Reflection.Core` and `.Reflection.Builtins`), `.Log`, `.Diagnostics`, `.Files`, `.Paths`, `.Image`, `.Model`, `.FrameCapture`, `.AgentChannel`.
 
 ### Entity/component model
-- `World` owns `GameObject`s (`std::vector<unique_ptr>`); `World::Run()` updates them.
-- `GameObject` owns `ComponentBase`s in an `unordered_map<ComponentId, unique_ptr>`. Type→id mapping is a per-type `static` counter (`GetComponentId<T>()` caches a value from `IncrementComponentId()`), so **each component type can appear at most once per GameObject**, `AddComponent` asserts on duplicates, `GetComponent` asserts if absent.
-- New components subclass `ComponentBase` (pure-virtual `Update()`) and should be re-exported from `Components.cppm`. `TransformComponent` is the template to copy.
-- **This model is a placeholder.** The decided direction is a full ECS, entities as generational handles, components as concrete value types in contiguous storage (see `docs/CoreConventions.md`). The skeleton will be replaced, not evolved; don't build new infrastructure on the GameObject model.
+The GameObject/World skeleton is gone; `PlaygroundEngine/src/Ecs/` is the simulation model.
+
+- `Entity` is a **value handle** (`int Id`, `InvalidId = 0`), copied freely and never an owner. It is not a generational handle yet.
+- `Ecs` owns systems (`std::vector<unique_ptr<System>>`, stepped in registration order) and components, held as `shared_ptr<Component>` in two ordered `std::map` indexes of one record: type → entity id, and entity id → type. The second doubles as the entity registry, so an entity with no components stays enumerable. **One component of a given type per entity**, which is what makes `(type, entity)` a key.
+- Queries return **snapshots** (`std::vector`), so adding or destroying during iteration is safe. That is a property of this storage, not a guarantee to rely on: write systems collect-then-act so they survive a change of storage.
+- Systems subclass `System` and implement `Step(float)`. Their protected API is the whole ECS surface: `AddEntity`, `IsEntityAlive`, `GetEntities`, `AddComponentToEntity<T>`, `TryGetComponent<T>` (the join primitive: a system pairing two component types goes through it), `GetComponents<T>`, `GetComponentsWithEntities<T>`, `GetEntityComponents`, `DestroyEntity`, `DestroyComponent<T>`. `InputSystem` is the engine-side example; `PlaygroundGame/src/Ecs/` has two more.
+- **Components are open data**: public fields, no invariants, default-constructible. Methods only when they are pure functions of the fields. This is deliberate and revisitable, and the reason is that serialization, replication, the C# boundary and `DrawDebug` live edit all write fields directly.
+- Misuse (a dead entity handle, a duplicate component) is a `pre` precondition. Note these do not currently fire: GCC drops a `pre` written in a module interface when the function is a template or is defined in the implementation unit. Write the contract correctly anyway, do not work around it, and never let a stale handle reach UB with the check compiled out (`find`, not `operator[]`).
+- Still missing, deliberately: pools, generational handles, system ordering or phases, a command buffer, and a math/`Transform` type.
 
 ### Logging
-spdlog, header-only (`SPDLOG_HEADER_ONLY`). Use the `LOG_TRACE/INFO/WARN/ERROR/FATAL` macros from `include/PlaygroundEngine/Log.h`. Because macros can't cross module boundaries, files that log must `#include "PlaygroundEngine/Log.h"` in the **global module fragment** (`module;` ... before the `module X;` line), see `Engine.cpp` and `PlaygroundGame/src/App.cpp`.
+spdlog, header-only (`SPDLOG_HEADER_ONLY`). Use the `PGE_LOG(level, ...)` macro from `include/PlaygroundEngine/Log.h` (levels `Trace/Info/Warn/Error/Fatal`), and `PGE_VERIFY(condition)` from `include/PlaygroundEngine/Verify.h` for an assertion that must survive a Release build, where contracts are set to `ignore`. Because macros can't cross module boundaries, files that log must `#include "PlaygroundEngine/Log.h"` in the **global module fragment** (`module;` ... before the `module X;` line), see `Engine.cpp` and `PlaygroundGame/src/App.cpp`.
 
 ## Module file conventions
 

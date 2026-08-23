@@ -461,6 +461,15 @@ export namespace ReflectionTestTypes
 		int Count = 2;
 	};
 
+	// Reaches the cv decomposition nodes two ways: the pointer's inner type is const Shade, and the map,
+	// having no facet to stop the structural walk, exposes value_type, that is std::pair<const Shade, int>.
+	// Both are shape, never storage, which is what makes a facet on them meaningless.
+	struct ShadeCounters
+	{
+		const Shade* Current = nullptr;
+		std::unordered_map<Shade, int> Counts;
+	};
+
 	// A leaf with no std::format support, no trait, and no enumerators: reflectable, stringified by the
 	// type-name fallback.
 	struct Opaque

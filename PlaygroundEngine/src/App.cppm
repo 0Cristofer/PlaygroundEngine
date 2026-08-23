@@ -1,6 +1,7 @@
 export module PlaygroundEngine.App;
 
-import PlaygroundEngine.World;
+import PlaygroundEngine.Ecs;
+import PlaygroundEngine.PlatformEvents;
 
 namespace PgE
 {
@@ -17,7 +18,7 @@ namespace PgE
 		virtual ~AppBase() = default;
 
 		virtual void OnBooted(EngineContext& engine) = 0;
-		virtual void OnStartRun(World* world) = 0;
-		virtual void OnStep() = 0;
+		virtual void OnStartRun(Ecs& ecs) = 0;
+		virtual void OnStep(const PlatformEventRecord& platformEventRecord) = 0;
 	};
 }

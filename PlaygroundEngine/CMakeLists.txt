@@ -457,14 +457,10 @@ target_link_libraries(
 target_sources(
 	PlaygroundEngine
 	PRIVATE
-		src/GameObject.cpp
 		src/Log.cpp
 		src/Diagnostics.cpp
 		src/ContractHandler.cpp
 		src/Engine.cpp
-		src/World.cpp
-		src/Component/ComponentBase.cpp
-		src/Component/TransformComponent.cpp
 		src/App.cpp
 		src/main.cpp
 		src/Files.cpp
@@ -473,6 +469,10 @@ target_sources(
 		src/DebugUI/DebugUI.cpp
 		src/DebugUI/DebugPanelDrawer.cpp
 		src/DebugUI/DebugUIInputTranslation.cpp
+        src/Ecs/Ecs.cpp
+        src/Ecs/System.cpp
+        src/Ecs/EntityDebugPanelSystem/EntityDebugPanelSystem.cpp
+        src/Ecs/InputSystem/InputSystem.cpp
 		src/Image/Image.cpp
 		src/Model/Model.cpp
 		src/AgentChannel/AgentChannel.cpp
@@ -494,17 +494,23 @@ target_sources(
 			BASE_DIRS
 				src
 			FILES
-				src/GameObject.cppm
 				src/Log.cppm
 				src/Diagnostics.cppm
 				src/Engine.cppm
 				src/App.cppm
-				src/World.cppm
 				src/Files.cppm
 				src/Paths.cppm
 				src/FrameCapture.cppm
 				src/DebugUI/DebugUI.cppm
 				src/DebugUI/DebugPanelDrawer.cppm
+                src/Ecs/Ecs.cppm
+                src/Ecs/Entity.cppm
+                src/Ecs/Component.cppm
+                src/Ecs/PositionComponent.cppm
+                src/Ecs/System.cppm
+                src/Ecs/EntityDebugPanelSystem/EntityDebugPanelSystem.cppm
+                src/Ecs/InputSystem/InputSystem.cppm
+                src/Ecs/InputSystem/InputStateComponent.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm
@@ -525,9 +531,6 @@ target_sources(
 				src/WindowServer/Backend/WindowServerBackend.GLFW.cppm
 				src/WindowServer/Backend/WindowBackend.GLFW.cppm
 				src/WindowServer/Backend/GlfwInputTranslation.cppm
-				src/Component/Components.cppm
-				src/Component/ComponentBase.cppm
-				src/Component/TransformComponent.cppm
 				src/Reflection/Core/Builders/MetaCommon.cppm
 				src/Reflection/Core/Builders/AnnotationsBuilder.cppm
 				src/Reflection/Core/Builders/FieldsBuilder.cppm

@@ -44,7 +44,7 @@ namespace PgE
 
 		_agentChannel.StartIfRequested(commandLine.Argc, commandLine.Argv);
 
-		_world = std::make_unique<World>();
+		_ecs = std::make_unique<Ecs>();
 
 		_app = _appDescriptor.GetApp();
 
@@ -58,7 +58,7 @@ namespace PgE
 
 	void Engine::StartRun()
 	{
-		_app->OnStartRun(_world.get());
+		_app->OnStartRun(*_ecs);
 		Run();
 	}
 
@@ -72,7 +72,7 @@ namespace PgE
 		_agentChannel.Stop();
 
 		_app.reset();
-		_world.reset();
+		_ecs.reset();
 
 		if (_rendererVulkan)
 		{
@@ -163,8 +163,8 @@ namespace PgE
 			_debugUi->BeginFrame(*_window, _platformEvents, deltaTimeSeconds);
 		}
 
-		_app->OnStep();
-		_world->Run();
+		_app->OnStep(_platformEvents);
+		_ecs->Step(deltaTimeSeconds);
 
 		// Placeholder standing in for real panels, written the way one would be: a guard on the frame
 		// being open, then plain ImGui calls, with no reference to the DebugUi instance.

@@ -260,7 +260,12 @@ namespace PgE
 		}
 	};
 
+	// Element is constrained to be unqualified for the same reason the enum traits are: this pattern would
+	// otherwise deduce Element = const int for const int[N], claiming a type whose facet the builder
+	// suppresses. The traits and the facet must agree on which types they describe.
+
 	template <typename Element, std::size_t Count>
+	requires std::same_as<Element, std::remove_cv_t<Element>>
 	struct TypeInfoTraits<Element[Count]> : TypeInfoTraitsDefaults
 	{
 		static std::string Stringify(const Element (&value)[Count])

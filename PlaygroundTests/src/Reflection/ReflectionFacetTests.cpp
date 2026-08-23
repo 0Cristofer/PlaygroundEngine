@@ -286,7 +286,7 @@ TEST_CASE("string and enumeration facets reject a write through a read-only borr
 	CHECK(text == "abc");
 	CHECK(string->View(PgE::TypedRefOf(constantText)) == "abc");
 
-	Shade shade = Shade::Green;
+	auto shade = Shade::Green;
 	const PgE::EnumerationFacet* enumeration = PgE::TypeOf<Shade>().GetFacet<PgE::EnumerationFacet>();
 	REQUIRE(enumeration != nullptr);
 
@@ -316,4 +316,52 @@ TEST_CASE("a facet rejects an object of a type it does not describe")
 	// The matching object is unaffected.
 	REQUIRE(facet->Append(PgE::TypedRefOf(numbers), PgE::TypedRefOf(value)).has_value());
 	CHECK(numbers.size() == 4);
+}
+
+TEST_CASE("a cv node carries no facet and the read peels to the unqualified one")
+{
+	// A cv-qualified type is a decomposition node with no structure of its own, so the protocol a facet
+	// exposes belongs to the type it names. Were the facet built here, a const enum would advertise an
+	// Assign that cannot compile, which is how this rule was found.
+	const PgE::TypeInfo& constantShadeType = PgE::TypeOf<const Shade*>().GetInnerType();
+	REQUIRE(constantShadeType.GetTraits().IsConst);
+	CHECK(constantShadeType.GetFacets().empty());
+	CHECK(constantShadeType.GetFacet<PgE::EnumerationFacet>() == nullptr);
+	CHECK(&constantShadeType.GetInnerType() == &PgE::TypeOf<Shade>());
+
+	// How a caller reads that object: dereferencing peels the cv node, so the facet is found on Shade and
+	// the constness rides the borrow, which is what refuses the write.
+	constexpr auto shade = Shade::Green;
+	const Shade* pointer = &shade;
+	const auto borrowed = PgE::TypedRefOf(pointer).Dereference();
+	REQUIRE(borrowed.has_value());
+	CHECK(borrowed->Type == &PgE::TypeOf<Shade>());
+	CHECK(borrowed->IsConst);
+
+	const PgE::EnumerationFacet* enumeration = borrowed->Type->GetFacet<PgE::EnumerationFacet>();
+	REQUIRE(enumeration != nullptr);
+	CHECK(enumeration->Value(*borrowed) == static_cast<std::uint64_t>(Shade::Green));
+	CHECK(enumeration->Assign(*borrowed, 0).error().Reason == PgE::FacetError::ConstViolation);
+}
+
+TEST_CASE("a field whose container has no facet still reflects through its const key")
+{
+	// A container with no facet of its own has nothing to stop the structural walk, so reflecting the field
+	// reaches value_type and builds a TypeInfo for const Shade. That build must stay possible: the facet
+	// suppression, not a special case for enums, is what keeps it so.
+	const PgE::FieldInfo* counts = PgE::TypeOf<ShadeCounters>().FindFieldByIdentifier("Counts");
+	REQUIRE(counts != nullptr);
+
+	const PgE::TypeInfo& mapType = counts->GetTypeInfo();
+	const PgE::NestedTypeInfo* valueType = mapType.FindNestedType("value_type");
+	REQUIRE(valueType != nullptr);
+
+	const PgE::NestedTypeInfo* keyType = valueType->GetTypeInfo().FindNestedType("first_type");
+	REQUIRE(keyType != nullptr);
+	CHECK(keyType->GetTypeInfo().GetTraits().IsConst);
+	CHECK(keyType->GetTypeInfo().GetFacets().empty());
+
+	// The enum it names is unaffected: the facet is there, one node down.
+	CHECK(&keyType->GetTypeInfo().GetInnerType() == &PgE::TypeOf<Shade>());
+	CHECK(PgE::TypeOf<Shade>().GetFacet<PgE::EnumerationFacet>() != nullptr);
 }

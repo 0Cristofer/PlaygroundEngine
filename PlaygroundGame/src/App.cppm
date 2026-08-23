@@ -3,59 +3,13 @@ export module PlaygroundGame;
 import PlaygroundEngine;
 import PlaygroundEngine.App;
 import PlaygroundEngine.DebugUi;
+import PlaygroundEngine.Ecs;
 
 import std;
+import PlaygroundEngine.Ecs.InputSystem;
 
 namespace PgG
 {
-	enum CameraType
-	{
-		Perspective,
-		Orthogonal
-	};
-
-	enum class Quality : std::uint8_t
-	{
-		Low,
-		Medium,
-		High
-	};
-
-	enum class DepthBias : std::int8_t
-	{
-		Pull = -1,
-		Neutral = 0,
-		Push = 1
-	};
-
-	struct Lens
-	{
-		[[= PgE::DrawDebug{}]] float FocalLength;
-		[[= PgE::DrawDebug{}]] Quality Coating;
-	};
-
-	struct BaseCamera
-	{
-		[[= PgE::DrawDebug{}]] float LocalPosition;
-	};
-
-	struct Camera : BaseCamera
-	{
-		[[= PgE::DrawDebug{}]] float Position;
-		[[= PgE::DrawDebug{}]] bool Enabled;
-		[[= PgE::DrawDebug{}]] CameraType Type;
-		[[= PgE::DrawDebug{}]] Quality RenderQuality;
-		[[= PgE::DrawDebug{}]] DepthBias Bias;
-		[[= PgE::DrawDebug{}]] Lens MainLens;
-		[[= PgE::DrawDebug{}]] std::string Name;
-		[[= PgE::DrawDebug{}]] std::vector<float> Exposures;
-		[[= PgE::DrawDebug{}]] Camera* Parent;
-		[[= PgE::DrawDebug{}]] int* OptionalId = &Id;
-		[[= PgE::DrawDebug{}]] std::vector<float>* OptionalExposures = &Exposures;
-		[[= PgE::DrawDebug{}]] const int Serial = 7;
-		int Id;
-	};
-
 	export class PlaygroundGameAppDescriptor : public PgE::AppDescriptorBase
 	{
 	public:
@@ -69,10 +23,10 @@ namespace PgG
 	{
 	public:
 		void OnBooted(PgE::EngineContext& engine) override;
-		void OnStartRun(PgE::World* world) override;
-		void OnStep() override;
+		void OnStartRun(PgE::Ecs& ecs) override;
+		void OnStep(const PgE::PlatformEventRecord& platformEventRecord) override;
 
 	private:
-		Camera _camera = {};
+		PgE::InputSystem* _inputSystem = nullptr;
 	};
 }
