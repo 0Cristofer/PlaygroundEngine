@@ -3,3 +3,10 @@
 indent: tabs
 line_length: 150
 list_expansion: favour-expansion
+# Custom commands gersemi cannot know from CMake's own modules. Without a definition it warns on
+# every run and leaves the call unformatted, so the warning noise sits in the same output as a real
+# finding. Only tracked paths belong here: a definition path that does not exist is a hard error, and
+# doctest_discover_tests lives in the generated build tree, so verify.sh supplies that one instead
+# (its --definitions replaces this list rather than extending it).
+definitions:
+  - PlaygroundEngine/CMakeLists.txt

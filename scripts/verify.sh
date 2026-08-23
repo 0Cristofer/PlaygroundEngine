@@ -48,6 +48,21 @@ find_gersemi() {
 	return 1
 }
 
+# doctest ships doctest_discover_tests in its own CMake module, which lands in the generated build
+# tree rather than the repo, so .gersemirc cannot name it (a definition path that does not exist is a
+# hard error there). Find whichever preset tree is populated; an empty result is fine, it only means
+# the warning comes back until a configure has run.
+find_doctest_definitions() {
+	local candidate
+	for candidate in build/linux build/linux-asan build/linux-coverage; do
+		if [ -f "$candidate/_deps/doctest-src/scripts/cmake/doctest.cmake" ]; then
+			printf '%s' "$candidate/_deps/doctest-src/scripts/cmake/doctest.cmake"
+			return 0
+		fi
+	done
+	return 1
+}
+
 # gcovr fronts gcov for a filtered summary (installed under ~/.local/bin here, on PATH in a container).
 find_gcovr() {
 	if command -v gcovr >/dev/null 2>&1; then
@@ -84,15 +99,25 @@ stage_format() {
 }
 
 # CMake formatter drift check (gersemi, config in .gersemirc), mirroring the clang-format stage for
-# C++. --check exits non-zero if a file would be reformatted; the unknown-command warning it prints for
-# doctest's helper macro is informational and does not fail the stage.
+# C++. --check exits non-zero if a file would be reformatted, and --diff makes it print the offending
+# hunks rather than only naming the file, so a failure here is actionable without a second command.
+# The custom-command definitions restate .gersemirc's list because a --definitions argument replaces
+# that list instead of extending it, and the build-tree doctest module can only be named here.
 stage_cmakeformat() {
 	local formatter
 	if ! formatter="$(find_gersemi)"; then
 		printf 'verify: gersemi not found (pip install gersemi, or drop it in ~/.local/bin)\n'
 		return 1
 	fi
-	git ls-files '*CMakeLists.txt' '*.cmake' | xargs "$formatter" --check
+
+	local definitions=(PlaygroundEngine/CMakeLists.txt)
+	local doctestDefinitions
+	if doctestDefinitions="$(find_doctest_definitions)"; then
+		definitions+=("$doctestDefinitions")
+	fi
+
+	git ls-files '*CMakeLists.txt' '*.cmake' |
+		xargs "$formatter" --definitions "${definitions[@]}" --check --diff
 }
 
 stage_lint() { "$root/scripts/lint.sh"; }

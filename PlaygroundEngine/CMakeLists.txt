@@ -400,8 +400,11 @@ endfunction()
 add_slang_shader_target(
 	PlaygroundEngineShaders
 	OUTPUT shaders.spv
-	SOURCES ${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Shaders/shaders.slang
-	ENTRY_POINTS vertMain fragMain
+	SOURCES
+		${CMAKE_CURRENT_LIST_DIR}/src/Renderer/Shaders/shaders.slang
+	ENTRY_POINTS
+		vertMain
+		fragMain
 )
 
 add_dependencies(PlaygroundEngine PlaygroundEngineShaders)
