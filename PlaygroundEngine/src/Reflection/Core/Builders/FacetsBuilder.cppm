@@ -39,14 +39,31 @@ namespace PgE::detail
 	}
 
 	template <std::meta::info MetaType>
+	consteval bool ProvidesFacets()
+	{
+		// Without this, a const enum would advertise an Assign it cannot honor, and a const T[N] a mutable element ref.
+		if constexpr (std::meta::is_const_type(MetaType) || std::meta::is_volatile_type(MetaType))
+		{
+			return false;
+		}
+		else
+		{
+			// Asked before the traits are ever named, since deducing MakeFacets' return type instantiates its
+			// body, and a body built for a cv type is exactly what must not be instantiated.
+			using T = [:MetaType:];
+			return requires { TypeInfoTraits<T>::MakeFacets(); };
+		}
+	}
+
+	template <std::meta::info MetaType>
 	consteval bool ProvidesSupersedingFacet()
 	{
 		// The builder-side rule that stops recursive reflection at protocol boundaries: a type whose facets
 		// supersede gets empty field and function spans, so reflecting std::vector<T> emits its TypeInfo, its
 		// facet, and recursion into T, nothing else. No facet kind is named here.
-		using T = [:MetaType:];
-		if constexpr (requires { TypeInfoTraits<T>::MakeFacets(); })
+		if constexpr (ProvidesFacets<MetaType>())
 		{
+			using T = [:MetaType:];
 			return AnyFacetSupersedes(TypeInfoTraits<T>::MakeFacets());
 		}
 		else
@@ -90,9 +107,9 @@ namespace PgE::detail
 	template <std::meta::info MetaType>
 	consteval auto MakeFacetsFromType()
 	{
-		using T = [:MetaType:];
-		if constexpr (requires { TypeInfoTraits<T>::MakeFacets(); })
+		if constexpr (ProvidesFacets<MetaType>())
 		{
+			using T = [:MetaType:];
 			constexpr auto count = std::tuple_size_v<decltype(TypeInfoTraits<T>::MakeFacets())>;
 			return MakeFacetEntryArray<MetaType>(std::make_index_sequence<count>{});
 		}

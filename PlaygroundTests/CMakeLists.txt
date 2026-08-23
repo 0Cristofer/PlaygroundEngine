@@ -81,6 +81,7 @@ target_sources(
 		src/ContractsTests.cpp
 		src/ContractSeam.cpp
 		src/RuntimeContractTests.cpp
+		src/EcsTests.cpp
 		src/VerifyTests.cpp
 		src/Scratch.cpp
 	PUBLIC

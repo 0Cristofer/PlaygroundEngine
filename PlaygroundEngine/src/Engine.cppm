@@ -1,7 +1,5 @@
 export module PlaygroundEngine;
 
-export import PlaygroundEngine.World;
-export import PlaygroundEngine.GameObject;
 export import PlaygroundEngine.WindowServer;
 
 import PlaygroundEngine.AgentChannel;
@@ -11,6 +9,7 @@ import PlaygroundEngine.FrameCapture;
 import PlaygroundEngine.Renderer.Vulkan;
 
 import std;
+import PlaygroundEngine.Ecs;
 
 namespace PgE
 {
@@ -65,14 +64,14 @@ namespace PgE
 		explicit Engine(AppDescriptorBase& appDescriptor);
 
 		[[nodiscard]] std::expected<void, BootError> Boot() pre(_app == nullptr);
-		void StartRun() pre(_app != nullptr && _world != nullptr);
+		void StartRun() pre(_app != nullptr && _ecs != nullptr);
 		void Shutdown();
 
 		void RequestStop();
 
 	private:
 		void Run();
-		std::expected<void, RendererError<RendererRenderErrorKind>> RunStep() pre(_world != nullptr);
+		std::expected<void, RendererError<RendererRenderErrorKind>> RunStep() pre(_ecs != nullptr);
 
 		void LogPlatformEvents() const;
 
@@ -97,7 +96,7 @@ namespace PgE
 
 		std::unique_ptr<DebugUi> _debugUi;
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
-		std::unique_ptr<World> _world;
+		std::unique_ptr<Ecs> _ecs;
 		std::unique_ptr<AppBase> _app;
 	};
 }

@@ -37,8 +37,12 @@ namespace PgE
 		}
 	}
 
+	// Matched on the unqualified enum type only. A trait-constrained specialization, unlike the pattern-matched
+	// ones, would otherwise also claim const E, whose facet the builder suppresses: the traits would then read a
+	// facet that is not there. A cv node renders through the defaults instead.
+
 	template <typename T>
-	requires std::is_enum_v<T>
+	requires(std::is_enum_v<T> && std::same_as<T, std::remove_cv_t<T>>)
 	struct TypeInfoTraits<T> : TypeInfoTraitsDefaults
 	{
 		static std::string Stringify(const T value)
