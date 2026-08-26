@@ -536,6 +536,11 @@ no facet kind:
 - **Facet-authoring toolkit:** `TypeMetaOf`, `TypeReferenceTo`, `IdentifierOf`, and `DisplayStringOf` are
   exported from `:MetaCommon` because a facet binding lives in its own module (Builtins, or a user's) and
   reaches back for them across the module boundary, where only exported names are visible.
+- **Traits must be visible wherever the type is reflected.** The specializations are found at `MakeType`'s
+  instantiation site, so a translation unit that sees the type but not its `TypeInfoTraits` builds a
+  *different* `TypeInfo` for it, with no diagnostic. A binding therefore ships with the type's own module
+  (or an umbrella every reflector imports), which limits how far downstream a traits specialization can
+  usefully live. Genuinely cross-layer metadata belongs in the runtime registry instead.
 
 ## Rendering
 

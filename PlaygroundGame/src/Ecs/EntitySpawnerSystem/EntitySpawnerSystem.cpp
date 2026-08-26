@@ -24,11 +24,11 @@ namespace PgG
 		}
 		if (inputState->WasPressedThisFrame(PgE::InputCode::KeyL))
 		{
-			DestroyFirstNamedEntity();
+			DestroyFirstSpawnedEntity();
 		}
 		if (inputState->WasPressedThisFrame(PgE::InputCode::KeyM))
 		{
-			DestroyFirstEntityName();
+			DestroyFirstSpawnedEntityName();
 		}
 	}
 
@@ -39,30 +39,42 @@ namespace PgG
 		const std::shared_ptr<EntityNameComponent> name = AddComponentToEntity<EntityNameComponent>(entity);
 		name->Name = std::format("PlaygroundGame {}", ++_spawnCount);
 
-		AddComponentToEntity<PgE::PositionComponent>(entity);
+		AddComponentToEntity<PgE::TransformComponent>(entity);
+
+		_spawnedEntities.push_back(entity);
 	}
 
-	void EntitySpawnerSystem::DestroyFirstNamedEntity()
+	// A spawned entity may already be gone (destroyed from elsewhere, or by a previous press), so the
+	// forgotten ones are dropped until a live one turns up.
+	PgE::Entity EntitySpawnerSystem::TakeFirstSpawnedEntity()
 	{
-		const std::vector<std::pair<PgE::Entity, std::shared_ptr<EntityNameComponent>>> named = GetComponentsWithEntities<EntityNameComponent>();
-		if (named.empty())
+		while (!_spawnedEntities.empty())
 		{
-			return;
+			const PgE::Entity entity = _spawnedEntities.front();
+			_spawnedEntities.erase(_spawnedEntities.begin());
+
+			if (IsEntityAlive(entity))
+			{
+				return entity;
+			}
 		}
 
-		const auto& [entity, name] = named.front();
-		DestroyEntity(entity);
+		return PgE::Entity{};
 	}
 
-	void EntitySpawnerSystem::DestroyFirstEntityName() const
+	void EntitySpawnerSystem::DestroyFirstSpawnedEntity()
 	{
-		const std::vector<std::pair<PgE::Entity, std::shared_ptr<EntityNameComponent>>> named = GetComponentsWithEntities<EntityNameComponent>();
-		if (named.empty())
+		if (const PgE::Entity entity = TakeFirstSpawnedEntity(); entity.Id != PgE::Entity::InvalidId)
 		{
-			return;
+			DestroyEntity(entity);
 		}
+	}
 
-		const auto& [entity, name] = named.front();
-		DestroyComponent<EntityNameComponent>(entity);
+	void EntitySpawnerSystem::DestroyFirstSpawnedEntityName()
+	{
+		if (const PgE::Entity entity = TakeFirstSpawnedEntity(); entity.Id != PgE::Entity::InvalidId)
+		{
+			DestroyComponent<EntityNameComponent>(entity);
+		}
 	}
 }

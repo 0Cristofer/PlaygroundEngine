@@ -234,9 +234,7 @@ still validated with a throwaway compile before it is relied on, per the working
   (`PlaygroundEngine/src/Reflection/Core/TypedRef.cppm`, `Core/FieldInfo.cppm`), where a wrong `Type`
   or `Data` assumption is silent undefined behavior today, and `Engine::Run` boot ordering. The durable
   `assert` sites migrate to contracts: `Engine.cpp:64` and the reflection facet op-table invariants
-  (`Builtins/StringFacet.cppm:32`, `Builtins/SequenceFacet.cppm:49/57/63`). Leave `GameObject.cppm`'s asserts alone:
-  that model is a placeholder slated for deletion ([CoreConventions.md](CoreConventions.md), Object
-  Model), so migrating them is churn on code that is going away.
+  (`Builtins/StringFacet.cppm:32`, `Builtins/SequenceFacet.cppm:49/57/63`).
 - **Where they must not go.** The `std::expected` / validation surface (`FieldInfo`'s `FieldError`).
   A dynamic type mismatch during generic reflected access is an expected runtime condition the caller
   handles, not a programmer error.
@@ -320,16 +318,55 @@ the clang-format stage for C++. Its opinionated `if(...)` (no space) becomes the
 same kind of uniformity call as the clang-format choices above; the unknown-command warning for
 doctest's `doctest_discover_tests` helper is informational and does not fail the stage.
 
+### Comments
+
+The 3-line cap below limits the *size* of a comment, not its *count* or its *shape*, and size was never
+the real failure. What actually accumulates is rationale: the counterfactual ("this is X, not Y, so
+..."), the alternative not taken, the narration of what the code already says. Those pass a length cap
+one at a time and still bury the file. So the comment rules in [CLAUDE.md](../CLAUDE.md) are written as
+an admission test with a falsifiable answer rather than as an appeal to judgment, because "comment only
+where the logic is genuinely complex" is a judgment every author makes in their own favour.
+
+**The admission test.** A comment earns its place only if deleting it would let a future editor make a
+silently wrong change. If deleting it merely loses *why we chose this*, that is design rationale and it
+belongs in a `docs/` document or in the commit message; if it is aimed at a reviewer, it belongs in the
+pull request. Giving that material a real home is the point, since it is written into source files
+mostly for want of anywhere else to put it.
+
+**The ladder.** A comment is the last resort, not the first: a better name, an extracted function or
+intermediate local, a named constant, a `pre`/`post` contract, a test that pins the behavior, and only
+then a comment. The test rung carries most of the weight in practice. A claim about behavior ("the
+basis is right-handed", "`atan2` of a negated zero is negative zero") is enforced by a test that fails
+when the claim stops holding, and merely asserted by a comment that does not.
+
+**Shape.** One sentence, terse, present tense, third person, stating a fact about the world that the
+code cannot state itself. Anything needing a second sentence is a `docs/` entry whose inline form is a
+pointer to it. Excluded: commented-out code, banner and divider comments (which compensate for a file
+that wants splitting), and any marker taxonomy beyond a one-line imperative `TODO`. Tests carry their
+claim in the test name and comment nothing. The single exception to "no history in source" is a
+toolchain workaround, which *must* name the tool, the version, and the symptom, because on a GCC trunk
+snapshot that is the only thing that tells a later reader whether the workaround can go.
+
+These are prose rules, deliberately not mechanized. The tempting regexes (contrast markers such as
+"rather than", counterfactual "would", a comment-density cap on the diff) all fire on legitimate
+comments too, and a lint rule that cries wolf trains authors to reach for the suppression comment. The
+enforcement here is review plus the agent instructions in [CLAUDE.md](../CLAUDE.md), with the mechanical
+cap below as the only automated part.
+
 ### Comment length [built]
 
 No comment is longer than **3 lines**. Anything that needs more explanation belongs in a `docs/`
-document, not inline. This reinforces the existing minimal-comments stance (comments only where logic
-is genuinely complex) and is enforced by `scripts/lint.sh`. Enforcing it across the existing tree
+document, not inline. This reinforces the minimal-comments stance above and is enforced by
+`scripts/lint.sh`. Enforcing it across the existing tree
 surfaced the knowledge-dense reflection comments; rather than delete them, the load-bearing material
 (the `TypeMetaOf` recursion knot, lazy `TypeReference`, the GCC-16 mangling-collision workaround, the
 validated `std::meta` patterns) was migrated to [ReflectionInternals.md](ReflectionInternals.md), and
 the inline comments now point there. Migrating outsized comments to a doc, not condensing away the
 reasoning, is the intended response when this cap bites.
+
+Existing code predating these rules is grandfathered, the same way the lint gate grandfathers it by
+linting only changed files: comments are brought into line when their code is next touched, not in a
+tree-wide sweep that would churn every file at once.
 
 ### Documentation
 
@@ -424,7 +461,7 @@ contract-mode-matrix and benchmark stages are not built (they need presets and s
 runs green: build clean, format clean, lint clean, shellcheck clean, 84/84 tests, matrix
 (Debug/RelWithDebInfo/Release) clean, 84/84 again under ASan+UBSan with zero sanitizer diagnostics, and
 a coverage report (currently line 21% of first-party source, honestly low: the reflection-focused suite
-does not exercise the windowing or GameObject-skeleton code).
+does not exercise the windowing or rendering code).
 
 **Local equals cloud.** The stage contract is defined once and run locally now. A future
 `.github/workflows/ci.yml` is a thin wrapper that calls the same stages, and an optional `Dockerfile`

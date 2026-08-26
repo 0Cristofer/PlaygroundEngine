@@ -68,6 +68,7 @@ target_sources(
 		src/DebugPanelDrawerTests.cpp
 		src/Reflection/ReflectionFacetTests.cpp
 		src/Reflection/ReflectionNamespaceTests.cpp
+		src/MathTests.cpp
 		src/LogTests.cpp
 		src/PlatformEventsTests.cpp
 		src/DebugUiInputTests.cpp

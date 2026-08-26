@@ -3,6 +3,7 @@
 import std;
 import imgui;
 import PlaygroundEngine.DebugUi;
+import PlaygroundEngine.Math;
 import PlaygroundEngine.Reflection;
 
 namespace
@@ -86,6 +87,63 @@ namespace
 		[[= PgE::DrawDebug{}]] Titled Heading;
 		[[maybe_unused]] int Unannotated = 5;
 	};
+
+	// The math types are drawn by dedicated rows rather than by the structural walk, so they are exercised
+	// through a type of their own: a field of one is intercepted before the walker ever sees its members.
+	struct Placement
+	{
+		[[= PgE::DrawDebug{}]] PgE::Vector3 Position{.X = 1.0f, .Y = 2.0f, .Z = 3.0f};
+		[[= PgE::DrawDebug{}]] PgE::Vector4 Tint = PgE::Vector4::One;
+		[[= PgE::DrawDebug{}]] PgE::Quaternion Rotation = PgE::Quaternion::FromEulerAngles({.Pitch = 0.5f, .Yaw = -1.2f, .Roll = 0.25f});
+		[[= PgE::DrawDebug{}]] PgE::Transform Pose;
+	};
+}
+
+TEST_CASE("the math rows draw without disturbing their values")
+{
+	const ImGuiFrameFixture frame;
+
+	Placement placement;
+	const PgE::Quaternion authored = placement.Rotation;
+
+	PgE::DebugPanelDrawer::Draw(placement);
+
+	CHECK(placement.Position == PgE::Vector3{.X = 1.0f, .Y = 2.0f, .Z = 3.0f});
+	CHECK(placement.Tint == PgE::Vector4::One);
+	CHECK(placement.Pose.Position == PgE::Vector3::Zero);
+	CHECK(placement.Pose.Scale == PgE::Vector3::One);
+
+	// The rotation row decomposes to Euler on read and recomposes on write, so an untouched row must not
+	// write at all: a round trip through the conversion would drift the quaternion every frame it is open.
+	CHECK(placement.Rotation == authored);
+}
+
+TEST_CASE("the rotation row survives repeated draws of a gimbal-locked rotation")
+{
+	const ImGuiFrameFixture frame;
+
+	// Straight up is where yaw and roll collapse and the extraction takes its degenerate branch, which is
+	// the case most likely to write something back or produce a NaN.
+	Placement placement;
+	placement.Rotation = PgE::Quaternion::FromEulerAngles({.Pitch = std::numbers::pi_v<float> / 2.0f, .Yaw = 0.75f});
+
+	const PgE::Quaternion authored = placement.Rotation;
+
+	PgE::DebugPanelDrawer::Draw(placement);
+	PgE::DebugPanelDrawer::Draw(placement);
+
+	CHECK(placement.Rotation == authored);
+}
+
+TEST_CASE("a const math field draws read-only")
+{
+	const ImGuiFrameFixture frame;
+
+	const Placement placement;
+
+	PgE::DebugPanelDrawer::Draw(placement);
+
+	CHECK(placement.Position.X == 1.0f);
 }
 
 TEST_CASE("the panel drawer walks every supported field kind")

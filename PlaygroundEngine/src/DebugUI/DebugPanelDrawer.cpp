@@ -4,6 +4,7 @@ import :DebugPanelDrawer;
 
 import imgui;
 
+import PlaygroundEngine.Math;
 import PlaygroundEngine.Reflection;
 
 import std;
@@ -11,6 +12,7 @@ import std;
 namespace
 {
 	constexpr float DragSpeed = 0.01f;
+	constexpr float DegreeDragSpeed = 0.5f;
 
 	// The name column starts narrower than the value column, and stays draggable from there.
 	constexpr float NameColumnWeight = 0.35f;
@@ -300,9 +302,153 @@ namespace
 		}
 	}
 
+	constexpr const char* AxisNames[] = {"X", "Y", "Z", "W"};
+
+	struct ComponentRow
+	{
+		bool Edited = false;
+		bool Active = false;
+	};
+
+	// One row of named components, "X [1.0] Y [2.0] Z [3.0]". ImGui has no widget for it, so the value
+	// column is shared out by hand: the labels take what they need and the drag fields split the rest.
+	ComponentRow DrawComponentRow(float* components, const int count, const float dragSpeed, const char* format)
+	{
+		const ImGuiStyle& style = ImGui::GetStyle();
+
+		float labelsWidth = 0.0f;
+		for (int index = 0; index < count; ++index)
+		{
+			labelsWidth += ImGui::CalcTextSize(AxisNames[index]).x;
+		}
+
+		const float spacing = static_cast<float>(count) * style.ItemInnerSpacing.x + static_cast<float>(count - 1) * style.ItemSpacing.x;
+		const float fieldWidth = std::max((ImGui::GetContentRegionAvail().x - labelsWidth - spacing) / static_cast<float>(count), 1.0f);
+
+		ComponentRow row;
+		for (int index = 0; index < count; ++index)
+		{
+			ImGui::PushID(index);
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(AxisNames[index]);
+			ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+			ImGui::SetNextItemWidth(fieldWidth);
+			if (ImGui::DragFloat("##value", &components[index], dragSpeed, 0.0f, 0.0f, format))
+			{
+				row.Edited = true;
+			}
+			if (ImGui::IsItemActive())
+			{
+				row.Active = true;
+			}
+
+			ImGui::PopID();
+
+			if (index + 1 < count)
+			{
+				ImGui::SameLine(0.0f, style.ItemSpacing.x);
+			}
+		}
+
+		return row;
+	}
+
+	// A vector is one row of components, not a subtree: three collapsed nodes each hiding a float is how no
+	// engine presents a position. The components are contiguous floats, so the widgets edit them in place.
+	template <typename Vector, int ComponentCount>
+	bool TryDrawVector(const char* label, const PgE::TypedRef& ref)
+	{
+		static_assert(sizeof(Vector) == ComponentCount * sizeof(float));
+
+		if (ref.Type != &PgE::TypeMetaOf<Vector>())
+		{
+			return false;
+		}
+
+		BeginLeafRow(label);
+		ImGui::BeginDisabled(ref.IsConst);
+		DrawComponentRow(static_cast<float*>(ref.Data), ComponentCount, DragSpeed, "%.3f");
+		ImGui::EndDisabled();
+		EndLeafRow();
+
+		return true;
+	}
+
+	// The row edits the rotation as degrees, ordered by axis so the boxes line up with the position and
+	// scale rows. The triple is held while a field is active because the conversion back is not unique;
+	// only the read is suppressed, never the write. See docs/CoreConventions.md (Transform).
+	bool TryDrawQuaternion(const char* label, const PgE::TypedRef& ref)
+	{
+		if (ref.Type != &PgE::TypeMetaOf<PgE::Quaternion>())
+		{
+			return false;
+		}
+
+		BeginLeafRow(label);
+
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID editingKey = ImGui::GetID("EulerEditing");
+		const ImGuiID xKey = ImGui::GetID("EulerX");
+		const ImGuiID yKey = ImGui::GetID("EulerY");
+		const ImGuiID zKey = ImGui::GetID("EulerZ");
+
+		const PgE::Quaternion& rotation = *static_cast<const PgE::Quaternion*>(ref.Data);
+
+		float degrees[3];
+		if (storage->GetBool(editingKey))
+		{
+			degrees[0] = storage->GetFloat(xKey);
+			degrees[1] = storage->GetFloat(yKey);
+			degrees[2] = storage->GetFloat(zKey);
+		}
+		else
+		{
+			const PgE::EulerAngles angles = rotation.ToEulerAngles();
+			degrees[0] = PgE::ToDegrees(angles.Pitch);
+			degrees[1] = PgE::ToDegrees(angles.Roll);
+			degrees[2] = PgE::ToDegrees(angles.Yaw);
+
+			// atan2 over a negated zero yields -0.0, which an unrotated object would display as "-0.0" and read
+			// as a bug. Adding zero is the one operation that turns it back into +0.0.
+			for (float& angle : degrees)
+			{
+				angle += 0.0f;
+			}
+		}
+
+		ImGui::BeginDisabled(ref.IsConst);
+		const ComponentRow row = DrawComponentRow(degrees, 3, DegreeDragSpeed, "%.1f");
+		ImGui::EndDisabled();
+
+		storage->SetBool(editingKey, row.Active);
+		if (row.Active)
+		{
+			storage->SetFloat(xKey, degrees[0]);
+			storage->SetFloat(yKey, degrees[1]);
+			storage->SetFloat(zKey, degrees[2]);
+		}
+
+		if (row.Edited && !ref.IsConst)
+		{
+			*static_cast<PgE::Quaternion*>(ref.Data) = PgE::Quaternion::FromEulerAngles(
+				PgE::EulerAngles{.Pitch = PgE::ToRadians(degrees[0]), .Yaw = PgE::ToRadians(degrees[2]), .Roll = PgE::ToRadians(degrees[1])});
+		}
+
+		EndLeafRow();
+
+		return true;
+	}
+
 	void DrawValue(const char* label, const PgE::TypedRef& ref)
 	{
 		if (DrawablePrimitives::TryDraw(label, ref))
+		{
+			return;
+		}
+
+		if (TryDrawQuaternion(label, ref) || TryDrawVector<PgE::Vector3, 3>(label, ref) || TryDrawVector<PgE::Vector4, 4>(label, ref))
 		{
 			return;
 		}

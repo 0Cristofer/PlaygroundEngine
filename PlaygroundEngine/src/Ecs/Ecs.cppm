@@ -3,7 +3,7 @@ export module PlaygroundEngine.Ecs;
 export import :System;
 export import PlaygroundEngine.Ecs.Component;
 export import PlaygroundEngine.Ecs.Entity;
-export import PlaygroundEngine.Ecs.PositionComponent;
+export import PlaygroundEngine.Ecs.TransformComponent;
 
 import PlaygroundEngine.Reflection.Core;
 import std;

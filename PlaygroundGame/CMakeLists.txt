@@ -50,6 +50,7 @@ target_sources(
 	PRIVATE
 		src/App.cpp
 		src/Ecs/EntitySpawnerSystem/EntitySpawnerSystem.cpp
+		src/Ecs/MovementSystem/MovementSystem.cpp
 		src/PlaygroundGame.cpp
 	PUBLIC
 		FILE_SET CXX_MODULES
@@ -59,6 +60,8 @@ target_sources(
 				src/App.cppm
 				src/Ecs/EntityNameComponent.cppm
 				src/Ecs/EntitySpawnerSystem/EntitySpawnerSystem.cppm
+				src/Ecs/MovementSystem/MovementSystem.cppm
+				src/Ecs/PlayerControlledComponent.cppm
 	PUBLIC
 		FILE_SET HEADERS
 			BASE_DIRS

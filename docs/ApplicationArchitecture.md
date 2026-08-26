@@ -31,11 +31,11 @@ Current and near-future modules, provisional except where a placement is called 
 
 - **L4:** `PlaygroundGame`.
 - **L3:** `PlaygroundEngine` umbrella (`Engine`, `AppDescriptorBase`, `CommandLine`, `main.cpp`), `PlaygroundEngine.App`. The umbrella currently mixes the root with convenience re-exports of L2; whether the root splits into its own module is an open cleanup.
-- **L2:** `.World` (placeholder; the ECS `World` replacing it stays L2), `.GameObject` and `.Components` (placeholder, do not build on). Future: InputSystem, Renderer with Viewport and RenderTarget, AssetSystem core, Networking, Audio.
+- **L2:** `.Ecs` (umbrella over `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem`, `.Renderer.Vulkan`, `.DebugUi`. Future: Viewport and RenderTarget on the renderer, AssetSystem core, Networking, Audio.
 - **L1:** `.Window` (`:common` contracts, CMake-selected per-platform `:backend`; the template for all L1 seams). Future: the platform event pump, file I/O, time, file watching.
-- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers). Future: input event and command POD contracts, ECS storage primitives, handles, error enums, math.
+- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers), `.Math` (`:Types`, `:Transform`), `.DebugUi.Annotations` (the `DrawDebug` tag alone, dependency-free so a type in any band can be annotated without reaching the debug UI). Future: input event and command POD contracts, ECS storage primitives, handles, error enums.
 
-Placement calls already settled: the asset system splits (runtime core at L2, file I/O and watching at L1, hot reload wired at L3, the import pipeline is editor tooling outside the runtime cake); ECS storage primitives (chunk storage, entity allocator, handle types) are L0 containers usable without a `World`, while the `World` itself is the L2 system.
+Placement calls already settled: the asset system splits (runtime core at L2, file I/O and watching at L1, hot reload wired at L3, the import pipeline is editor tooling outside the runtime cake); ECS storage primitives (chunk storage, entity allocator, handle types) are L0 containers usable without an `Ecs`, while the `Ecs` itself is the L2 system.
 
 ## What is settled, what is not
 

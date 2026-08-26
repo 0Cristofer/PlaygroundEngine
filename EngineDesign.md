@@ -47,8 +47,8 @@ These are the five pillars the engine needs to have working together, in their s
 ### 1. Application Lifecycle `in design`
 Window creation, input handling, the main loop, platform abstraction. The entry point pattern is in place, the engine owns `main()` and the game supplies a descriptor. The framework design (composition root, capability model, layer bands, frame loop, editor and play model, distribution) is settled at the general level in [docs/ApplicationArchitecture.md](docs/ApplicationArchitecture.md).
 
-### 2. Realtime Simulation `planned`
-The world, entities, components, and the update loop. The decided direction is a full ECS, entities as generational handles, components as value types ([docs/CoreConventions.md](docs/CoreConventions.md)); the existing skeleton (World, GameObject, ComponentBase) is a placeholder that will be replaced. The design needs to account for networking from the start, replication, authority, and determinism influence the structure, not just the API surface.
+### 2. Realtime Simulation `in progress`
+The world, entities, components, and the update loop. The decided direction is a full ECS, entities as generational handles, components as value types ([docs/CoreConventions.md](docs/CoreConventions.md)); a first ECS iteration is in place, with pooled contiguous storage and generational handles still ahead of it. The design needs to account for networking from the start, replication, authority, and determinism influence the structure, not just the API surface.
 
 ### 3. Asset Authoring Tool `planned`
 An editor for creating, importing, and configuring assets. Depends on the reflection and serialization system, asset data is reflected C++ structs, and the editor reads and writes serialized state directly.
@@ -104,9 +104,9 @@ main()
 
 This inversion means the engine controls initialization order, platform setup, and teardown. The game plugs into well-defined lifecycle hooks.
 
-### Entity / Component Model (placeholder, ECS planned)
+### Entity / Component Model (first ECS iteration)
 
-The current skeleton (`World` owns `GameObject`s, `GameObject` owns `ComponentBase`s keyed by type) is a sketch and will be **replaced, not evolved**. The decided direction is a full ECS: entities as generational handles, components as concrete value types in contiguous per-type storage, behavior expressed by composition. An optional thin facade may later present a simpler object-style API for small games; it owns no state, so engine systems see only ECS state.
+`Ecs` owns systems and components; an entity is a value handle used as a key. The decided direction it is converging on is a full ECS: entities as generational handles, components as concrete value types in contiguous per-type storage, behavior expressed by composition. Pools, generational handles, system phases, and a command buffer are deliberately absent from the first iteration. An optional thin facade may later present a simpler object-style API for small games; it owns no state, so engine systems see only ECS state.
 
 Object model, handle, and memory conventions are recorded in [docs/CoreConventions.md](docs/CoreConventions.md).
 
@@ -129,7 +129,7 @@ The reflection system finds these annotations at compile time. On platforms with
 
 ### Module Layout (engine)
 
-`PlaygroundEngine` is the umbrella module, re-exporting `.World`, `.GameObject`, `.Components`. Game code imports `PlaygroundEngine` for the engine surface and `PlaygroundEngine.App` for the application base classes.
+`PlaygroundEngine` is the umbrella module, re-exporting `.WindowServer`; everything else it imports without re-exporting, so a game imports what it uses by name. Game code imports `PlaygroundEngine` for the engine surface and `PlaygroundEngine.App` for the application base classes.
 
 ### Logging
 

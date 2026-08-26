@@ -27,6 +27,8 @@ namespace PgG
 		void OnStep(const PgE::PlatformEventRecord& platformEventRecord) override;
 
 	private:
+		static void SpawnPlayer(PgE::Ecs& ecs);
+
 		PgE::InputSystem* _inputSystem = nullptr;
 	};
 }
