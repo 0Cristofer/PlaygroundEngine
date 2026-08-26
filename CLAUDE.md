@@ -68,7 +68,14 @@ Do not run the heavy path on light work.
 - Blank lines separate distinct logic blocks.
 - Functions are clear in intent and do one job; split when doing too much (`OnClick()` calls `Purchase()`; it is not itself the purchase).
 - Class interfaces read like documentation; keep them clean, and if internals must surface, organize them clearly.
-- Comments only where logic is genuinely complex or assumes low-level knowledge; code should be self-documenting. Put comments inside their block, never floating above it where they would read as API docs (real API docs come later, once the surface stabilizes).
+- **Comments: the default is none.** Before writing one, walk the ladder: a better name, an extracted function or intermediate local, a named constant, a `pre`/`post` contract, a test that pins the behavior. The comment is the last rung, taken only when no other rung can carry it. A test is often the right home for a claim about behavior, because it fails when someone breaks the claim and a comment does not.
+- A comment earns its place only if deleting it would let a future editor make a *silently wrong* change. If deleting it only loses "why we chose this", that is design rationale: it belongs in `docs/` or the commit message. Rationale meant for a reviewer goes in the pull request or in your response, never in the file.
+- Write the constraint, not the deliberation. The alternative not taken is invisible in the code and stays invisible in the comment: no "this is X, not Y, so ...", no "we do A rather than B", no "otherwise it would ...", no restating what the line does, no teaching the domain.
+- One sentence, terse, present tense, third person. No "we", no "you", no "note that", no hedging ("probably", or "for now" without a `TODO`). If it needs a second sentence or a second paragraph, it is a `docs/` entry and the inline form is the pointer to it (`// See docs/ReflectionInternals.md § Facets`).
+- Put comments inside their block, never floating above it where they would read as API docs (real API docs come later, once the surface stabilizes). A comment dies with the code it sits on: editing a block means rereading its comment and deleting it if it is no longer exactly true. A comment that would survive a rewrite of the lines below it was never about those lines.
+- No commented-out code, git holds it. No banner or divider comments (`// ---- Helpers ----`), which compensate for a file or class that should be split. No marker taxonomy: a single imperative one-line `// TODO:`, never `NOTE`, `HACK`, `XXX`, or `FIXME`.
+- Tests comment nothing; the test name carries the claim. If a test needs a comment to say what it checks, rename it or split it.
+- A toolchain workaround is the one comment allowed to record history, and it must: name the tool, the version, and the symptom seen without the workaround, since that is what tells a future reader whether it can go.
 - A `pre`/`post`/`contract_assert` whose predicate does not by itself convey the invariant gets a brief comment saying what it guards or how a caller avoids it. C++26 contracts carry no message (unlike `assert`), so the reasoning the old assert string held must live in a comment, not be lost. Skip it only when the predicate is self-evident.
 
 ## Design rationale notes
@@ -101,6 +108,8 @@ Background for the decisions in `docs/`, useful when evaluating proposals or ext
 - **MSVC cannot currently be used** even though the CMake has Windows presets/flags: the reflection demo needs `-freflection`, which is GCC-only. Treat the Windows preset as aspirational, not working.
 - CMake 4.3+ and Ninja are required. `import std` support is gated behind the experimental `CMAKE_EXPERIMENTAL_CXX_IMPORT_STD` UUID set in the root `CMakeLists.txt`, that UUID is CMake-version-specific and must be updated when bumping CMake.
 - All warnings are errors (`COMPILE_WARNING_AS_ERROR ON`, `-Wall -Wextra -Wpedantic`). `-freflection` is applied globally via `add_compile_options` in the root CMakeLists.
+- **Cross-module inlining needs `inline` and a definition in the `.cppm`.** GCC hands an importer a function body only for an `inline` or `constexpr` function defined in the interface; a plain definition there still costs a call, and one in an implementation unit cannot be inlined at all with LTO disabled. Verify with `nm` on a consumer object file: the symbol should be a weak (`W`) definition, not an undefined reference.
+- **A contract on such a function fails to link.** A `pre`/`post` on an `inline` function in a module interface emits `__tu_has_violation` into every importing TU with no definition (`undefined reference`). Dropping `inline` on that one function fixes the link, and the contract then does fire. So per function it is inlining or a contract, not both.
 
 ## Build & run
 
@@ -156,7 +165,7 @@ A game is created by subclassing `AppDescriptorBase` (factory: `GetApp()`) and `
 ### Module layout
 `PlaygroundEngine` (the primary module interface, defined in `Engine.cppm`) exports `Engine`, `AppDescriptorBase`, `CommandLine`, `AppCapabilities`, `BootError`, and re-exports `.WindowServer`. It *imports* the rest without re-exporting, so a game imports what it uses by name.
 
-Other named modules: `.App` (`AppBase`, `EngineContext`), `.Ecs` (umbrella, re-exports `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.PositionComponent`, and the `:System` partition), `.Ecs.InputSystem` and `.Ecs.InputSystem.InputStateComponent`, `.PlatformEvents`, `.WindowServer`, `.Renderer.Vulkan`, `.DebugUi`, `.Reflection` (umbrella over `.Reflection.Core` and `.Reflection.Builtins`), `.Log`, `.Diagnostics`, `.Files`, `.Paths`, `.Image`, `.Model`, `.FrameCapture`, `.AgentChannel`.
+Other named modules: `.App` (`AppBase`, `EngineContext`), `.Ecs` (umbrella, re-exports `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem` and `.Ecs.InputSystem.InputStateComponent`, `.Math` (umbrella over the `:Types` and `:Transform` partitions), `.PlatformEvents`, `.WindowServer`, `.Renderer.Vulkan`, `.DebugUi` (re-exports `.DebugUi.Annotations`, which carries the `DrawDebug` tag with no dependencies so any band can annotate), `.Reflection` (umbrella over `.Reflection.Core` and `.Reflection.Builtins`), `.Log`, `.Diagnostics`, `.Files`, `.Paths`, `.Image`, `.Model`, `.FrameCapture`, `.AgentChannel`.
 
 ### Entity/component model
 The GameObject/World skeleton is gone; `PlaygroundEngine/src/Ecs/` is the simulation model.

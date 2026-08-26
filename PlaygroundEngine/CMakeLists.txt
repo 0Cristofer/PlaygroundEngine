@@ -506,14 +506,18 @@ target_sources(
 				src/FrameCapture.cppm
 				src/DebugUI/DebugUI.cppm
 				src/DebugUI/DebugPanelDrawer.cppm
+				src/DebugUI/DrawDebugAnnotation.cppm
 				src/Ecs/Ecs.cppm
 				src/Ecs/Entity.cppm
 				src/Ecs/Component.cppm
-				src/Ecs/PositionComponent.cppm
+				src/Ecs/TransformComponent.cppm
 				src/Ecs/System.cppm
 				src/Ecs/EntityDebugPanelSystem/EntityDebugPanelSystem.cppm
 				src/Ecs/InputSystem/InputSystem.cppm
 				src/Ecs/InputSystem/InputStateComponent.cppm
+				src/Math/Math.cppm
+				src/Math/Types.cppm
+				src/Math/Transform.cppm
 				src/Image/Image.cppm
 				src/Model/Model.cppm
 				src/PlatformEvents/PlatformEvents.cppm

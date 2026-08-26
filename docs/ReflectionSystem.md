@@ -93,7 +93,7 @@ The operations are everything that can be done to a type or an instance of it:
 
 **Not being implemented now.** The erased ops are being built incrementally on the existing metadata objects (`TypeInfo`, `FieldInfo`, `FuncInfo`), not as the unified op-table abstraction. Consolidating them into a first-class per-type table, with the provider indirection and a uniform erased-reference type, is deferred. Each reason is a missing input to that convergence point:
 - **Stable member identity.** A type-level `getField(obj, id)` / `invoke(obj, id, ...)` addresses members by stable id; that scheme is the highest-priority open question below and is not yet fixed.
-- **Storage model.** `construct`'s signature (return-by-value vs. placement into chunk storage) depends on the ECS layout, which does not exist yet (the GameObject model is a placeholder).
+- **Storage model.** `construct`'s signature (return-by-value vs. placement into chunk storage) depends on the ECS chunk layout, which does not exist yet (the first iteration holds components behind `shared_ptr` in map indexes).
 - **Provider seam.** Only the native provider exists; designing the multi-provider indirection against a single provider risks fixing the wrong seam.
 
 A convergence point is designed after the things converging into it. The op-table becomes a dedicated design pass once the stable-id scheme exists, or when the second provider or the ECS storage model forces its shape.
@@ -152,6 +152,17 @@ Overload disambiguation and cross-build function identity are deferred to the st
 | Unified type identity with the ECS component registry | Simulation, serialization, replication |
 
 ## Open Questions
+
+- **Per-type customization, one mechanism or four.** Every erased consumer (debug panel, serializer,
+  replicator, C# generator) eventually wants per-type behavior for the same types: a quaternion edited as
+  Euler angles, a colour as a swatch, a handle as a picker. Three tiers exist for attaching that, and the
+  selection rule is whether the metadata is a property *of the type* (annotation, or `TypeInfoTraits` for a
+  type you do not own) or of *a consumer's relationship to the type* (the runtime registry, so five
+  consumers' policies do not accrete onto one declaration). Open: whether the registry is drawer-specific
+  or general, whether it is keyed per type or also per field, and how game code registers into it. The
+  trigger to design it is the third custom type, since facet kinds are a closed set but custom types are
+  not. Precedent: Unreal's `IPropertyTypeCustomization`, Unity's `CustomPropertyDrawer`, Godot's
+  `EditorInspectorPlugin`, all of which are runtime-registered because game code must be able to add one.
 
 - **Stable ID scheme**, how type/field IDs are derived (qualified-name hash? annotation override for renames?), how renames migrate, and whether type/field/object/asset identity unify into one scheme. Highest priority: consumed by replication, hot reload, save/load, the C# boundary, and all three runtimes.
   - *Settled within one build:* runtime `TypeInfo` instance identity is canonical per type. `TypeMetaOf` dealiases before caching, so every alias spelling (`std::uint16_t`, `std::underlying_type_t<E>`, `unsigned short`) resolves to one `TypeInfo` and pointer identity equals type identity, which is what annotation matching, serialization, and C# dedup compare on. Open here is only the *cross-build, name-based* ID.

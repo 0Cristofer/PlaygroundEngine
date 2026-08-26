@@ -8,7 +8,7 @@ Engine-wide decisions: object model, memory, native/managed boundary, std usage,
 - **Generational handles are the canonical reference to engine objects** (entities, components, assets), in C++, in C#, on the wire, on disk. A handle is a POD stable ID, validated on dereference: `TryGet(handle)` returns a pointer or null. Handles never own; destruction is deterministic and invalidates all outstanding handles immediately.
   - Backings: **slot + generation** for pooled simulation objects; **ID table** for tree-owned objects (e.g. UI widgets), registered/unregistered by the object's constructor/destructor.
   - A field that references an object it does not own is a handle. The `TryGet` result is a transient borrow, used in scope, never stored.
-- **The simulation is a full ECS**: entities are handles; components are concrete value types in contiguous per-type storage; behavior is composition. The current `World`/`GameObject` skeleton is a placeholder and will be replaced. No runtime polymorphism in component storage; struct inheritance for field reuse is allowed.
+- **The simulation is a full ECS**: entities are handles; components are concrete value types in contiguous per-type storage; behavior is composition. The first ECS iteration is in place; pooled storage, generational handles, and system phases are not built yet. No runtime polymorphism in component storage; struct inheritance for field reuse is allowed.
 - **Not everything is ECS.** Retained object trees with runtime polymorphism are the correct model for some domains (UI is the anticipated case): parent owns children, cross-references are handles.
 - A simple-game **facade** over the ECS may exist later. It owns no state; engine systems see only ECS state.
 - **Reference vocabulary in reflected data:**
@@ -21,6 +21,43 @@ Engine-wide decisions: object model, memory, native/managed boundary, std usage,
   | `Poly<T>` | Owned, polymorphic (boxed) | Type discriminator + fields |
 
   `Poly<T>` captures the concrete type's `TypeInfo` at the point of erasure (templated constructor), no RTTI, no common base class required.
+
+## World Space & Transforms
+
+- **Metric, SI.** 1 unit = 1 meter; seconds, kilograms. Angles are **radians** in code, degrees only at UI and authoring edges.
+- **Positions are `float`.** Roughly 1 mm of precision at 8 km from the origin is the accepted limit. Double precision and origin rebasing for large worlds are deferred, not designed against.
+- **Right-handed, Z up:**
+
+  | Axis | Direction |
+  |---|---|
+  | +X | Right |
+  | +Y | Forward |
+  | +Z | Up |
+
+  The right-hand rule applies twice: fingers along the first axis curled toward the second give the third as the thumb (`cross(X, Y) = Z`), and the thumb along a rotation axis gives the positive angle as the curl. Equivalently, positive rotation carries the next axis into the one after it, cycling X, Y, Z, X.
+- **Rotation names:** yaw about Z (+X toward +Y, so positive yaw turns left when facing +Y), pitch about X (positive is nose up), roll about Y (positive banks right).
+- Chosen over Y-up because the ground plane is XY (navigation, spatial partitioning, terrain, replication interest management), yaw is the rotation that gets replicated, and it matches Blender and the physics literature. Importers convert at the boundary, so the conversion never reaches gameplay code.
+
+### Transform
+
+- **The engine owns its math types** (`Vector2/3/4`, `Quaternion`, `Matrix4x4`, in `PlaygroundEngine.Math`) rather than aliasing a library's. A class template specialization has no reflected identifier, so a field of one reflects nameless and gives serialization and the C# boundary nothing to key on; an alias also cannot carry `Vector3::Up`, cannot be annotated, and does not export its library's operators across a module boundary. A third-party library stays available behind these types for heavy operations (decomposition, slerp, projection).
+- **`Transform` is a decomposed value type, always world space.** `TransformComponent` derives from it, so a system writes `component->Position`; that wrapper is transitional and disappears when components stop needing a polymorphic base, at which point `Transform` is itself the component.
+
+  | Field | Type | Default |
+  |---|---|---|
+  | Position | 3-vector | (0, 0, 0) |
+  | Rotation | quaternion | identity |
+  | Scale | 3-vector | (1, 1, 1) |
+
+- **No scene hierarchy.** Nothing composes transforms, so the parent-scale-times-child-rotation shear case cannot arise and non-uniform scale is safe. Adding a hierarchy means revisiting non-uniform scale first.
+- **Composition order is `M = T * R * S`**: scale in the object's own frame, then rotate, then translate. Any other order scales the translation or stretches along world axes instead of the object's.
+- **Column vectors** (`v' = M * v`), so `A * B` applies B first, and `Matrix4x4` stores four columns with the translation in the last one.
+- **The matrix is derived, never stored.** Building it is on the order of 40 flops, and a cached one would be an invariant, which contradicts components being open data written field-wise by the debug panel, serialization, replication, and the C# bindings. If profiling ever demands caching, the cache belongs in a system-owned per-frame array, not in the component.
+- **The quaternion is the stored truth**; `EulerAngles` (pitch, yaw, roll, in radians) is a display and authoring form only, never a runtime representation. The composition is **yaw about world Z, then pitch about the yawed right axis, then roll about the resulting forward axis**, spelled `Yaw * Pitch * Roll` since the right operand applies first; a different order names a different rotation from the same three numbers, so it is part of the authoring contract.
+- Quaternion to Euler is not unique, so a triple recovered from a rotation need not be the one authored, and at a pitch of +/-90 degrees yaw and roll collapse onto one axis, where the whole turn is reported as yaw with zero roll and pitch is set to exactly vertical. Editing UI therefore holds its own triple while a widget is active and rereads only when it is not; the write is never deferred, so what the rotation drives follows the edit live.
+- Non-uniform scale obliges the renderer to transform normals by the inverse-transpose of the upper 3x3, and will need constraining at the physics boundary, where primitive collision shapes do not scale non-uniformly.
+- Panels present a vector or a rotation as **one row of X/Y/Z components**, not a subtree, and a rotation's boxes are ordered by axis rather than by name so they align with the position and scale rows.
+- **2D uses the same `Transform`**, as a usage convention (a working plane plus an orthographic camera), not a separate type or a parallel node tree. The world stays metric; sprites carry a pixels-per-unit setting at import.
 
 ## Ownership & Memory
 
@@ -76,3 +113,5 @@ Zones split by **"does this native code ship in the console runtime?"**:
 - **Handle granularity**, per-entity only, or per-component too. Belongs to the simulation design.
 - **One handle scheme or siblings**, whether asset GUIDs and entity handles share an identity scheme. Tied to the stable-ID design in [ReflectionSystem.md](ReflectionSystem.md).
 - **C# event subscription lifetime**, needs a focused pass when binding generator work starts.
+- **2D working plane and sort axis**, chosen when the 2D render path exists. Skew stays out until 2D authoring is real.
+- **Drawing foreign types in a debug panel.** A field of a type the engine does not own (a `std::pair`, a third-party struct) cannot carry a `DrawDebug` annotation, and annotations are required at every level, so it renders as nothing. Deferred; see the per-type customization question in [ReflectionSystem.md](ReflectionSystem.md).
