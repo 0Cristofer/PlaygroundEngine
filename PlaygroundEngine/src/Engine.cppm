@@ -7,6 +7,8 @@ import PlaygroundEngine.App;
 import PlaygroundEngine.DebugUi;
 import PlaygroundEngine.FrameCapture;
 import PlaygroundEngine.Renderer.Vulkan;
+import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.RenderExtraction;
 
 import std;
 import PlaygroundEngine.Ecs;
@@ -98,5 +100,7 @@ namespace PgE
 		std::unique_ptr<RendererVulkan> _rendererVulkan;
 		std::unique_ptr<Ecs> _ecs;
 		std::unique_ptr<AppBase> _app;
+
+		ExtractedFrame _extractedFrame;
 	};
 }

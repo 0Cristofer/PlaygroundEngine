@@ -6,6 +6,7 @@ export module PlaygroundEngine.Renderer.Vertex;
 
 import std;
 import vulkan;
+import PlaygroundEngine.Math;
 
 namespace PgE
 {
@@ -30,8 +31,8 @@ namespace PgE
 
 	export struct UniformBufferObject
 	{
-		glm::mat4 Model;
-		glm::mat4 View;
-		glm::mat4 Proj;
+		Matrix4x4 Model;
+		Matrix4x4 WorldToView;
+		Matrix4x4 ViewToClip;
 	};
 }
