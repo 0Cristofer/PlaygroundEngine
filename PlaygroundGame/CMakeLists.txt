@@ -50,6 +50,7 @@ target_sources(
 	PRIVATE
 		src/App.cpp
 		src/Ecs/EntitySpawnerSystem/EntitySpawnerSystem.cpp
+		src/Ecs/CameraControlSystem/CameraControlSystem.cpp
 		src/Ecs/MovementSystem/MovementSystem.cpp
 		src/PlaygroundGame.cpp
 	PUBLIC
@@ -60,6 +61,8 @@ target_sources(
 				src/App.cppm
 				src/Ecs/EntityNameComponent.cppm
 				src/Ecs/EntitySpawnerSystem/EntitySpawnerSystem.cppm
+				src/Ecs/CameraControlSystem/CameraControlSystem.cppm
+				src/Ecs/FreeLookComponent.cppm
 				src/Ecs/MovementSystem/MovementSystem.cppm
 				src/Ecs/PlayerControlledComponent.cppm
 	PUBLIC

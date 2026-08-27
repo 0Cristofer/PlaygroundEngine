@@ -30,10 +30,10 @@ A *system* is a vertical slice spanning bands: for input, contract types at L0, 
 Current and near-future modules, provisional except where a placement is called out as settled:
 
 - **L4:** `PlaygroundGame`.
-- **L3:** `PlaygroundEngine` umbrella (`Engine`, `AppDescriptorBase`, `CommandLine`, `main.cpp`), `PlaygroundEngine.App`. The umbrella currently mixes the root with convenience re-exports of L2; whether the root splits into its own module is an open cleanup.
-- **L2:** `.Ecs` (umbrella over `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem`, `.Renderer.Vulkan`, `.DebugUi`. Future: Viewport and RenderTarget on the renderer, AssetSystem core, Networking, Audio.
+- **L3:** `PlaygroundEngine` umbrella (`Engine`, `AppDescriptorBase`, `CommandLine`, `main.cpp`), `PlaygroundEngine.App`, `.RenderExtraction` (the simulation-to-renderer translation; see Render extraction). The umbrella currently mixes the root with convenience re-exports of L2; whether the root splits into its own module is an open cleanup.
+- **L2:** `.Ecs` (umbrella over `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem`, `.Ecs.CameraComponent`, `.Renderer.Vulkan`, `.DebugUi`. Future: Viewport and RenderTarget on the renderer, AssetSystem core, Networking, Audio.
 - **L1:** `.Window` (`:common` contracts, CMake-selected per-platform `:backend`; the template for all L1 seams). Future: the platform event pump, file I/O, time, file watching.
-- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers), `.Math` (`:Types`, `:Transform`), `.DebugUi.Annotations` (the `DrawDebug` tag alone, dependency-free so a type in any band can be annotated without reaching the debug UI). Future: input event and command POD contracts, ECS storage primitives, handles, error enums.
+- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers), `.Math` (`:Types`, `:Transform`), `.DebugUi.Annotations` (the `DrawDebug` tag alone, dependency-free so a type in any band can be annotated without reaching the debug UI), `.Renderer.View` (the `ExtractedView` contract and the two matrix builders, importing only `.Math`) and `.Renderer.Frame` (the `ExtractedFrame` payload), so the simulation and the renderer meet without either importing the other. Future: input event and command POD contracts, ECS storage primitives, handles, error enums.
 
 Placement calls already settled: the asset system splits (runtime core at L2, file I/O and watching at L1, hot reload wired at L3, the import pipeline is editor tooling outside the runtime cake); ECS storage primitives (chunk storage, entity allocator, handle types) are L0 containers usable without an `Ecs`, while the `Ecs` itself is the L2 system.
 
@@ -53,7 +53,7 @@ Placement calls already settled: the asset system splits (runtime core at L2, fi
 - The source-versus-derived asset split mechanics (import pipeline, derived-data cache).
 - The developer debugging workflow for out-of-process play: a wait-for-debugger spawn option and an editor-attaches-to-running-game mode are the likely baseline, IDE integration the eventual polish; dual-runtime (native plus embedded .NET) debugging is the hard part regardless of process model.
 - Fixed-timestep placement (loop, `World`, or per-system) and render interpolation.
-- Render extraction shape (snapshot versus double-buffered), tied to the multithread-first rule and the future job system.
+- Render extraction *storage*: snapshot versus double-buffered, tied to the multithread-first rule and the future job system. The producer shape is settled (see Render extraction below); what is open is how many frames exist at once and who owns them.
 - Multi-window focus and hit-test routing once more than one window exists.
 - Lifetime scopes (app versus world/match) for C# game services.
 - The project manifest format for the generic host, and C# AOT for consoles.
@@ -67,6 +67,31 @@ When implementing, treat the six decisions above as constraints and everything e
 **Frame-time data flow: data seams plus the explicit loop.** Everything that crosses a system boundary at frame time is a POD or a generational handle, moved through queues or extracted data, never a method call into a peer. This one rule makes seam data serializable, replicable, injectable in tests, and C#-crossable without per-system adapters. The loop pumps the platform, drains input into semantic commands, steps the simulation, and renders; the simulation only ever consumes commands, so it cannot tell local input from replicated input.
 
 **Rare notifications: typed signals.** Resize, device lost, asset reloaded. Signals are owned by the emitting system, carry POD payloads, and are subscribed at wiring time in the composition root (or in the game's one composition function). Subscriptions are RAII objects. Signals fire only from defined drain points in the frame, never from inside OS callbacks. There is no global event bus.
+
+## Render extraction
+
+The one instance of the frame-time data seam that exists today, and the pattern every later one follows:
+
+> **simulation -> extraction -> frame POD -> engine system**
+
+- **Extraction lives at L3**, not in either peer. It is a cross-system edge, and L3 is the only band that
+  sees the whole graph. Putting it in the simulation band would make the ECS the author of render
+  contracts, which does not survive meshes: a draw item is a handle to a renderer-owned resource, so a
+  mesh component would have to learn what a renderer resource is.
+- **It is a pure function of the world.** It reads through the ECS's public query API, writes only L0
+  types, reads no engine state and mutates nothing, so it can move to a job or be double-buffered without
+  touching its callers. No ambient or process-global state: several worlds are live at once as soon as the
+  editor has preview scenes.
+- **It fills caller-owned storage** (`ExtractFrame(const Ecs&, ExtractedFrame&)`) rather than returning
+  a value, because the growing parts of a frame must not reallocate every step.
+- **The consuming system takes the frame as a parameter.** It never calls back into the simulation.
+- **Growth is ordered calls, not a registration list.** When extraction splits into view-independent and
+  per-view halves, the L3 function calls them in written order, the same rule as the frame loop.
+
+Two boundaries this pattern deliberately keeps apart. **Resource registration is not extraction:** getting
+a mesh onto the GPU and back as a handle happens on load, and per-frame extraction only ships handles and
+transforms. And **which camera a viewport renders through belongs to the viewport**, not to a flag on the
+camera, because it is per-viewer state that must not replicate.
 
 ## Capabilities and targets
 

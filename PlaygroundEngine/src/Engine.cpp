@@ -186,8 +186,12 @@ namespace PgE
 
 		if (_rendererVulkan && _window)
 		{
+			// After the simulation step and the debug panel, so an edit this frame is seen this frame.
+
+			ExtractFrame(*_ecs, _extractedFrame);
+
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =
-					_rendererVulkan->DrawFrame(_platformEvents, _window->GetFramebufferSize(), deltaTimeSeconds, debugUiDrawData);
+					_rendererVulkan->DrawFrame(_extractedFrame, _window->GetFramebufferSize(), debugUiDrawData);
 				!drawResult)
 			{
 				return drawResult;

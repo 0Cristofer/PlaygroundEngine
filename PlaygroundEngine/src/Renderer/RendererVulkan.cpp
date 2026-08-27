@@ -6,8 +6,6 @@
 #if defined(PGE_DEV)
 #include <imgui_impl_vulkan.h>
 #endif
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 module PlaygroundEngine.Renderer.Vulkan;
 
@@ -18,7 +16,10 @@ import PlaygroundEngine.Files;
 import PlaygroundEngine.Image;
 import PlaygroundEngine.Log;
 import PlaygroundEngine.Model;
+import PlaygroundEngine.Math;
 import PlaygroundEngine.Renderer.Vertex;
+import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.Renderer.View;
 
 import vulkan;
 import :VulkanTypes;
@@ -432,9 +433,8 @@ namespace PgE
 #endif
 	}
 
-	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const PlatformEventRecord& platformEventRecord,
+	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::DrawFrame(const ExtractedFrame& frame,
 																						  const FramebufferSize framebufferSize,
-																						  const float deltaTimeSeconds,
 																						  ImDrawData* debugUiDrawData)
 	{
 		// A minimized window reports a zero framebuffer, and no swap chain can be built for one.
@@ -473,10 +473,7 @@ namespace PgE
 			return std::unexpected(RendererError(RendererRenderErrorKind::FenceResetError, ToString(fenceResetResult)));
 		}
 
-		_cameraInput = ReadCameraInput(platformEventRecord, _cameraInput);
-		MoveCamera(_cameraInput, deltaTimeSeconds);
-
-		UpdateUniformBuffer(_frameIndex);
+		UpdateUniformBuffer(_frameIndex, frame.View);
 
 		if (const std::expected<void, vk::Result> resetCommandBufferResult = _commandBuffers[_frameIndex].reset(); !resetCommandBufferResult)
 		{
@@ -720,102 +717,19 @@ namespace PgE
 			_renderFinishedSemaphores = std::move(semaphoresResult.value());
 		}
 
-		_ubo.Proj = glm::perspective(glm::radians(45.0f), static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height),
-									 0.1f, 10.0f);
-		_ubo.Proj[1][1] *= -1;
-
 		return {};
 	}
 
-	RendererVulkan::CameraInputState RendererVulkan::ReadCameraInput(const PlatformEventRecord& platformEventRecord, CameraInputState previousState)
+	void RendererVulkan::UpdateUniformBuffer(const std::uint32_t frameIndex, const ExtractedView& view) const
 	{
-		for (const auto& event : platformEventRecord.GetEvents())
-		{
-			if (event.Type != PlatformEventType::KeyPressed && event.Type != PlatformEventType::KeyReleased)
-			{
-				continue;
-			}
+		const float aspectRatio = static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height);
 
-			const bool isPressed = event.Type == PlatformEventType::KeyPressed;
-			switch (event.Code)
-			{
-			case InputCode::KeyW:
-				previousState.MoveForward = isPressed;
-				break;
-			case InputCode::KeyS:
-				previousState.MoveBackward = isPressed;
-				break;
-			case InputCode::KeyA:
-				previousState.StrafeLeft = isPressed;
-				break;
-			case InputCode::KeyD:
-				previousState.StrafeRight = isPressed;
-				break;
-			case InputCode::KeyLeft:
-				previousState.TurnLeft = isPressed;
-				break;
-			case InputCode::KeyRight:
-				previousState.TurnRight = isPressed;
-				break;
-			case InputCode::KeyUp:
-				previousState.LookUp = isPressed;
-				break;
-			case InputCode::KeyDown:
-				previousState.LookDown = isPressed;
-				break;
-			default:
-				break;
-			}
-		}
+		const UniformBufferObject uniforms{.Model = _modelMatrix,
+										   .WorldToView = MakeWorldToViewMatrix(view.Position, view.Rotation),
+										   .ViewToClip = MakePerspectiveProjectionMatrix(view.VerticalFieldOfViewRadians, aspectRatio,
+																						 view.NearPlaneDistance, view.FarPlaneDistance)};
 
-		return previousState;
-	}
-
-	void RendererVulkan::MoveCamera(const CameraInputState cameraInput, const float deltaTimeSeconds)
-	{
-		constexpr float turnSpeed = 1.5f;
-
-		// Pitch stops just short of straight up or down, where forward would become parallel to the
-		// world up axis and the right-vector cross product would collapse to zero.
-
-		constexpr float pitchLimit = 1.5f;
-
-		const auto axisFromKeys = [](const bool positive, const bool negative) {
-			return static_cast<float>(positive) - static_cast<float>(negative);
-		};
-
-		_cameraYaw += axisFromKeys(cameraInput.TurnRight, cameraInput.TurnLeft) * turnSpeed * deltaTimeSeconds;
-		_cameraPitch =
-			std::clamp(_cameraPitch + axisFromKeys(cameraInput.LookUp, cameraInput.LookDown) * turnSpeed * deltaTimeSeconds, -pitchLimit, pitchLimit);
-
-		const glm::vec3 forward = GetCameraForward();
-		const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-
-		const glm::vec3 movement = forward * axisFromKeys(cameraInput.MoveForward, cameraInput.MoveBackward) +
-								   right * axisFromKeys(cameraInput.StrafeRight, cameraInput.StrafeLeft);
-
-		if (glm::length(movement) > 0.0f)
-		{
-			constexpr float moveSpeed = 1.5f;
-			_cameraPosition += glm::normalize(movement) * moveSpeed * deltaTimeSeconds;
-		}
-
-		RebuildViewMatrix();
-	}
-
-	glm::vec3 RendererVulkan::GetCameraForward() const
-	{
-		return glm::vec3(std::cos(_cameraPitch) * std::sin(_cameraYaw), std::sin(_cameraPitch), -std::cos(_cameraPitch) * std::cos(_cameraYaw));
-	}
-
-	void RendererVulkan::RebuildViewMatrix()
-	{
-		_ubo.View = lookAt(_cameraPosition, _cameraPosition + GetCameraForward(), glm::vec3(0.0f, 1.0f, 0.0f));
-	}
-
-	void RendererVulkan::UpdateUniformBuffer(const std::uint32_t frameIndex) const
-	{
-		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &_ubo, sizeof(_ubo));
+		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &uniforms, sizeof(uniforms));
 	}
 
 	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex,

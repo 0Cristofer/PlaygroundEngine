@@ -490,6 +490,8 @@ target_sources(
 		src/Reflection/Core/FunctionInfo.cpp
 		src/Reflection/Core/Core.cpp
 		src/Reflection/Builtins/EnumerationFacet.cpp
+		src/RenderExtraction.cpp
+		src/Renderer/View.cpp
 		src/Renderer/RendererVulkan.cpp
 		src/Renderer/VulkanUtils.cpp
 	PUBLIC
@@ -507,6 +509,7 @@ target_sources(
 				src/DebugUI/DebugUI.cppm
 				src/DebugUI/DebugPanelDrawer.cppm
 				src/DebugUI/DrawDebugAnnotation.cppm
+				src/Ecs/CameraComponent.cppm
 				src/Ecs/Ecs.cppm
 				src/Ecs/Entity.cppm
 				src/Ecs/Component.cppm
@@ -589,6 +592,9 @@ target_sources(
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm
+				src/RenderExtraction.cppm
+				src/Renderer/Frame.cppm
+				src/Renderer/View.cppm
 				src/Renderer/Vertex.cppm
 				src/Renderer/VulkanTypes.cppm
 				src/Renderer/VulkanUtils.cppm

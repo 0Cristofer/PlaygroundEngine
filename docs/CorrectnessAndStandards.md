@@ -347,11 +347,16 @@ claim in the test name and comment nothing. The single exception to "no history 
 toolchain workaround, which *must* name the tool, the version, and the symptom, because on a GCC trunk
 snapshot that is the only thing that tells a later reader whether the workaround can go.
 
-These are prose rules, deliberately not mechanized. The tempting regexes (contrast markers such as
+Judging a comment is deliberately not mechanized. The tempting regexes (contrast markers such as
 "rather than", counterfactual "would", a comment-density cap on the diff) all fire on legitimate
-comments too, and a lint rule that cries wolf trains authors to reach for the suppression comment. The
-enforcement here is review plus the agent instructions in [CLAUDE.md](../CLAUDE.md), with the mechanical
-cap below as the only automated part.
+comments too, and a lint rule that cries wolf trains authors to reach for the suppression comment.
+What *is* mechanized is the reminder. `scripts/claude-lint-hook.sh` (the `PostToolUse` hook on
+`Edit`/`Write`) restates these rules whenever an edit adds comment lines to a C++ file, and stays
+silent otherwise. It is a trigger, not a judge: it decides only that comments were added, never
+whether one is justified, so it has no verdict to be wrong about. This exists because
+[CLAUDE.md](../CLAUDE.md) is read once at session start while the comment is written hundreds of tool
+calls later, and a rule delivered at the moment of the action is what actually steers the writing. The
+3-line cap below is the other automated part; everything else falls to review.
 
 ### Comment length [built]
 

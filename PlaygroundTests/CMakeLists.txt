@@ -69,6 +69,8 @@ target_sources(
 		src/Reflection/ReflectionFacetTests.cpp
 		src/Reflection/ReflectionNamespaceTests.cpp
 		src/MathTests.cpp
+		src/ViewMatrixTests.cpp
+		src/RenderExtractionTests.cpp
 		src/LogTests.cpp
 		src/PlatformEventsTests.cpp
 		src/DebugUiInputTests.cpp
