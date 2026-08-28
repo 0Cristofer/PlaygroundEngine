@@ -16,6 +16,7 @@ import PlaygroundGame.Ecs.MovementSystem;
 import PlaygroundGame.Ecs.PlayerControlledComponent;
 import PlaygroundGame.Ecs.EntityNameComponent;
 import PlaygroundEngine.Ecs.CameraComponent;
+import PlaygroundEngine.Ecs.MeshComponent;
 import PlaygroundEngine.Math;
 
 std::unique_ptr<PgE::AppBase> PgG::PlaygroundGameAppDescriptor::GetApp()
@@ -48,6 +49,7 @@ void PgG::App::OnStartRun(PgE::Ecs& ecs)
 
 	SpawnPlayer(ecs);
 	SpawnCamera(ecs);
+	SpawnProps(ecs);
 }
 
 void PgG::App::SpawnPlayer(PgE::Ecs& ecs)
@@ -57,8 +59,36 @@ void PgG::App::SpawnPlayer(PgE::Ecs& ecs)
 	const std::shared_ptr<EntityNameComponent> name = ecs.AddComponentToEntity<EntityNameComponent>(player);
 	name->Name = "Player";
 
-	ecs.AddComponentToEntity<PgE::TransformComponent>(player);
+	const std::shared_ptr<PgE::TransformComponent> transform = ecs.AddComponentToEntity<PgE::TransformComponent>(player);
+	transform->Position = PgE::Vector3{.X = -2.0f, .Y = 0.0f, .Z = 0.0f};
+
+	ecs.AddComponentToEntity<PgE::MeshComponent>(player);
 	ecs.AddComponentToEntity<PlayerControlledComponent>(player);
+}
+
+void PgG::App::SpawnProps(PgE::Ecs& ecs)
+{
+	const PgE::Entity room = ecs.AddEntity();
+
+	const std::shared_ptr<EntityNameComponent> roomName = ecs.AddComponentToEntity<EntityNameComponent>(room);
+	roomName->Name = "Room";
+
+	const std::shared_ptr<PgE::TransformComponent> roomTransform = ecs.AddComponentToEntity<PgE::TransformComponent>(room);
+	roomTransform->Rotation = PgE::Quaternion::FromAxisAngle(PgE::Vector3::Up, PgE::ToRadians(90.0f));
+
+	const std::shared_ptr<PgE::MeshComponent> roomMesh = ecs.AddComponentToEntity<PgE::MeshComponent>(room);
+	roomMesh->MeshPath = "viking_room.obj";
+
+	const PgE::Entity pillar = ecs.AddEntity();
+
+	const std::shared_ptr<EntityNameComponent> pillarName = ecs.AddComponentToEntity<EntityNameComponent>(pillar);
+	pillarName->Name = "Pillar";
+
+	const std::shared_ptr<PgE::TransformComponent> pillarTransform = ecs.AddComponentToEntity<PgE::TransformComponent>(pillar);
+	pillarTransform->Position = PgE::Vector3{.X = 2.0f, .Y = 0.0f, .Z = 0.5f};
+	pillarTransform->Scale = PgE::Vector3{.X = 0.5f, .Y = 0.5f, .Z = 2.0f};
+
+	ecs.AddComponentToEntity<PgE::MeshComponent>(pillar);
 }
 
 void PgG::App::SpawnCamera(PgE::Ecs& ecs)
@@ -68,7 +98,7 @@ void PgG::App::SpawnCamera(PgE::Ecs& ecs)
 	const std::shared_ptr<EntityNameComponent> name = ecs.AddComponentToEntity<EntityNameComponent>(camera);
 	name->Name = "Camera";
 
-	// Placed and aimed at the origin, which is where the one model the renderer draws sits.
+	// Placed and aimed at the origin, which is where the props are spawned.
 
 	const std::shared_ptr<PgE::TransformComponent> transform = ecs.AddComponentToEntity<PgE::TransformComponent>(camera);
 	transform->Position = PgE::Vector3{.X = 2.0f, .Y = -2.0f, .Z = 2.0f};

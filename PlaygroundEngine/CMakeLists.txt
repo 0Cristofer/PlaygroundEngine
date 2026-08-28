@@ -477,7 +477,7 @@ target_sources(
 		src/Ecs/EntityDebugPanelSystem/EntityDebugPanelSystem.cpp
 		src/Ecs/InputSystem/InputSystem.cpp
 		src/Image/Image.cpp
-		src/Model/Model.cpp
+		src/Mesh/Mesh.cpp
 		src/AgentChannel/AgentChannel.cpp
 		src/WindowServer/WindowServer.cpp
 		src/WindowServer/Window.cpp
@@ -490,6 +490,7 @@ target_sources(
 		src/Reflection/Core/FunctionInfo.cpp
 		src/Reflection/Core/Core.cpp
 		src/Reflection/Builtins/EnumerationFacet.cpp
+		src/MeshCatalog.cpp
 		src/RenderExtraction.cpp
 		src/Renderer/View.cpp
 		src/Renderer/RendererVulkan.cpp
@@ -510,6 +511,7 @@ target_sources(
 				src/DebugUI/DebugPanelDrawer.cppm
 				src/DebugUI/DrawDebugAnnotation.cppm
 				src/Ecs/CameraComponent.cppm
+				src/Ecs/MeshComponent.cppm
 				src/Ecs/Ecs.cppm
 				src/Ecs/Entity.cppm
 				src/Ecs/Component.cppm
@@ -522,7 +524,7 @@ target_sources(
 				src/Math/Types.cppm
 				src/Math/Transform.cppm
 				src/Image/Image.cppm
-				src/Model/Model.cppm
+				src/Mesh/Mesh.cppm
 				src/PlatformEvents/PlatformEvents.cppm
 				src/PlatformEvents/InputCode.cppm
 				src/PlatformEvents/InputModifiers.cppm
@@ -592,8 +594,10 @@ target_sources(
 				src/Reflection/Core/DeclarationInfo.cppm
 				src/Reflection/Core/TypeInfoTraits.cppm
 				src/Reflection/Core/Core.cppm
+				src/MeshCatalog.cppm
 				src/RenderExtraction.cppm
 				src/Renderer/Frame.cppm
+				src/Renderer/Mesh.cppm
 				src/Renderer/View.cppm
 				src/Renderer/Vertex.cppm
 				src/Renderer/VulkanTypes.cppm

@@ -478,8 +478,10 @@ namespace PgE
 	CreationResult<vk::raii::PipelineLayout> CreatePipelineLayout(const vk::raii::Device& logicalDevice,
 																  const vk::raii::DescriptorSetLayout& descriptorSetLayout)
 	{
+		constexpr vk::PushConstantRange meshRange{.stageFlags = vk::ShaderStageFlagBits::eVertex, .offset = 0, .size = sizeof(MeshPushConstants)};
+
 		const vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{
-			.setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0};
+			.setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 1, .pPushConstantRanges = &meshRange};
 
 		std::expected<vk::raii::PipelineLayout, vk::Result> pipelineLayoutResult = logicalDevice.createPipelineLayout(pipelineLayoutCreateInfo);
 		if (!pipelineLayoutResult)

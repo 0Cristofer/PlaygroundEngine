@@ -8,7 +8,9 @@ import PlaygroundEngine.DebugUi;
 import PlaygroundEngine.FrameCapture;
 import PlaygroundEngine.Renderer.Vulkan;
 import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.Renderer.Mesh;
 import PlaygroundEngine.RenderExtraction;
+import PlaygroundEngine.MeshCatalog;
 
 import std;
 import PlaygroundEngine.Ecs;
@@ -77,6 +79,8 @@ namespace PgE
 
 		void LogPlatformEvents() const;
 
+		void SyncMeshCatalog() pre(_ecs != nullptr && _rendererVulkan != nullptr);
+
 		std::expected<void, BootError> BootPresentation();
 		std::expected<void, BootError> BootRendering();
 		void BootDebugUi();
@@ -101,6 +105,7 @@ namespace PgE
 		std::unique_ptr<Ecs> _ecs;
 		std::unique_ptr<AppBase> _app;
 
+		MeshCatalog _meshCatalog;
 		ExtractedFrame _extractedFrame;
 	};
 }

@@ -3,9 +3,12 @@
 import std;
 import PlaygroundEngine.Ecs;
 import PlaygroundEngine.Ecs.CameraComponent;
+import PlaygroundEngine.Ecs.MeshComponent;
 import PlaygroundEngine.Math;
+import PlaygroundEngine.MeshCatalog;
 import PlaygroundEngine.RenderExtraction;
 import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.Renderer.Mesh;
 import PlaygroundEngine.Renderer.View;
 
 namespace
@@ -20,12 +23,30 @@ namespace
 		return camera;
 	}
 
-	PgE::ExtractedFrame ExtractFrom(const PgE::Ecs& ecs)
+	PgE::ExtractedFrame ExtractFrom(const PgE::Ecs& ecs, const PgE::MeshCatalog& meshes = {})
 	{
 		PgE::ExtractedFrame frame;
-		PgE::ExtractFrame(ecs, frame);
+		PgE::ExtractFrame(ecs, meshes, frame);
 
 		return frame;
+	}
+
+	PgE::Entity SpawnMesh(PgE::Ecs& ecs, const std::string& path, const PgE::Vector3 position)
+	{
+		const PgE::Entity entity = ecs.AddEntity();
+
+		ecs.AddComponentToEntity<PgE::TransformComponent>(entity)->Position = position;
+		ecs.AddComponentToEntity<PgE::MeshComponent>(entity)->MeshPath = path;
+
+		return entity;
+	}
+
+	PgE::MeshCatalog CatalogOf(const std::string& path, const std::uint32_t index)
+	{
+		PgE::MeshCatalog catalog;
+		catalog.Insert(path, PgE::MeshHandle{.Index = index});
+
+		return catalog;
 	}
 }
 
@@ -33,7 +54,7 @@ TEST_CASE("A camera and its transform extract into the frame's view, its lens co
 {
 	PgE::Ecs ecs;
 
-	const PgE::Vector3 position{.X = 1.0f, .Y = 2.0f, .Z = 3.0f};
+	constexpr PgE::Vector3 position{.X = 1.0f, .Y = 2.0f, .Z = 3.0f};
 	const PgE::Quaternion rotation = PgE::Quaternion::FromAxisAngle(PgE::Vector3::Up, PgE::ToRadians(90.0f));
 
 	const PgE::Entity camera = SpawnCamera(ecs, position);
@@ -70,8 +91,8 @@ TEST_CASE("The lowest entity id decides between cameras")
 {
 	PgE::Ecs ecs;
 
-	const PgE::Vector3 first{.X = 1.0f};
-	const PgE::Vector3 second{.X = 2.0f};
+	constexpr PgE::Vector3 first{.X = 1.0f};
+	constexpr PgE::Vector3 second{.X = 2.0f};
 
 	SpawnCamera(ecs, first);
 	SpawnCamera(ecs, second);
@@ -87,7 +108,7 @@ TEST_CASE("Extraction overwrites what the previous frame left in the storage")
 	PgE::ExtractedFrame frame;
 	frame.View.Position = PgE::Vector3{.X = -1.0f, .Y = -1.0f, .Z = -1.0f};
 
-	PgE::ExtractFrame(ecs, frame);
+	PgE::ExtractFrame(ecs, PgE::MeshCatalog{}, frame);
 
 	CHECK(frame.View.Position == PgE::Vector3{.X = 7.0f});
 }
@@ -134,4 +155,66 @@ TEST_CASE("A lens dragged through zero still extracts a usable projection")
 		CHECK(std::isfinite(column.Z));
 		CHECK(std::isfinite(column.W));
 	}
+}
+
+TEST_CASE("A mesh the catalog resolved extracts with the placement its entity carries")
+{
+	PgE::Ecs ecs;
+
+	constexpr PgE::Vector3 position{.X = 4.0f, .Y = 5.0f, .Z = 6.0f};
+	const PgE::Entity entity = SpawnMesh(ecs, "cube.obj", position);
+	ecs.TryGetComponent<PgE::TransformComponent>(entity)->Scale = PgE::Vector3{.X = 2.0f, .Y = 2.0f, .Z = 2.0f};
+
+	const PgE::ExtractedFrame frame = ExtractFrom(ecs, CatalogOf("cube.obj", 3));
+
+	REQUIRE(frame.Meshes.size() == 1);
+	CHECK(frame.Meshes.front().Mesh == PgE::MeshHandle{.Index = 3});
+	CHECK(frame.Meshes.front().Placement.Position == position);
+	CHECK(frame.Meshes.front().Placement.Scale == PgE::Vector3{.X = 2.0f, .Y = 2.0f, .Z = 2.0f});
+}
+
+TEST_CASE("A mesh path the catalog never resolved draws nothing")
+{
+	PgE::Ecs ecs;
+	SpawnMesh(ecs, "missing.obj", PgE::Vector3::Zero);
+
+	CHECK(ExtractFrom(ecs, CatalogOf("cube.obj", 1)).Meshes.empty());
+}
+
+TEST_CASE("A mesh with nowhere to stand is skipped")
+{
+	PgE::Ecs ecs;
+	ecs.AddComponentToEntity<PgE::MeshComponent>(ecs.AddEntity())->MeshPath = "cube.obj";
+
+	CHECK(ExtractFrom(ecs, CatalogOf("cube.obj", 1)).Meshes.empty());
+}
+
+TEST_CASE("Meshes extract in entity id order")
+{
+	PgE::Ecs ecs;
+
+	SpawnMesh(ecs, "cube.obj", PgE::Vector3{.X = 1.0f});
+	SpawnMesh(ecs, "cube.obj", PgE::Vector3{.X = 2.0f});
+	SpawnMesh(ecs, "cube.obj", PgE::Vector3{.X = 3.0f});
+
+	const PgE::ExtractedFrame frame = ExtractFrom(ecs, CatalogOf("cube.obj", 1));
+
+	REQUIRE(frame.Meshes.size() == 3);
+	CHECK(frame.Meshes[0].Placement.Position.X == 1.0f);
+	CHECK(frame.Meshes[1].Placement.Position.X == 2.0f);
+	CHECK(frame.Meshes[2].Placement.Position.X == 3.0f);
+}
+
+TEST_CASE("Re-extracting into the same frame replaces the draw list rather than appending to it")
+{
+	PgE::Ecs ecs;
+	SpawnMesh(ecs, "cube.obj", PgE::Vector3::Zero);
+
+	const PgE::MeshCatalog catalog = CatalogOf("cube.obj", 1);
+
+	PgE::ExtractedFrame frame;
+	PgE::ExtractFrame(ecs, catalog, frame);
+	PgE::ExtractFrame(ecs, catalog, frame);
+
+	CHECK(frame.Meshes.size() == 1);
 }

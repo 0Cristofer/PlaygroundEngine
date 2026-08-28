@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
 import std;
-import PlaygroundEngine.Model;
+import PlaygroundEngine.Mesh;
 
 namespace
 {
@@ -37,7 +37,7 @@ f 1 2 3
 
 TEST_CASE("ParseWavefrontMesh merges vertices shared between faces")
 {
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh(QuadObject);
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh(QuadObject);
 
 	REQUIRE(result.has_value());
 
@@ -53,7 +53,7 @@ TEST_CASE("ParseWavefrontMesh merges vertices shared between faces")
 
 TEST_CASE("ParseWavefrontMesh flips the Wavefront V axis to a top-left origin")
 {
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh(QuadObject);
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh(QuadObject);
 
 	REQUIRE(result.has_value());
 	REQUIRE(result->Vertices.size() == 4);
@@ -70,7 +70,7 @@ TEST_CASE("ParseWavefrontMesh flips the Wavefront V axis to a top-left origin")
 
 TEST_CASE("ParseWavefrontMesh reads positions and normals into the mesh")
 {
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh(QuadObject);
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh(QuadObject);
 
 	REQUIRE(result.has_value());
 	REQUIRE(result->Vertices.size() == 4);
@@ -90,7 +90,7 @@ TEST_CASE("ParseWavefrontMesh defaults the attributes a face omits")
 	// Faces may reference a position alone, leaving the normal and texture coordinate indices
 	// negative. Those have to read as zero rather than index the attribute arrays from the end.
 
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh(PositionsOnlyTriangle);
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh(PositionsOnlyTriangle);
 
 	REQUIRE(result.has_value());
 	REQUIRE(result->Vertices.size() == 3);
@@ -107,16 +107,16 @@ TEST_CASE("ParseWavefrontMesh defaults the attributes a face omits")
 
 TEST_CASE("ParseWavefrontMesh reports a failure for text holding no faces")
 {
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh("v 0.0 0.0 0.0\n");
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh("v 0.0 0.0 0.0\n");
 
 	REQUIRE_FALSE(result.has_value());
-	CHECK(result.error() == PgE::ModelError::NoGeometry);
+	CHECK(result.error() == PgE::MeshError::NoGeometry);
 }
 
 TEST_CASE("ParseWavefrontMesh reports a failure for an empty document")
 {
-	const std::expected<PgE::Mesh, PgE::ModelError> result = PgE::ParseWavefrontMesh("");
+	const std::expected<PgE::Mesh, PgE::MeshError> result = PgE::ParseWavefrontMesh("");
 
 	REQUIRE_FALSE(result.has_value());
-	CHECK(result.error() == PgE::ModelError::NoGeometry);
+	CHECK(result.error() == PgE::MeshError::NoGeometry);
 }

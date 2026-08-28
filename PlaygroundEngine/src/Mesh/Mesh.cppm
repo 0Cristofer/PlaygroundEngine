@@ -2,13 +2,13 @@ module;
 
 #include <glm/glm.hpp>
 
-export module PlaygroundEngine.Model;
+export module PlaygroundEngine.Mesh;
 
 import std;
 
 namespace PgE
 {
-	export enum class ModelError
+	export enum class MeshError
 	{
 		ParseFailed,
 		NoGeometry,
@@ -33,5 +33,5 @@ namespace PgE
 	// Faces are triangulated and
 	// vertices sharing a position/normal/texture-coordinate triple are merged onto one index.
 
-	export std::expected<Mesh, ModelError> ParseWavefrontMesh(std::string_view objectText);
+	export std::expected<Mesh, MeshError> ParseWavefrontMesh(std::string_view objectText);
 }
