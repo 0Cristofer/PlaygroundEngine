@@ -4,7 +4,7 @@ module;
 
 #include <tiny_obj_loader.h>
 
-module PlaygroundEngine.Model;
+module PlaygroundEngine.Mesh;
 
 import std;
 import PlaygroundEngine.Log;
@@ -69,7 +69,7 @@ namespace PgE
 		}
 	}
 
-	std::expected<Mesh, ModelError> ParseWavefrontMesh(const std::string_view objectText)
+	std::expected<Mesh, MeshError> ParseWavefrontMesh(const std::string_view objectText)
 	{
 		// No material search path: resolving an .mtl reference would need file access, which this
 		// module deliberately does not have, and no material data is consumed yet.
@@ -82,7 +82,7 @@ namespace PgE
 		if (!reader.ParseFromString(std::string(objectText), "", config))
 		{
 			PGE_LOG(Error, "Unable to parse Wavefront mesh: {}", reader.Error());
-			return std::unexpected(ModelError::ParseFailed);
+			return std::unexpected(MeshError::ParseFailed);
 		}
 
 		if (!reader.Warning().empty())
@@ -117,7 +117,7 @@ namespace PgE
 
 		if (mesh.Indices.empty())
 		{
-			return std::unexpected(ModelError::NoGeometry);
+			return std::unexpected(MeshError::NoGeometry);
 		}
 
 		return mesh;

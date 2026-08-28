@@ -31,8 +31,14 @@ namespace PgE
 
 	export struct UniformBufferObject
 	{
-		Matrix4x4 Model;
 		Matrix4x4 WorldToView;
 		Matrix4x4 ViewToClip;
+	};
+
+	// One mesh's placement, pushed per draw. Sized to stay inside the 128 bytes a Vulkan implementation
+	// is required to offer, so no device query gates it.
+	export struct MeshPushConstants
+	{
+		Matrix4x4 LocalToWorld;
 	};
 }

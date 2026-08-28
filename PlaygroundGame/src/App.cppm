@@ -29,6 +29,7 @@ namespace PgG
 	private:
 		static void SpawnPlayer(PgE::Ecs& ecs);
 		static void SpawnCamera(PgE::Ecs& ecs);
+		static void SpawnProps(PgE::Ecs& ecs);
 
 		PgE::InputSystem* _inputSystem = nullptr;
 	};

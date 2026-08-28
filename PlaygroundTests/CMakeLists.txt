@@ -71,13 +71,14 @@ target_sources(
 		src/MathTests.cpp
 		src/ViewMatrixTests.cpp
 		src/RenderExtractionTests.cpp
+		src/MeshCatalogTests.cpp
 		src/LogTests.cpp
 		src/PlatformEventsTests.cpp
 		src/DebugUiInputTests.cpp
 		src/AgentChannelTests.cpp
 		src/ImageTests.cpp
 		src/FilesTests.cpp
-		src/ModelTests.cpp
+		src/MeshTests.cpp
 		src/SnapshotHarness.cpp
 		src/SnapshotTests.cpp
 		src/HarnessSelfVerificationTests.cpp

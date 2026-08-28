@@ -1,9 +1,14 @@
+module;
+
+#include "PlaygroundEngine/Log.h"
+
 module PlaygroundEngine.DebugUi;
 
 import :DebugPanelDrawer;
 
 import imgui;
 
+import PlaygroundEngine.Log;
 import PlaygroundEngine.Math;
 import PlaygroundEngine.Reflection;
 
@@ -13,6 +18,9 @@ namespace
 {
 	constexpr float DragSpeed = 0.01f;
 	constexpr float DegreeDragSpeed = 0.5f;
+
+	// Caps what an edited string can grow to. Longer text still displays, it just cannot be edited here.
+	constexpr std::size_t StringEditCapacity = 256;
 
 	// The name column starts narrower than the value column, and stays draggable from there.
 	constexpr float NameColumnWeight = 0.35f;
@@ -157,6 +165,39 @@ namespace
 		ImGui::BeginDisabled();
 		ImGui::TextUnformatted(text);
 		ImGui::EndDisabled();
+		EndLeafRow();
+	}
+
+	void DrawString(const char* label, const PgE::StringFacet& string, const PgE::TypedRef& ref)
+	{
+		const std::string_view text = string.View(ref);
+
+		if (!string.CanAssign() || ref.IsConst || text.size() >= StringEditCapacity)
+		{
+			DrawDisabledText(label, std::format("\"{}\"", text).c_str());
+			return;
+		}
+
+		// Reseeded every frame from the object, which ImGui overrides for the widget it is editing, so a
+		// value changed elsewhere still shows while an in-progress edit survives.
+
+		std::array<char, StringEditCapacity> buffer{};
+		std::ranges::copy(text, buffer.begin());
+
+		BeginLeafRow(label);
+		ImGui::InputText("##value", buffer.data(), buffer.size());
+
+		// On commit rather than per keystroke: a consumer reacting to the value (loading the file a path
+		// names) would otherwise act on every prefix typed.
+
+		if (ImGui::IsItemDeactivatedAfterEdit())
+		{
+			if (const std::expected<void, PgE::FacetError> assigned = string.Assign(ref, buffer.data()); !assigned)
+			{
+				PGE_LOG(Error, "Debug panel failed to assign string field '{}'", label);
+			}
+		}
+
 		EndLeafRow();
 	}
 
@@ -463,8 +504,7 @@ namespace
 
 		if (const PgE::StringFacet* string = ref.Type->GetFacet<PgE::StringFacet>())
 		{
-			const std::string_view view = string->View(ref);
-			DrawDisabledText(label, std::format("\"{}\"", view).c_str());
+			DrawString(label, *string, ref);
 			return;
 		}
 

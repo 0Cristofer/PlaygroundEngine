@@ -30,10 +30,10 @@ A *system* is a vertical slice spanning bands: for input, contract types at L0, 
 Current and near-future modules, provisional except where a placement is called out as settled:
 
 - **L4:** `PlaygroundGame`.
-- **L3:** `PlaygroundEngine` umbrella (`Engine`, `AppDescriptorBase`, `CommandLine`, `main.cpp`), `PlaygroundEngine.App`, `.RenderExtraction` (the simulation-to-renderer translation; see Render extraction). The umbrella currently mixes the root with convenience re-exports of L2; whether the root splits into its own module is an open cleanup.
-- **L2:** `.Ecs` (umbrella over `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem`, `.Ecs.CameraComponent`, `.Renderer.Vulkan`, `.DebugUi`. Future: Viewport and RenderTarget on the renderer, AssetSystem core, Networking, Audio.
+- **L3:** `PlaygroundEngine` umbrella (`Engine`, `AppDescriptorBase`, `CommandLine`, `main.cpp`), `PlaygroundEngine.App`, `.RenderExtraction` (the simulation-to-renderer translation; see Render extraction), `.MeshCatalog` (the path-to-`MeshHandle` table extraction reads; filled by the root, and the seat the asset system takes over). The umbrella currently mixes the root with convenience re-exports of L2; whether the root splits into its own module is an open cleanup.
+- **L2:** `.Ecs` (umbrella over `.Ecs.Component`, `.Ecs.Entity`, `.Ecs.TransformComponent` and the `:System` partition), `.Ecs.InputSystem`, `.Ecs.CameraComponent`, `.Ecs.MeshComponent`, `.Renderer.Vulkan`, `.DebugUi`. Future: Viewport and RenderTarget on the renderer, AssetSystem core, Networking, Audio.
 - **L1:** `.Window` (`:common` contracts, CMake-selected per-platform `:backend`; the template for all L1 seams). Future: the platform event pump, file I/O, time, file watching.
-- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers), `.Math` (`:Types`, `:Transform`), `.DebugUi.Annotations` (the `DrawDebug` tag alone, dependency-free so a type in any band can be annotated without reaching the debug UI), `.Renderer.View` (the `ExtractedView` contract and the two matrix builders, importing only `.Math`) and `.Renderer.Frame` (the `ExtractedFrame` payload), so the simulation and the renderer meet without either importing the other. Future: input event and command POD contracts, ECS storage primitives, handles, error enums.
+- **L0:** `.Log`, `.Reflection` (settled by its own design doc; the registry *instance* is owned by L3, which schedules its mutation barriers), `.Math` (`:Types`, `:Transform`), `.DebugUi.Annotations` (the `DrawDebug` tag alone, dependency-free so a type in any band can be annotated without reaching the debug UI), `.Renderer.View` (the `ExtractedView` contract and the two matrix builders, importing only `.Math`) `.Renderer.Mesh` (the `MeshHandle` resource identity and the `ExtractedMesh` draw item, importing only `.Math`) and `.Renderer.Frame` (the `ExtractedFrame` payload that aggregates them), so the simulation and the renderer meet without either importing the other. Future: input event and command POD contracts, ECS storage primitives, handles, error enums.
 
 Placement calls already settled: the asset system splits (runtime core at L2, file I/O and watching at L1, hot reload wired at L3, the import pipeline is editor tooling outside the runtime cake); ECS storage primitives (chunk storage, entity allocator, handle types) are L0 containers usable without an `Ecs`, while the `Ecs` itself is the L2 system.
 
@@ -82,16 +82,28 @@ The one instance of the frame-time data seam that exists today, and the pattern 
   types, reads no engine state and mutates nothing, so it can move to a job or be double-buffered without
   touching its callers. No ambient or process-global state: several worlds are live at once as soon as the
   editor has preview scenes.
-- **It fills caller-owned storage** (`ExtractFrame(const Ecs&, ExtractedFrame&)`) rather than returning
+- **It fills caller-owned storage** (`ExtractFrame(const Ecs&, const MeshCatalog&, ExtractedFrame&)`) rather than returning
   a value, because the growing parts of a frame must not reallocate every step.
 - **The consuming system takes the frame as a parameter.** It never calls back into the simulation.
 - **Growth is ordered calls, not a registration list.** When extraction splits into view-independent and
   per-view halves, the L3 function calls them in written order, the same rule as the frame loop.
 
 Two boundaries this pattern deliberately keeps apart. **Resource registration is not extraction:** getting
-a mesh onto the GPU and back as a handle happens on load, and per-frame extraction only ships handles and
-transforms. And **which camera a viewport renders through belongs to the viewport**, not to a flag on the
-camera, because it is per-viewer state that must not replicate.
+a mesh onto the GPU and back as a handle is its own step, and extraction only ships handles and transforms.
+Meshes are the worked example: `MeshComponent` names a path, `Engine::SyncMeshCatalog` turns each new path
+into a `MeshHandle` through `RendererVulkan::AcquireMesh` and records it in the `MeshCatalog`, and
+`ExtractFrame(const Ecs&, const MeshCatalog&, ExtractedFrame&)` then only looks handles up. The registration
+loop lives in the composition root because it is the one place that sees both peers; the catalog itself
+imports neither, which is what keeps extraction from reaching the renderer.
+
+Registration is where the missing asset system shows. Until it exists, `SyncMeshCatalog` runs on the frame
+thread immediately before extraction, so a path seen for the first time uploads synchronously and stalls
+the frame on a device wait, and nothing is ever released. That placement is the stand-in, not the design:
+the split above is what survives, and the asset system takes the catalog's seat and moves the upload off
+the frame.
+
+And **which camera a viewport renders through belongs to the viewport**, not to a flag on the camera,
+because it is per-viewer state that must not replicate.
 
 ## Capabilities and targets
 

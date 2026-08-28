@@ -2,12 +2,16 @@
 
 import PlaygroundEngine.Ecs.InputSystem.InputStateComponent;
 import PlaygroundGame.Ecs.EntityNameComponent;
+import PlaygroundEngine.Ecs.MeshComponent;
+import PlaygroundEngine.Math;
 import PlaygroundEngine.PlatformEvents;
 
 import std;
 
 namespace PgG
 {
+	constexpr float SpawnSpacingMeters = 1.5f;
+
 	void EntitySpawnerSystem::Step(float)
 	{
 		const std::vector<std::shared_ptr<PgE::InputStateComponent>> inputStateComponents = GetComponents<PgE::InputStateComponent>();
@@ -36,10 +40,17 @@ namespace PgG
 	{
 		const PgE::Entity entity = AddEntity();
 
-		const std::shared_ptr<EntityNameComponent> name = AddComponentToEntity<EntityNameComponent>(entity);
-		name->Name = std::format("PlaygroundGame {}", ++_spawnCount);
+		const int spawnOrdinal = ++_spawnCount;
 
-		AddComponentToEntity<PgE::TransformComponent>(entity);
+		const std::shared_ptr<EntityNameComponent> name = AddComponentToEntity<EntityNameComponent>(entity);
+		name->Name = std::format("PlaygroundGame {}", spawnOrdinal);
+
+		// Spread along +Y so successive presses line up rather than stacking on the origin.
+
+		const std::shared_ptr<PgE::TransformComponent> transform = AddComponentToEntity<PgE::TransformComponent>(entity);
+		transform->Position = PgE::Vector3{.X = 0.0f, .Y = static_cast<float>(spawnOrdinal) * SpawnSpacingMeters, .Z = 0.0f};
+
+		AddComponentToEntity<PgE::MeshComponent>(entity);
 
 		_spawnedEntities.push_back(entity);
 	}

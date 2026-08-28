@@ -7,11 +7,16 @@ struct VSInput
 
 struct UniformBuffer
 {
-    float4x4 model;
     float4x4 view;
     float4x4 proj;
 };
 ConstantBuffer<UniformBuffer> ubo;
+
+struct MeshPushConstants
+{
+    float4x4 model;
+};
+[vk::push_constant] ConstantBuffer<MeshPushConstants> pushConstants;
 
 struct VSOutput
 {
@@ -24,7 +29,7 @@ struct VSOutput
 VSOutput vertMain(VSInput input)
 {
     VSOutput output;
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPos, 1.0))));
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(pushConstants.model, float4(input.inPos, 1.0))));
     output.fragColor = input.inColor;
     output.fragTexCoord = input.inTexCoord;
     return output;

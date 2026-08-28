@@ -5,6 +5,7 @@ module;
 module PlaygroundEngine;
 
 import PlaygroundEngine.App;
+import PlaygroundEngine.Ecs.MeshComponent;
 import PlaygroundEngine.Log;
 import PlaygroundEngine.Reflection;
 import imgui;
@@ -188,7 +189,8 @@ namespace PgE
 		{
 			// After the simulation step and the debug panel, so an edit this frame is seen this frame.
 
-			ExtractFrame(*_ecs, _extractedFrame);
+			SyncMeshCatalog();
+			ExtractFrame(*_ecs, _meshCatalog, _extractedFrame);
 
 			if (const std::expected<void, RendererError<RendererRenderErrorKind>> drawResult =
 					_rendererVulkan->DrawFrame(_extractedFrame, _window->GetFramebufferSize(), debugUiDrawData);
@@ -217,6 +219,27 @@ namespace PgE
 		_previousFrameTime = frameTime;
 
 		return deltaTimeSeconds;
+	}
+
+	void Engine::SyncMeshCatalog()
+	{
+		for (const std::shared_ptr<MeshComponent>& mesh : _ecs->GetComponents<MeshComponent>())
+		{
+			if (_meshCatalog.Contains(mesh->MeshPath))
+			{
+				continue;
+			}
+
+			CreationResult<MeshHandle> acquired = _rendererVulkan->AcquireMesh(mesh->MeshPath);
+			if (!acquired)
+			{
+				PGE_LOG(Error, "Mesh '{}' failed to load: {}", mesh->MeshPath, acquired.error().Message());
+			}
+
+			// Recorded either way, so a path that cannot load is not retried on every later frame.
+
+			_meshCatalog.Insert(mesh->MeshPath, acquired ? acquired.value() : MeshHandle{});
+		}
 	}
 
 	void Engine::LogPlatformEvents() const

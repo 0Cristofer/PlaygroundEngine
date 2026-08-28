@@ -15,10 +15,11 @@ import PlaygroundEngine.Paths;
 import PlaygroundEngine.Files;
 import PlaygroundEngine.Image;
 import PlaygroundEngine.Log;
-import PlaygroundEngine.Model;
+import PlaygroundEngine.Mesh;
 import PlaygroundEngine.Math;
 import PlaygroundEngine.Renderer.Vertex;
 import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.Renderer.Mesh;
 import PlaygroundEngine.Renderer.View;
 
 import vulkan;
@@ -34,8 +35,7 @@ namespace PgE
 	constexpr std::uint32_t DebugUiDescriptorPoolSize = 16;
 	constexpr vk::DeviceSize DebugUiMinimumAllocationSize = 1024 * 1024;
 
-	constexpr std::string_view PlaceholderTextureFileName = "viking_room.png";
-	constexpr std::string_view PlaceholderModelFileName = "viking_room.obj";
+	constexpr std::string_view PlaceholderTextureFileName = "placeholder.png";
 
 	static CreationResult<Mesh> LoadMesh(const std::string_view modelFileName)
 	{
@@ -51,7 +51,7 @@ namespace PgE
 			return std::unexpected(RendererError(RendererCreationErrorKind::ModelLoadError, ToString(objectTextResult.error())));
 		}
 
-		std::expected<Mesh, ModelError> meshResult = ParseWavefrontMesh(objectTextResult.value());
+		std::expected<Mesh, MeshError> meshResult = ParseWavefrontMesh(objectTextResult.value());
 		if (!meshResult)
 		{
 			return std::unexpected(RendererError(RendererCreationErrorKind::ModelLoadError, ToString(meshResult.error())));
@@ -194,30 +194,6 @@ namespace PgE
 		}
 		vk::raii::CommandPool& commandPool = commandPoolResult.value();
 
-		CreationResult<Mesh> meshResult = LoadMesh(PlaceholderModelFileName);
-		if (!meshResult)
-		{
-			return std::unexpected(meshResult.error());
-		}
-		const Mesh& mesh = meshResult.value();
-		const std::vector<Vertex> vertices = ToRendererVertices(mesh);
-
-		CreationResult<BufferResource> vertexBufferResourceResult = CreateDeviceLocalBuffer(
-			physicalDevice, logicalDevice, queue, commandPool, std::as_bytes(std::span(vertices)), vk::BufferUsageFlagBits::eVertexBuffer);
-		if (!vertexBufferResourceResult)
-		{
-			return std::unexpected(vertexBufferResourceResult.error());
-		}
-		BufferResource& vertexBufferResource = vertexBufferResourceResult.value();
-
-		CreationResult<BufferResource> indexBufferResourceResult = CreateDeviceLocalBuffer(
-			physicalDevice, logicalDevice, queue, commandPool, std::as_bytes(std::span(mesh.Indices)), vk::BufferUsageFlagBits::eIndexBuffer);
-		if (!indexBufferResourceResult)
-		{
-			return std::unexpected(indexBufferResourceResult.error());
-		}
-		BufferResource& indexBufferResource = indexBufferResourceResult.value();
-
 		CreationResult<std::tuple<ImageResource, std::uint32_t>> textureImageResourceResult =
 			CreateTextureImage(physicalDevice, logicalDevice, queue, commandPool, PlaceholderTextureFileName);
 		if (!textureImageResourceResult)
@@ -324,8 +300,7 @@ namespace PgE
 			std::move(context), std::move(instance), std::move(debugMessenger), std::move(surface), std::move(physicalDevice),
 			std::move(logicalDevice), std::move(queue), std::move(swapChain.SwapChain), std::move(swapChain.Images), swapChainSurfaceFormat,
 			swapChain.Extent, swapChain.SupportsTransferSource, std::move(swapChain.ImageViews), std::move(descriptorSetLayout),
-			std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool), std::move(vertexBufferResource),
-			std::move(indexBufferResource), static_cast<std::uint32_t>(mesh.Indices.size()), std::move(textureImageResource),
+			std::move(pipelineLayout), std::move(graphicsPipeline), std::move(commandPool), std::move(textureImageResource),
 			std::move(textureImageView), std::move(textureSampler), sampleCount, std::move(multisampleColorImageResource),
 			std::move(multisampleColorImageView), depthFormat, std::move(depthImageResource), std::move(depthImageView),
 			std::move(uniformBufferResources), std::move(descriptorPool), std::move(descriptorSets), std::move(commandBuffers),
@@ -419,6 +394,38 @@ namespace PgE
 #endif
 	}
 
+	CreationResult<MeshHandle> RendererVulkan::AcquireMesh(const std::string_view modelFileName)
+	{
+		CreationResult<Mesh> meshResult = LoadMesh(modelFileName);
+		if (!meshResult)
+		{
+			return std::unexpected(meshResult.error());
+		}
+
+		const Mesh& mesh = meshResult.value();
+		const std::vector<Vertex> vertices = ToRendererVertices(mesh);
+
+		CreationResult<BufferResource> vertexBufferResourceResult = CreateDeviceLocalBuffer(
+			_physicalDevice, _logicalDevice, _queue, _commandPool, std::as_bytes(std::span(vertices)), vk::BufferUsageFlagBits::eVertexBuffer);
+		if (!vertexBufferResourceResult)
+		{
+			return std::unexpected(vertexBufferResourceResult.error());
+		}
+
+		CreationResult<BufferResource> indexBufferResourceResult = CreateDeviceLocalBuffer(
+			_physicalDevice, _logicalDevice, _queue, _commandPool, std::as_bytes(std::span(mesh.Indices)), vk::BufferUsageFlagBits::eIndexBuffer);
+		if (!indexBufferResourceResult)
+		{
+			return std::unexpected(indexBufferResourceResult.error());
+		}
+
+		_meshes.emplace_back(GpuMesh{.VertexBuffer = std::move(vertexBufferResourceResult.value()),
+									 .IndexBuffer = std::move(indexBufferResourceResult.value()),
+									 .IndexCount = static_cast<std::uint32_t>(mesh.Indices.size())});
+
+		return MeshHandle{.Index = static_cast<std::uint32_t>(_meshes.size())};
+	}
+
 	void RendererVulkan::Teardown() const
 	{
 		[[maybe_unused]] auto waitResult = _logicalDevice.waitIdle();
@@ -480,7 +487,8 @@ namespace PgE
 			return std::unexpected(RendererError(RendererRenderErrorKind::UnableToResetCommandBuffer, ToString(resetCommandBufferResult)));
 		}
 
-		if (std::expected<void, RendererError<RendererRenderErrorKind>> recordCommandBufferResult = RecordCommandBuffer(imageIndex, debugUiDrawData);
+		if (std::expected<void, RendererError<RendererRenderErrorKind>> recordCommandBufferResult =
+				RecordCommandBuffer(frame, imageIndex, debugUiDrawData);
 			!recordCommandBufferResult)
 		{
 			return recordCommandBufferResult;
@@ -724,15 +732,15 @@ namespace PgE
 	{
 		const float aspectRatio = static_cast<float>(_swapChainExtent.width) / static_cast<float>(_swapChainExtent.height);
 
-		const UniformBufferObject uniforms{.Model = _modelMatrix,
-										   .WorldToView = MakeWorldToViewMatrix(view.Position, view.Rotation),
+		const UniformBufferObject uniforms{.WorldToView = MakeWorldToViewMatrix(view.Position, view.Rotation),
 										   .ViewToClip = MakePerspectiveProjectionMatrix(view.VerticalFieldOfViewRadians, aspectRatio,
 																						 view.NearPlaneDistance, view.FarPlaneDistance)};
 
 		std::memcpy(_uniformBufferResources[frameIndex].BufferMapped, &uniforms, sizeof(uniforms));
 	}
 
-	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const std::uint32_t imageIndex,
+	std::expected<void, RendererError<RendererRenderErrorKind>> RendererVulkan::RecordCommandBuffer(const ExtractedFrame& frame,
+																									const std::uint32_t imageIndex,
 																									ImDrawData* debugUiDrawData) const
 	{
 		if (std::expected<void, vk::Result> beginResult = _commandBuffers[_frameIndex].begin({}); !beginResult)
@@ -798,15 +806,31 @@ namespace PgE
 		_commandBuffers[_frameIndex].beginRendering(renderingInfo);
 
 		_commandBuffers[_frameIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, *_graphicsPipeline);
-		_commandBuffers[_frameIndex].bindVertexBuffers(0, *_vertexBufferResource.Buffer, {0});
-		_commandBuffers[_frameIndex].bindIndexBuffer(*_indexBufferResource.Buffer, 0, vk::IndexType::eUint32);
 
 		_commandBuffers[_frameIndex].setViewport(
 			0, vk::Viewport(0.0f, 0.0f, static_cast<float>(_swapChainExtent.width), static_cast<float>(_swapChainExtent.height), 0.0f, 1.0f));
 		_commandBuffers[_frameIndex].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChainExtent));
 
 		_commandBuffers[_frameIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, _pipelineLayout, 0, *_descriptorSets[_frameIndex], nullptr);
-		_commandBuffers[_frameIndex].drawIndexed(_indexCount, 1, 0, 0, 0);
+
+		for (const ExtractedMesh& extractedMesh : frame.Meshes)
+		{
+			// An extracted handle can name a mesh this renderer never acquired, since the frame and the
+			// registry are filled by separate callers.
+
+			if (extractedMesh.Mesh.Index == MeshHandle::InvalidIndex || extractedMesh.Mesh.Index > _meshes.size())
+			{
+				continue;
+			}
+
+			const GpuMesh& gpuMesh = _meshes[extractedMesh.Mesh.Index - 1];
+			const MeshPushConstants pushConstants{.LocalToWorld = extractedMesh.Placement.ToMatrix()};
+
+			_commandBuffers[_frameIndex].pushConstants<MeshPushConstants>(_pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, pushConstants);
+			_commandBuffers[_frameIndex].bindVertexBuffers(0, *gpuMesh.VertexBuffer.Buffer, {0});
+			_commandBuffers[_frameIndex].bindIndexBuffer(*gpuMesh.IndexBuffer.Buffer, 0, vk::IndexType::eUint32);
+			_commandBuffers[_frameIndex].drawIndexed(gpuMesh.IndexCount, 1, 0, 0, 0);
+		}
 
 		_commandBuffers[_frameIndex].endRendering();
 

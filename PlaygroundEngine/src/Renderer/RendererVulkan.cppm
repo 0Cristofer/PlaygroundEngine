@@ -15,6 +15,7 @@ import std;
 import PlaygroundEngine.Math;
 import PlaygroundEngine.Renderer.Vertex;
 import PlaygroundEngine.Renderer.Frame;
+import PlaygroundEngine.Renderer.Mesh;
 import PlaygroundEngine.Renderer.View;
 
 namespace PgE
@@ -26,6 +27,10 @@ namespace PgE
 			const RendererSpecification& specification, const WindowServer& windowServer, const Window& window);
 
 		void Teardown() const;
+
+		/// Uploads a model file from the Models folder beside the executable and names the result.
+		/// Nothing is de-duplicated here: a caller that may ask twice keeps its own path-to-handle map.
+		[[nodiscard]] CreationResult<MeshHandle> AcquireMesh(std::string_view modelFileName);
 
 		/// frame is what the simulation extracted for this step; the aspect ratio comes from the swap chain.
 		/// debugUiDrawData is ImGui's output for this frame, drawn in an overlay pass after the scene.
@@ -52,6 +57,13 @@ namespace PgE
 		void RequestCapture(std::filesystem::path path);
 
 	private:
+		struct GpuMesh
+		{
+			BufferResource VertexBuffer;
+			BufferResource IndexBuffer;
+			std::uint32_t IndexCount;
+		};
+
 		RendererVulkan(vk::raii::Context context,
 					   vk::raii::Instance instance,
 					   vk::raii::DebugUtilsMessengerEXT debugMessenger,
@@ -69,9 +81,6 @@ namespace PgE
 					   vk::raii::PipelineLayout pipelineLayout,
 					   vk::raii::Pipeline graphicsPipeline,
 					   vk::raii::CommandPool commandPool,
-					   BufferResource vertexBufferResource,
-					   BufferResource indexBufferResource,
-					   std::uint32_t indexCount,
 					   ImageResource textureImageResource,
 					   vk::raii::ImageView textureImageView,
 					   vk::raii::Sampler textureSampler,
@@ -95,7 +104,6 @@ namespace PgE
 			  _swapChainSupportsTransferSource(swapChainSupportsTransferSource), _swapChainImageViews(std::move(swapChainImageViews)),
 			  _descriptorSetLayout(std::move(descriptorSetLayout)), _pipelineLayout(std::move(pipelineLayout)),
 			  _graphicsPipeline(std::move(graphicsPipeline)), _commandPool(std::move(commandPool)),
-			  _vertexBufferResource(std::move(vertexBufferResource)), _indexBufferResource(std::move(indexBufferResource)), _indexCount(indexCount),
 			  _textureImageResource(std::move(textureImageResource)), _textureImageView(std::move(textureImageView)),
 			  _textureSampler(std::move(textureSampler)), _sampleCount(sampleCount),
 			  _multisampleColorImageResource(std::move(multisampleColorImageResource)),
@@ -105,15 +113,15 @@ namespace PgE
 			  _descriptorSets(std::move(descriptorSets)), _commandBuffers(std::move(commandBuffer)),
 			  _presentCompleteSemaphores(std::move(presentCompleteSemaphores)), _renderFinishedSemaphores(std::move(renderFinishedSemaphores)),
 			  _inFlightFences(std::move(inFlightFences))
-		{
-			_modelMatrix = Transform{.Rotation = Quaternion::FromAxisAngle(Vector3::Up, ToRadians(90.0f))}.ToMatrix();
-		}
+		{}
 
 		/// Attaches ImGui's Vulkan backend to the current ImGui context. Separate from the constructor
 		/// because it is the one piece of setup that reads state owned outside the renderer.
 		void InitializeDebugUiBackend(std::uint32_t queueFamilyIndex);
 
-		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const;
+		std::expected<void, RendererError<RendererRenderErrorKind>> RecordCommandBuffer(const ExtractedFrame& frame,
+																						std::uint32_t imageIndex,
+																						ImDrawData* debugUiDrawData) const;
 		void RecordDebugUiOverlay(std::uint32_t imageIndex, ImDrawData* debugUiDrawData) const;
 		CreationResult<void> CaptureSwapChainImage(std::uint32_t imageIndex, const std::filesystem::path& path) const;
 		std::expected<void, RendererError<RendererRenderErrorKind>> RecreateSwapChain(FramebufferSize framebufferSize);
@@ -139,9 +147,8 @@ namespace PgE
 		vk::raii::Pipeline _graphicsPipeline;
 		vk::raii::CommandPool _commandPool;
 
-		BufferResource _vertexBufferResource;
-		BufferResource _indexBufferResource;
-		std::uint32_t _indexCount;
+		// Indexed by MeshHandle::Index minus one, so a default-constructed handle names nothing.
+		std::vector<GpuMesh> _meshes;
 
 		ImageResource _textureImageResource;
 		vk::raii::ImageView _textureImageView;
@@ -169,7 +176,5 @@ namespace PgE
 		bool _framebufferResized = false;
 		bool _debugUiOverlayEnabled = false;
 		std::optional<std::filesystem::path> _pendingCapturePath;
-
-		Matrix4x4 _modelMatrix = Matrix4x4::Identity;
 	};
 }
